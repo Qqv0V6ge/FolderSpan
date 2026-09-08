@@ -1,0 +1,20 @@
+# Keep rules for project-specific reflection/dynamic loading can be added here when needed.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+-dontwarn javax.el.BeanELResolver
+-dontwarn javax.el.ELContext
+-dontwarn javax.el.ELResolver
+-dontwarn javax.el.ExpressionFactory
+-dontwarn javax.el.FunctionMapper
+-dontwarn javax.el.ValueExpression
+-dontwarn javax.el.VariableMapper
+-dontwarn javax.management.MBeanException
+-dontwarn javax.management.ReflectionException
+-dontwarn javax.security.auth.login.CredentialException
+-dontwarn javax.security.auth.login.FailedLoginException
+-dontwarn org.ietf.jgss.GSSContext
+-dontwarn org.ietf.jgss.GSSCredential
+-dontwarn org.ietf.jgss.GSSException
+-dontwarn org.ietf.jgss.GSSManager
+-dontwarn org.ietf.jgss.GSSName
+-dontwarn org.ietf.jgss.Oid

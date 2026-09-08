@@ -1,0 +1,11 @@
+## 1. Implementation
+- [ ] 1.1 扩展网络数据模型与 SQLDelight：新增端口、被动模式、FTPS、私钥、known_hosts、SMB 共享名、域/工作组等字段并迁移
+- [ ] 1.2 更新网络协议新增/编辑表单：按协议显示字段、校验与默认值
+- [ ] 1.3 更新网络管理列表显示与编辑逻辑，覆盖新增字段
+- [ ] 1.4 定义共享的网络操作接口与错误类型（list/read/write/rename/delete/move）
+- [ ] 1.5 实现 JVM 客户端：FTP(Commons Net)、SFTP(Mina SSHD)、SMB(SMBJ)
+- [ ] 1.6 实现 iOS 客户端（基于选定本地库的 cinterop）
+- [ ] 1.7 JS/WASM 空实现 + UI 禁用提示文案
+- [ ] 1.8 FileState/NetworkState 对接协议操作，支持粘贴复制/移动、重命名、删除与下载/打开
+- [ ] 1.9 补充单元测试（模型持久化、协议参数应用、操作路由）
+- [ ] 1.10 更新 About Libraries 资源与依赖声明

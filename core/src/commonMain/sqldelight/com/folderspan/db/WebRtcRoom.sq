@@ -1,0 +1,72 @@
+CREATE TABLE WebRtcRoom (
+    id              INTEGER NOT NULL CONSTRAINT WebRtcRoom_pk PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL,
+    wssUrl          TEXT    NOT NULL,
+    roomId          TEXT    NOT NULL,
+    stunUrl         TEXT    NOT NULL,
+    turnUrl         TEXT    NOT NULL,
+    turnUsername    TEXT    NOT NULL,
+    turnPassword    TEXT    NOT NULL,
+    source          TEXT    NOT NULL,
+    pinned          INTEGER NOT NULL DEFAULT 0,
+    sortOrder       INTEGER NOT NULL DEFAULT 0,
+    createdAt       INTEGER NOT NULL,
+    updatedAt       INTEGER NOT NULL
+);
+
+insert:
+INSERT INTO WebRtcRoom (
+    name,
+    wssUrl,
+    roomId,
+    stunUrl,
+    turnUrl,
+    turnUsername,
+    turnPassword,
+    source,
+    pinned,
+    sortOrder,
+    createdAt,
+    updatedAt
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAll:
+SELECT *
+FROM WebRtcRoom
+ORDER BY pinned DESC, sortOrder ASC, id ASC;
+
+selectById:
+SELECT *
+FROM WebRtcRoom
+WHERE id = ?;
+
+countAll:
+SELECT COUNT(*)
+FROM WebRtcRoom;
+
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+deleteById:
+DELETE FROM WebRtcRoom
+WHERE id = ?;
+
+updateById:
+UPDATE WebRtcRoom
+SET name = ?,
+    wssUrl = ?,
+    roomId = ?,
+    stunUrl = ?,
+    turnUrl = ?,
+    turnUsername = ?,
+    turnPassword = ?,
+    source = ?,
+    updatedAt = ?
+WHERE id = ?;
+
+updatePinnedById:
+UPDATE WebRtcRoom
+SET pinned = ?,
+    updatedAt = ?
+WHERE id = ?;

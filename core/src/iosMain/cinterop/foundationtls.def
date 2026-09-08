@@ -1,0 +1,4 @@
+headers = foundation_tls_wrapper.h
+package = platform.foundationtls
+language = Objective-C
+linkerOpts = -framework Foundation -framework Security

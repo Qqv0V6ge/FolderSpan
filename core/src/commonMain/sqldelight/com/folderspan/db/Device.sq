@@ -1,0 +1,83 @@
+import kotlin.Boolean;
+import com.folderspan.data.main.device.DeviceType;
+
+-- 创建设备表
+CREATE TABLE Device (
+    id             TEXT               NOT NULL,        -- 设备唯一标识符
+    name           TEXT               NOT NULL,        -- 设备名称
+    host           TEXT               DEFAULT '',      -- 设备主机地址
+    port           INTEGER            DEFAULT 0,       -- 设备端口号
+    type           TEXT AS DeviceType NOT NULL,        -- 设备类型，使用DeviceType枚举
+    hasRemarks    INTEGER AS Boolean DEFAULT 0,       -- 是否有备注，布尔值字段(0=false, 1=true)
+    CONSTRAINT pk_device PRIMARY KEY (id)              -- 设置主键约束
+);
+
+-- 插入新设备记录
+insert:
+INSERT INTO Device (id, name, host, port, type)
+VALUES (?, ?, ?, ?, ?);
+
+-- 查询所有设备信息
+queryAll:
+SELECT *
+FROM Device;
+
+-- 根据ID查询特定设备
+queryById:
+SELECT *
+FROM Device
+WHERE id = ?;
+
+-- 根据设备ID列表查询多个设备
+queryByIds:
+SELECT *
+FROM Device
+WHERE id IN ?;
+
+-- 按名称和类型搜索设备并分页
+queryByNameAndDeviceTypePaginated:
+SELECT *
+FROM Device
+WHERE name LIKE '%' || ? || '%'
+AND type IN ?
+LIMIT ? OFFSET ?;
+
+-- 更新设备的名称和类型信息
+updateNameTypeById:
+UPDATE Device
+SET name = ?,
+    type = ?
+WHERE id = ?;
+
+-- 根据ID更新设备名称和类型
+updateNameAndTypeById:
+UPDATE Device
+SET name = ?,
+    type = ?
+WHERE id = ?;
+
+-- 根据ID更新设备网络端点
+updateEndpointById:
+UPDATE Device
+SET host = ?,
+    port = ?,
+    type = ?
+WHERE id = ?;
+
+-- 更新设备的备注状态标志
+updateHasRemarksById:
+UPDATE Device
+SET hasRemarks = ?
+WHERE id = ?;
+
+-- 根据ID删除设备记录
+deleteById:
+DELETE FROM Device
+WHERE id = ?;
+
+-- 根据ID更新设备名称并将hasRemarks设置为true
+updateNameAndEnableRemarksById:
+UPDATE Device
+SET name = ?,
+    hasRemarks = 1
+WHERE id = ?;

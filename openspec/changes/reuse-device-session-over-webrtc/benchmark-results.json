@@ -1,0 +1,5088 @@
+{
+  "date": "2026-09-05",
+  "baselineCommit": "b73bddf8",
+  "sessionCommit": "78227e05",
+  "desktop": "macOS arm64 / Chrome 152.0.7977.83",
+  "android": "Redmi K30 Pro / Android 12 / arm64-v8a",
+  "method": "256 KiB warmup; 1 x 4 MiB and 4 x 4 MiB; 3 samples each where completed; 2 ms sampled bufferedAmount and managed heap; native local SCTP/DTLS; in-memory random payload, no disk I/O",
+  "results": [
+    {
+      "name": "legacy-jvm",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 42,
+          "sampledPeakBuffered": 3371328,
+          "baselineMemory": 35604712,
+          "peakMemory": 44902712
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 26,
+          "sampledPeakBuffered": 2844568,
+          "baselineMemory": 48315792,
+          "peakMemory": 57040592
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 29,
+          "sampledPeakBuffered": 3057992,
+          "baselineMemory": 57171704,
+          "peakMemory": 65879520
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 116,
+          "sampledPeakBuffered": 6185004,
+          "baselineMemory": 65879520,
+          "peakMemory": 101907976
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 107,
+          "sampledPeakBuffered": 5372036,
+          "baselineMemory": 102317456,
+          "peakMemory": 138198656
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 107,
+          "sampledPeakBuffered": 5561084,
+          "baselineMemory": 138198656,
+          "peakMemory": 174096000
+        }
+      ]
+    },
+    {
+      "name": "legacy-js",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 141,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 185768960,
+          "peakMemory": 194667189
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 134,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 194667189,
+          "peakMemory": 206437523
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 134,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 206437523,
+          "peakMemory": 209680477
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 525,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 209680477,
+          "peakMemory": 225603572
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 522,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 198194452,
+          "peakMemory": 238848600
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 488,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 238848600,
+          "peakMemory": 275672768
+        }
+      ]
+    },
+    {
+      "name": "legacy-android-redmi",
+      "completed": false,
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 156,
+          "sampledPeakBuffered": 3137120,
+          "baselineMemory": 7899760,
+          "peakMemory": 21248624
+        }
+      ],
+      "failure": "Timed out after 120 seconds; first single-stream sample completed, subsequent sample did not."
+    },
+    {
+      "name": "session-jvm",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 46,
+          "sampledPeakBuffered": 255546,
+          "baselineMemory": 22576128,
+          "peakMemory": 45112016
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 37,
+          "sampledPeakBuffered": 11744,
+          "baselineMemory": 47339576,
+          "peakMemory": 71605304
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 32,
+          "sampledPeakBuffered": 11744,
+          "baselineMemory": 71621704,
+          "peakMemory": 95001120
+        },
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 130,
+          "sampledPeakBuffered": 11744,
+          "baselineMemory": 95033920,
+          "peakMemory": 184048432
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 132,
+          "sampledPeakBuffered": 533440,
+          "baselineMemory": 184703032,
+          "peakMemory": 204642696
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 124,
+          "sampledPeakBuffered": 11744,
+          "baselineMemory": 90697416,
+          "peakMemory": 180518080
+        }
+      ]
+    },
+    {
+      "name": "session-js",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 106,
+          "sampledPeakBuffered": 942156,
+          "baselineMemory": 169967573,
+          "peakMemory": 182603516
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 63,
+          "sampledPeakBuffered": 942156,
+          "baselineMemory": 180990588,
+          "peakMemory": 190177975
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 69,
+          "sampledPeakBuffered": 942156,
+          "baselineMemory": 190206766,
+          "peakMemory": 199418270
+        },
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 268,
+          "sampledPeakBuffered": 3794746,
+          "baselineMemory": 199058686,
+          "peakMemory": 234186984
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 265,
+          "sampledPeakBuffered": 3750786,
+          "baselineMemory": 233580949,
+          "peakMemory": 269048253
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 264,
+          "sampledPeakBuffered": 3675773,
+          "baselineMemory": 268807180,
+          "peakMemory": 313615483
+        }
+      ]
+    },
+    {
+      "name": "session-android-redmi",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 217,
+          "sampledPeakBuffered": 145851,
+          "baselineMemory": 8222288,
+          "peakMemory": 37762640
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 178,
+          "sampledPeakBuffered": 92998,
+          "baselineMemory": 37762640,
+          "peakMemory": 59225680
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 179,
+          "sampledPeakBuffered": 88998,
+          "baselineMemory": 18732472,
+          "peakMemory": 39339448
+        },
+        {
+          "protocol": "session",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 563,
+          "sampledPeakBuffered": 931594,
+          "baselineMemory": 7037112,
+          "peakMemory": 21282336
+        },
+        {
+          "protocol": "session",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 558,
+          "sampledPeakBuffered": 941315,
+          "baselineMemory": 5438512,
+          "peakMemory": 19753000
+        },
+        {
+          "protocol": "session",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 563,
+          "sampledPeakBuffered": 933543,
+          "baselineMemory": 13499384,
+          "peakMemory": 19275312
+        }
+      ]
+    }
+  ],
+  "beforeOptimizations": {
+    "commit": "aefeefb2",
+    "results": [
+      {
+        "name": "session-jvm",
+        "exit_code": 0,
+        "tests": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "samples": [
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 44,
+            "sampledPeakBuffered": 14224,
+            "baselineMemory": 22232896,
+            "peakMemory": 52347408
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 58,
+            "sampledPeakBuffered": 11744,
+            "baselineMemory": 55541616,
+            "peakMemory": 86622264
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 35,
+            "sampledPeakBuffered": 25968,
+            "baselineMemory": 86737064,
+            "peakMemory": 119275664
+          },
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 150,
+            "sampledPeakBuffered": 14880,
+            "baselineMemory": 119275664,
+            "peakMemory": 194380256
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 134,
+            "sampledPeakBuffered": 11744,
+            "baselineMemory": 67615568,
+            "peakMemory": 189020704
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 118,
+            "sampledPeakBuffered": 21664,
+            "baselineMemory": 190511616,
+            "peakMemory": 199158712
+          }
+        ]
+      },
+      {
+        "name": "session-js",
+        "exit_code": 0,
+        "tests": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "samples": [
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 191,
+            "sampledPeakBuffered": 942156,
+            "baselineMemory": 176228809,
+            "peakMemory": 193041245
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 69,
+            "sampledPeakBuffered": 1110541,
+            "baselineMemory": 192791204,
+            "peakMemory": 204187077
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 68,
+            "sampledPeakBuffered": 1008300,
+            "baselineMemory": 198100960,
+            "peakMemory": 211832443
+          },
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 269,
+            "sampledPeakBuffered": 4062034,
+            "baselineMemory": 199260874,
+            "peakMemory": 246092207
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 261,
+            "sampledPeakBuffered": 4021907,
+            "baselineMemory": 246549510,
+            "peakMemory": 280089231
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 260,
+            "sampledPeakBuffered": 3916477,
+            "baselineMemory": 277060033,
+            "peakMemory": 331879651
+          }
+        ]
+      },
+      {
+        "name": "session-android-redmi",
+        "completed": true,
+        "samples": [
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 180,
+            "sampledPeakBuffered": 113617,
+            "baselineMemory": 6876848,
+            "peakMemory": 17604176
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 147,
+            "sampledPeakBuffered": 132970,
+            "baselineMemory": 8977960,
+            "peakMemory": 21212712
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 155,
+            "sampledPeakBuffered": 134771,
+            "baselineMemory": 10696848,
+            "peakMemory": 20524896
+          },
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 551,
+            "sampledPeakBuffered": 864174,
+            "baselineMemory": 13353552,
+            "peakMemory": 23073848
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 544,
+            "sampledPeakBuffered": 857402,
+            "baselineMemory": 14175752,
+            "peakMemory": 24444368
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 538,
+            "sampledPeakBuffered": 872926,
+            "baselineMemory": 13525304,
+            "peakMemory": 27978040
+          }
+        ]
+      }
+    ]
+  },
+  "initialBaselines": [
+    {
+      "name": "legacy-jvm",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 42,
+          "sampledPeakBuffered": 3371328,
+          "baselineMemory": 35604712,
+          "peakMemory": 44902712
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 26,
+          "sampledPeakBuffered": 2844568,
+          "baselineMemory": 48315792,
+          "peakMemory": 57040592
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 29,
+          "sampledPeakBuffered": 3057992,
+          "baselineMemory": 57171704,
+          "peakMemory": 65879520
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 116,
+          "sampledPeakBuffered": 6185004,
+          "baselineMemory": 65879520,
+          "peakMemory": 101907976
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 107,
+          "sampledPeakBuffered": 5372036,
+          "baselineMemory": 102317456,
+          "peakMemory": 138198656
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 107,
+          "sampledPeakBuffered": 5561084,
+          "baselineMemory": 138198656,
+          "peakMemory": 174096000
+        }
+      ]
+    },
+    {
+      "name": "legacy-js",
+      "exit_code": 0,
+      "tests": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 141,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 185768960,
+          "peakMemory": 194667189
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 134,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 194667189,
+          "peakMemory": 206437523
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 134,
+          "sampledPeakBuffered": 2064888,
+          "baselineMemory": 206437523,
+          "peakMemory": 209680477
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 525,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 209680477,
+          "peakMemory": 225603572
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 1,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 522,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 198194452,
+          "peakMemory": 238848600
+        },
+        {
+          "protocol": "legacy",
+          "iteration": 2,
+          "concurrent": 4,
+          "bytes": 16777216,
+          "elapsedMs": 488,
+          "sampledPeakBuffered": 1573248,
+          "baselineMemory": 238848600,
+          "peakMemory": 275672768
+        }
+      ]
+    },
+    {
+      "name": "legacy-android-redmi",
+      "completed": false,
+      "samples": [
+        {
+          "protocol": "legacy",
+          "iteration": 0,
+          "concurrent": 1,
+          "bytes": 4194304,
+          "elapsedMs": 156,
+          "sampledPeakBuffered": 3137120,
+          "baselineMemory": 7899760,
+          "peakMemory": 21248624
+        }
+      ],
+      "failure": "Timed out after 120 seconds; first single-stream sample completed, subsequent sample did not."
+    }
+  ],
+  "assessment": {
+    "jvmRepeatedThroughputChangePercent": {
+      "1": -3.45,
+      "4": -8.55
+    },
+    "sessionRepeatedSamplesOver500Ms": [
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 1038,
+        "sampledPeakBuffered": 3270342,
+        "baselineMemory": 114090840,
+        "peakMemory": 200745488
+      }
+    ],
+    "status": "Completed with measured throughput costs and tail-latency limitations disclosed; no exact percentile/SLA claim beyond this local sample set.",
+    "limitations": [
+      "Managed heap excludes native WebRTC memory; sampled peaks may miss brief spikes.",
+      "The Android legacy baseline is incomplete and cannot support a throughput improvement ratio.",
+      "A pre-fix 9426 ms sample and a post-fix 1038 ms sample are retained. The confirmed lost credit wakeup defect is not proven to be the sole cause of the earlier outlier.",
+      "Cold single-round results and 20-pair JVM results are separate cohorts; no samples were removed from their medians."
+    ]
+  },
+  "beforeCreditWakeFix": {
+    "commit": "775946c8",
+    "results": [
+      {
+        "name": "session-jvm",
+        "exit_code": 0,
+        "tests": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "samples": [
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 43,
+            "sampledPeakBuffered": 225452,
+            "baselineMemory": 25188272,
+            "peakMemory": 48781232
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 43,
+            "sampledPeakBuffered": 12400,
+            "baselineMemory": 50878384,
+            "peakMemory": 73587184
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 41,
+            "sampledPeakBuffered": 23488,
+            "baselineMemory": 74127408,
+            "peakMemory": 98343056
+          },
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 9426,
+            "sampledPeakBuffered": 362827,
+            "baselineMemory": 98343056,
+            "peakMemory": 189110680
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 199,
+            "sampledPeakBuffered": 3932118,
+            "baselineMemory": 189176232,
+            "peakMemory": 206183000
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 120,
+            "sampledPeakBuffered": 3739760,
+            "baselineMemory": 91708040,
+            "peakMemory": 179394672
+          }
+        ]
+      },
+      {
+        "name": "session-js",
+        "exit_code": 0,
+        "tests": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "samples": [
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 146,
+            "sampledPeakBuffered": 1050565,
+            "baselineMemory": 166954822,
+            "peakMemory": 186960395
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 73,
+            "sampledPeakBuffered": 1048764,
+            "baselineMemory": 187613674,
+            "peakMemory": 194803200
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 1,
+            "bytes": 4194304,
+            "elapsedMs": 71,
+            "sampledPeakBuffered": 942156,
+            "baselineMemory": 195956656,
+            "peakMemory": 203496781
+          },
+          {
+            "protocol": "session",
+            "iteration": 0,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 281,
+            "sampledPeakBuffered": 4070445,
+            "baselineMemory": 204250892,
+            "peakMemory": 236352825
+          },
+          {
+            "protocol": "session",
+            "iteration": 1,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 278,
+            "sampledPeakBuffered": 4031509,
+            "baselineMemory": 235201053,
+            "peakMemory": 271468081
+          },
+          {
+            "protocol": "session",
+            "iteration": 2,
+            "concurrent": 4,
+            "bytes": 16777216,
+            "elapsedMs": 273,
+            "sampledPeakBuffered": 3899708,
+            "baselineMemory": 267773792,
+            "peakMemory": 306884928
+          }
+        ]
+      }
+    ],
+    "jvmRepeatedSamples": [
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 43,
+        "sampledPeakBuffered": 239741,
+        "baselineMemory": 23279544,
+        "peakMemory": 46972464
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 43,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 49432320,
+        "peakMemory": 71482920
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 12080,
+        "baselineMemory": 72105144,
+        "peakMemory": 94964080
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 229,
+        "sampledPeakBuffered": 924654,
+        "baselineMemory": 95714504,
+        "peakMemory": 182828728
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 142,
+        "sampledPeakBuffered": 2052500,
+        "baselineMemory": 184696088,
+        "peakMemory": 195477176
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 121,
+        "sampledPeakBuffered": 2060615,
+        "baselineMemory": 96939400,
+        "peakMemory": 187327936
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 69,
+        "sampledPeakBuffered": 682884,
+        "baselineMemory": 189552704,
+        "peakMemory": 198468728
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 705590,
+        "baselineMemory": 28960928,
+        "peakMemory": 52146072
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 697708,
+        "baselineMemory": 52146072,
+        "peakMemory": 74501296
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 124,
+        "sampledPeakBuffered": 3724269,
+        "baselineMemory": 74501296,
+        "peakMemory": 162546032
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 3684294,
+        "baselineMemory": 163672280,
+        "peakMemory": 193288752
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 3705033,
+        "baselineMemory": 76367480,
+        "peakMemory": 165035368
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 287569,
+        "baselineMemory": 167725496,
+        "peakMemory": 189139056
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 189139056,
+        "peakMemory": 189139056
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 38801912,
+        "peakMemory": 60473928
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 123,
+        "sampledPeakBuffered": 1155322,
+        "baselineMemory": 60801856,
+        "peakMemory": 148652056
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 149212744,
+        "peakMemory": 194565336
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 62767672,
+        "peakMemory": 150687808
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 306530,
+        "baselineMemory": 153224512,
+        "peakMemory": 174493008
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 175245808,
+        "peakMemory": 196751048
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 16970952,
+        "peakMemory": 38660144
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 124,
+        "sampledPeakBuffered": 1065948,
+        "baselineMemory": 38660144,
+        "peakMemory": 128385272
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 128385272,
+        "peakMemory": 195786288
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 120,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 35203936,
+        "peakMemory": 123716864
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 288049,
+        "baselineMemory": 126074680,
+        "peakMemory": 148606776
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 148843408,
+        "peakMemory": 170782424
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 170782424,
+        "peakMemory": 193702024
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 142,
+        "sampledPeakBuffered": 1242695,
+        "baselineMemory": 193702024,
+        "peakMemory": 193702024
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 160,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 103941680,
+        "peakMemory": 191634984
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 157,
+        "sampledPeakBuffered": 12064,
+        "baselineMemory": 191931832,
+        "peakMemory": 200562576
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 46,
+        "sampledPeakBuffered": 215184,
+        "baselineMemory": 102389136,
+        "peakMemory": 123710840
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 47,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 124048456,
+        "peakMemory": 145832456
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 36,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 146347568,
+        "peakMemory": 169018584
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 150,
+        "sampledPeakBuffered": 575158,
+        "baselineMemory": 169149784,
+        "peakMemory": 196243792
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 131,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 80099848,
+        "peakMemory": 168691608
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 168691608,
+        "peakMemory": 199662184
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 270620,
+        "baselineMemory": 77673232,
+        "peakMemory": 98956256
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 100529112,
+        "peakMemory": 121638304
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 122214056,
+        "peakMemory": 144493272
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 982264,
+        "baselineMemory": 144782096,
+        "peakMemory": 197154344
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 12064,
+        "baselineMemory": 52398504,
+        "peakMemory": 139725440
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 140715664,
+        "peakMemory": 194259688
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 289500,
+        "baselineMemory": 52304672,
+        "peakMemory": 75467960
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 75467960,
+        "peakMemory": 98402096
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 98402096,
+        "peakMemory": 120520248
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 123,
+        "sampledPeakBuffered": 1103901,
+        "baselineMemory": 120763328,
+        "peakMemory": 192079344
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 34026616,
+        "peakMemory": 122692336
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 123031928,
+        "peakMemory": 195722784
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 367730,
+        "baselineMemory": 34575976,
+        "peakMemory": 55356152
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 55498296,
+        "peakMemory": 78225088
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 78225088,
+        "peakMemory": 100128696
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1150474,
+        "baselineMemory": 100866496,
+        "peakMemory": 188667448
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 15948232,
+        "peakMemory": 105542320
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 105542320,
+        "peakMemory": 193492864
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 227800,
+        "baselineMemory": 195332416,
+        "peakMemory": 198685584
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 35553328,
+        "peakMemory": 55536064
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 56775424,
+        "peakMemory": 79762880
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 157,
+        "sampledPeakBuffered": 1064219,
+        "baselineMemory": 79762880,
+        "peakMemory": 167180160
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 165,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 167447576,
+        "peakMemory": 194055160
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 80173104,
+        "peakMemory": 168339368
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 214796,
+        "baselineMemory": 169976672,
+        "peakMemory": 191318360
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 191575152,
+        "peakMemory": 199042904
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 45,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 32357560,
+        "peakMemory": 54551176
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 205,
+        "sampledPeakBuffered": 822795,
+        "baselineMemory": 55114672,
+        "peakMemory": 143188232
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 182,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 143602960,
+        "peakMemory": 204170832
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 169,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 44966616,
+        "peakMemory": 133687832
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 45,
+        "sampledPeakBuffered": 239394,
+        "baselineMemory": 135259144,
+        "peakMemory": 156954248
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 39,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 156987048,
+        "peakMemory": 178646968
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 91,
+        "sampledPeakBuffered": 14240,
+        "baselineMemory": 178679768,
+        "peakMemory": 198274864
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 237,
+        "sampledPeakBuffered": 912027,
+        "baselineMemory": 20205232,
+        "peakMemory": 107941552
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 143,
+        "sampledPeakBuffered": 21392,
+        "baselineMemory": 108488048,
+        "peakMemory": 197331728
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 197617008,
+        "peakMemory": 208734056
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 255536,
+        "baselineMemory": 98708872,
+        "peakMemory": 120045328
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 120810872,
+        "peakMemory": 142127872
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 143389600,
+        "peakMemory": 165736936
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 123,
+        "sampledPeakBuffered": 1061376,
+        "baselineMemory": 165736936,
+        "peakMemory": 197112240
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 42352,
+        "baselineMemory": 74728232,
+        "peakMemory": 163058184
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 163309496,
+        "peakMemory": 193284888
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 291726,
+        "baselineMemory": 79653408,
+        "peakMemory": 101591528
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 102002712,
+        "peakMemory": 124076032
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 124083704,
+        "peakMemory": 146027088
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 127,
+        "sampledPeakBuffered": 1122810,
+        "baselineMemory": 146635584,
+        "peakMemory": 198127264
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 51900920,
+        "peakMemory": 140226392
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 127,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 140226392,
+        "peakMemory": 195565032
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 295554,
+        "baselineMemory": 52347640,
+        "peakMemory": 72967112
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 73592824,
+        "peakMemory": 96664824
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 96845176,
+        "peakMemory": 118857328
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 1144219,
+        "baselineMemory": 119114240,
+        "peakMemory": 195561224
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 28419536,
+        "peakMemory": 116798200
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 116798200,
+        "peakMemory": 193843152
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 299808,
+        "baselineMemory": 27245752,
+        "peakMemory": 49323368
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 49438168,
+        "peakMemory": 72710200
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 72710200,
+        "peakMemory": 94732504
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 124,
+        "sampledPeakBuffered": 1210974,
+        "baselineMemory": 94732504,
+        "peakMemory": 182303296
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 182530840,
+        "peakMemory": 190874760
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 21344,
+        "baselineMemory": 98991288,
+        "peakMemory": 187291872
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 315012,
+        "baselineMemory": 188910232,
+        "peakMemory": 199695784
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 26542520,
+        "peakMemory": 49411584
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 49571152,
+        "peakMemory": 71640888
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 123,
+        "sampledPeakBuffered": 1153008,
+        "baselineMemory": 72090000,
+        "peakMemory": 160660160
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 160660160,
+        "peakMemory": 195478592
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 69702512,
+        "peakMemory": 158621216
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 252503,
+        "baselineMemory": 160552360,
+        "peakMemory": 182137528
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 182383504,
+        "peakMemory": 192913408
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 27768000,
+        "peakMemory": 49903128
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 124,
+        "sampledPeakBuffered": 1051432,
+        "baselineMemory": 50308496,
+        "peakMemory": 138824792
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 124,
+        "sampledPeakBuffered": 18848,
+        "baselineMemory": 138824792,
+        "peakMemory": 199267040
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 44911416,
+        "peakMemory": 133188120
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 245945,
+        "baselineMemory": 135842144,
+        "peakMemory": 156783944
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 157139240,
+        "peakMemory": 179194272
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 179358224,
+        "peakMemory": 193507640
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1133472,
+        "baselineMemory": 22824672,
+        "peakMemory": 110810296
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 111183696,
+        "peakMemory": 191819376
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 22150640,
+        "peakMemory": 110271528
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 260587,
+        "baselineMemory": 112830416,
+        "peakMemory": 133994360
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 134584608,
+        "peakMemory": 156844656
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 156844656,
+        "peakMemory": 179498520
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 120,
+        "sampledPeakBuffered": 996180,
+        "baselineMemory": 180026488,
+        "peakMemory": 196428856
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 16704,
+        "baselineMemory": 91913560,
+        "peakMemory": 179678960
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 114,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 179678960,
+        "peakMemory": 197350328
+      }
+    ],
+    "note": "Initial JVM 4-stream sample took 9426 ms. Later 20-pair diagnostic did not reproduce it. A deterministic lost credit wakeup defect was subsequently found; that defect is not proven to be the sole cause of the 9426 ms observation."
+  },
+  "repeatedJvmBaseline": {
+    "commit": "b73bddf8",
+    "pairs": 20,
+    "samples": [
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 42,
+        "sampledPeakBuffered": 3435152,
+        "baselineMemory": 38398464,
+        "peakMemory": 47715392
+      },
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 2125416,
+        "baselineMemory": 50123520,
+        "peakMemory": 59405216
+      },
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 2997672,
+        "baselineMemory": 59405216,
+        "peakMemory": 68334416
+      },
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 5177172,
+        "baselineMemory": 68858704,
+        "peakMemory": 104461376
+      },
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 108,
+        "sampledPeakBuffered": 5362772,
+        "baselineMemory": 104461376,
+        "peakMemory": 140825344
+      },
+      {
+        "run": 0,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 107,
+        "sampledPeakBuffered": 5436996,
+        "baselineMemory": 140825344,
+        "peakMemory": 174625696
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 35,
+        "sampledPeakBuffered": 3017248,
+        "baselineMemory": 21898704,
+        "peakMemory": 30672416
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 3002344,
+        "baselineMemory": 30672416,
+        "peakMemory": 39643888
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 3302704,
+        "baselineMemory": 39676496,
+        "peakMemory": 48663360
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 114,
+        "sampledPeakBuffered": 6352028,
+        "baselineMemory": 16268896,
+        "peakMemory": 42086128
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 101,
+        "sampledPeakBuffered": 6430908,
+        "baselineMemory": 26518880,
+        "peakMemory": 42986072
+      },
+      {
+        "run": 1,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 5792880,
+        "baselineMemory": 37178568,
+        "peakMemory": 42973136
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 3277940,
+        "baselineMemory": 21236824,
+        "peakMemory": 30187680
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 3104392,
+        "baselineMemory": 30264128,
+        "peakMemory": 39373608
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 3011592,
+        "baselineMemory": 39449832,
+        "peakMemory": 43372392
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 114,
+        "sampledPeakBuffered": 5678260,
+        "baselineMemory": 19008176,
+        "peakMemory": 45378064
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6185020,
+        "baselineMemory": 25135864,
+        "peakMemory": 46049744
+      },
+      {
+        "run": 2,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6263868,
+        "baselineMemory": 31518496,
+        "peakMemory": 46362080
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 3272100,
+        "baselineMemory": 40029432,
+        "peakMemory": 45989000
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3466280,
+        "baselineMemory": 18371704,
+        "peakMemory": 27418576
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3344448,
+        "baselineMemory": 27448784,
+        "peakMemory": 36357832
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 6208064,
+        "baselineMemory": 36547488,
+        "peakMemory": 44421600
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6101344,
+        "baselineMemory": 44466304,
+        "peakMemory": 45513056
+      },
+      {
+        "run": 3,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6514412,
+        "baselineMemory": 21252104,
+        "peakMemory": 46964688
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 34,
+        "sampledPeakBuffered": 3208732,
+        "baselineMemory": 27560000,
+        "peakMemory": 36537920
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3470920,
+        "baselineMemory": 36572520,
+        "peakMemory": 45570824
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3237760,
+        "baselineMemory": 45598216,
+        "peakMemory": 45605040
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 114,
+        "sampledPeakBuffered": 6152524,
+        "baselineMemory": 23147736,
+        "peakMemory": 47785648
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6514412,
+        "baselineMemory": 27438504,
+        "peakMemory": 48138680
+      },
+      {
+        "run": 4,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6222124,
+        "baselineMemory": 31938264,
+        "peakMemory": 46186624
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 3590944,
+        "baselineMemory": 39803256,
+        "peakMemory": 46029544
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3461640,
+        "baselineMemory": 18156024,
+        "peakMemory": 27189168
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 2875856,
+        "baselineMemory": 27221776,
+        "peakMemory": 36308336
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 5488020,
+        "baselineMemory": 36340776,
+        "peakMemory": 46628360
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 108,
+        "sampledPeakBuffered": 6231248,
+        "baselineMemory": 43044144,
+        "peakMemory": 44958512
+      },
+      {
+        "run": 5,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 5709548,
+        "baselineMemory": 20624704,
+        "peakMemory": 45715248
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 3502060,
+        "baselineMemory": 29005256,
+        "peakMemory": 37987256
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 3164712,
+        "baselineMemory": 38022872,
+        "peakMemory": 46089264
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 2974472,
+        "baselineMemory": 16415320,
+        "peakMemory": 25500656
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 5859204,
+        "baselineMemory": 25537584,
+        "peakMemory": 46479888
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 104,
+        "sampledPeakBuffered": 6648972,
+        "baselineMemory": 31992792,
+        "peakMemory": 45853088
+      },
+      {
+        "run": 6,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 103,
+        "sampledPeakBuffered": 6314908,
+        "baselineMemory": 39717832,
+        "peakMemory": 45255920
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 3553448,
+        "baselineMemory": 18727376,
+        "peakMemory": 27734064
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 3071912,
+        "baselineMemory": 27747568,
+        "peakMemory": 36893096
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 24,
+        "sampledPeakBuffered": 2993032,
+        "baselineMemory": 36928800,
+        "peakMemory": 45728864
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 6546892,
+        "baselineMemory": 15609560,
+        "peakMemory": 46643832
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6471476,
+        "baselineMemory": 21379520,
+        "peakMemory": 47278288
+      },
+      {
+        "run": 7,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 109,
+        "sampledPeakBuffered": 6361168,
+        "baselineMemory": 26452592,
+        "peakMemory": 47328688
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3553448,
+        "baselineMemory": 33825552,
+        "peakMemory": 42843768
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 3006952,
+        "baselineMemory": 42876240,
+        "peakMemory": 45051824
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3396696,
+        "baselineMemory": 21899320,
+        "peakMemory": 30913760
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 6573556,
+        "baselineMemory": 30946368,
+        "peakMemory": 46967376
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 107,
+        "sampledPeakBuffered": 6180224,
+        "baselineMemory": 37906904,
+        "peakMemory": 45180336
+      },
+      {
+        "run": 8,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 107,
+        "sampledPeakBuffered": 6398288,
+        "baselineMemory": 45280496,
+        "peakMemory": 45283592
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3576764,
+        "baselineMemory": 23620760,
+        "peakMemory": 32727656
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3424536,
+        "baselineMemory": 32764360,
+        "peakMemory": 41736400
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 3247040,
+        "baselineMemory": 41769464,
+        "peakMemory": 44689592
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 6569952,
+        "baselineMemory": 20374920,
+        "peakMemory": 46785192
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 104,
+        "sampledPeakBuffered": 6541076,
+        "baselineMemory": 25727272,
+        "peakMemory": 47245176
+      },
+      {
+        "run": 9,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 103,
+        "sampledPeakBuffered": 5817444,
+        "baselineMemory": 31521000,
+        "peakMemory": 46458096
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 3123648,
+        "baselineMemory": 40147920,
+        "peakMemory": 46100032
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3396696,
+        "baselineMemory": 18249200,
+        "peakMemory": 27481528
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3443080,
+        "baselineMemory": 27512072,
+        "peakMemory": 36606176
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 6443496,
+        "baselineMemory": 36642080,
+        "peakMemory": 44987696
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 103,
+        "sampledPeakBuffered": 6157040,
+        "baselineMemory": 45081520,
+        "peakMemory": 45151136
+      },
+      {
+        "run": 10,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 102,
+        "sampledPeakBuffered": 5835864,
+        "baselineMemory": 21450504,
+        "peakMemory": 46074496
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 3548736,
+        "baselineMemory": 29198624,
+        "peakMemory": 38275632
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3452360,
+        "baselineMemory": 38311920,
+        "peakMemory": 47251648
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3498760,
+        "baselineMemory": 47288136,
+        "peakMemory": 47288136
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 5914744,
+        "baselineMemory": 24625344,
+        "peakMemory": 45928280
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 5848716,
+        "baselineMemory": 31032944,
+        "peakMemory": 46887800
+      },
+      {
+        "run": 11,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 5630668,
+        "baselineMemory": 37484440,
+        "peakMemory": 45471112
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3548736,
+        "baselineMemory": 16787792,
+        "peakMemory": 25943776
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3396696,
+        "baselineMemory": 25975072,
+        "peakMemory": 34933144
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3443080,
+        "baselineMemory": 34968840,
+        "peakMemory": 44016440
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 6203440,
+        "baselineMemory": 44047384,
+        "peakMemory": 46230616
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6588512,
+        "baselineMemory": 20736704,
+        "peakMemory": 46340208
+      },
+      {
+        "run": 12,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 104,
+        "sampledPeakBuffered": 6471336,
+        "baselineMemory": 26841944,
+        "peakMemory": 45997344
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3560412,
+        "baselineMemory": 34992672,
+        "peakMemory": 44037240
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 3368856,
+        "baselineMemory": 44068792,
+        "peakMemory": 44074000
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3433800,
+        "baselineMemory": 22635704,
+        "peakMemory": 31650480
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 6397236,
+        "baselineMemory": 31689488,
+        "peakMemory": 45755616
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6356528,
+        "baselineMemory": 39088192,
+        "peakMemory": 44642464
+      },
+      {
+        "run": 13,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6542112,
+        "baselineMemory": 18677192,
+        "peakMemory": 45954792
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 3541748,
+        "baselineMemory": 26259600,
+        "peakMemory": 35259296
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3438440,
+        "baselineMemory": 35293424,
+        "peakMemory": 44329168
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3350296,
+        "baselineMemory": 44367680,
+        "peakMemory": 44367680
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 5863844,
+        "baselineMemory": 23319800,
+        "peakMemory": 46607624
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6616352,
+        "baselineMemory": 29336360,
+        "peakMemory": 45781152
+      },
+      {
+        "run": 14,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 101,
+        "sampledPeakBuffered": 6035348,
+        "baselineMemory": 36977192,
+        "peakMemory": 45783712
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 34,
+        "sampledPeakBuffered": 3203236,
+        "baselineMemory": 15830888,
+        "peakMemory": 24958920
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3443080,
+        "baselineMemory": 24976440,
+        "peakMemory": 33770440
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 2951272,
+        "baselineMemory": 33934160,
+        "peakMemory": 42985224
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 5746528,
+        "baselineMemory": 42997240,
+        "peakMemory": 45946504
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 107,
+        "sampledPeakBuffered": 6434232,
+        "baselineMemory": 20169888,
+        "peakMemory": 46083960
+      },
+      {
+        "run": 15,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6625632,
+        "baselineMemory": 26372864,
+        "peakMemory": 46713408
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3533552,
+        "baselineMemory": 34276112,
+        "peakMemory": 43294448
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3373496,
+        "baselineMemory": 43332728,
+        "peakMemory": 43332728
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3457000,
+        "baselineMemory": 22343128,
+        "peakMemory": 31494088
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 6611712,
+        "baselineMemory": 31526304,
+        "peakMemory": 47126192
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 107,
+        "sampledPeakBuffered": 6406360,
+        "baselineMemory": 38071072,
+        "peakMemory": 45800464
+      },
+      {
+        "run": 16,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 6438856,
+        "baselineMemory": 15558640,
+        "peakMemory": 45601480
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 3148200,
+        "baselineMemory": 23801568,
+        "peakMemory": 32880440
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 2974472,
+        "baselineMemory": 32914040,
+        "peakMemory": 41836024
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 26,
+        "sampledPeakBuffered": 3373496,
+        "baselineMemory": 41873048,
+        "peakMemory": 44778536
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 6620992,
+        "baselineMemory": 20723360,
+        "peakMemory": 47158152
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 106,
+        "sampledPeakBuffered": 5741888,
+        "baselineMemory": 25942864,
+        "peakMemory": 46845472
+      },
+      {
+        "run": 17,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6616352,
+        "baselineMemory": 32303352,
+        "peakMemory": 46878320
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3530056,
+        "baselineMemory": 40597840,
+        "peakMemory": 46554216
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 2969832,
+        "baselineMemory": 18594440,
+        "peakMemory": 27671304
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 34,
+        "sampledPeakBuffered": 3387416,
+        "baselineMemory": 27708976,
+        "peakMemory": 36592408
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 6541076,
+        "baselineMemory": 36797144,
+        "peakMemory": 46767056
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 6579232,
+        "baselineMemory": 43948992,
+        "peakMemory": 45961824
+      },
+      {
+        "run": 18,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 5487880,
+        "baselineMemory": 20866168,
+        "peakMemory": 46456392
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 3539416,
+        "baselineMemory": 28555336,
+        "peakMemory": 37555048
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 25,
+        "sampledPeakBuffered": 3405960,
+        "baselineMemory": 37593264,
+        "peakMemory": 46057256
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 3321248,
+        "baselineMemory": 16103944,
+        "peakMemory": 25262400
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 6565312,
+        "baselineMemory": 25291760,
+        "peakMemory": 46788560
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6607072,
+        "baselineMemory": 31814824,
+        "peakMemory": 46065000
+      },
+      {
+        "run": 19,
+        "protocol": "legacy",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 105,
+        "sampledPeakBuffered": 6124684,
+        "baselineMemory": 39559096,
+        "peakMemory": 45811952
+      }
+    ]
+  },
+  "repeatedJvmSession": {
+    "commit": "78227e05",
+    "pairs": 20,
+    "samples": [
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 45,
+        "sampledPeakBuffered": 210443,
+        "baselineMemory": 31285864,
+        "peakMemory": 52735984
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 44,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 54959592,
+        "peakMemory": 79360456
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 33,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 80260968,
+        "peakMemory": 102723400
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 145,
+        "sampledPeakBuffered": 16688,
+        "baselineMemory": 103382472,
+        "peakMemory": 192376976
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 155,
+        "sampledPeakBuffered": 1032494,
+        "baselineMemory": 192868136,
+        "peakMemory": 198553752
+      },
+      {
+        "run": 0,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 52400,
+        "baselineMemory": 105407976,
+        "peakMemory": 195657752
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 51,
+        "sampledPeakBuffered": 105274,
+        "baselineMemory": 198523360,
+        "peakMemory": 202734848
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 35680720,
+        "peakMemory": 59883544
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 59883544,
+        "peakMemory": 81853840
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 133,
+        "sampledPeakBuffered": 1018630,
+        "baselineMemory": 81918856,
+        "peakMemory": 171817712
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 171817712,
+        "peakMemory": 198553888
+      },
+      {
+        "run": 1,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 82499992,
+        "peakMemory": 172433568
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 290388,
+        "baselineMemory": 174996376,
+        "peakMemory": 196923736
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 197573704,
+        "peakMemory": 197573704
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 38468232,
+        "peakMemory": 60929456
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 125,
+        "sampledPeakBuffered": 919764,
+        "baselineMemory": 61111552,
+        "peakMemory": 151056744
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 240,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 151056744,
+        "peakMemory": 194716992
+      },
+      {
+        "run": 2,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 126,
+        "sampledPeakBuffered": 18864,
+        "baselineMemory": 65477856,
+        "peakMemory": 154540240
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 313880,
+        "baselineMemory": 157343320,
+        "peakMemory": 179355296
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 179371696,
+        "peakMemory": 196446392
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 21375616,
+        "peakMemory": 43375424
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1151014,
+        "baselineMemory": 43498704,
+        "peakMemory": 133594240
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 133594240,
+        "peakMemory": 194397160
+      },
+      {
+        "run": 3,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 44861464,
+        "peakMemory": 135224160
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 190673,
+        "baselineMemory": 137425080,
+        "peakMemory": 159681600
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 159681600,
+        "peakMemory": 181443504
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 182213744,
+        "peakMemory": 191290960
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 1114830,
+        "baselineMemory": 30501744,
+        "peakMemory": 120312344
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 120491520,
+        "peakMemory": 196779928
+      },
+      {
+        "run": 4,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 28203448,
+        "peakMemory": 117491704
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 315428,
+        "baselineMemory": 119228848,
+        "peakMemory": 141288248
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 141893040,
+        "peakMemory": 164235696
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 164669816,
+        "peakMemory": 186431232
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 126,
+        "sampledPeakBuffered": 1193960,
+        "baselineMemory": 187131824,
+        "peakMemory": 187131824
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 12064,
+        "baselineMemory": 103629496,
+        "peakMemory": 192779736
+      },
+      {
+        "run": 5,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 193030984,
+        "peakMemory": 193030984
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 340775,
+        "baselineMemory": 107681120,
+        "peakMemory": 129559384
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 129559384,
+        "peakMemory": 151409208
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 32,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 151573760,
+        "peakMemory": 173676104
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 126,
+        "sampledPeakBuffered": 1139318,
+        "baselineMemory": 174707984,
+        "peakMemory": 190179208
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 94143168,
+        "peakMemory": 183967672
+      },
+      {
+        "run": 6,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 183967672,
+        "peakMemory": 196019680
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 336672,
+        "baselineMemory": 98359024,
+        "peakMemory": 120303200
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 120319600,
+        "peakMemory": 142653992
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 142820824,
+        "peakMemory": 164743552
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 931002,
+        "baselineMemory": 165845408,
+        "peakMemory": 195003096
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 114,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 77397104,
+        "peakMemory": 166495744
+      },
+      {
+        "run": 7,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 166495744,
+        "peakMemory": 189499376
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 296833,
+        "baselineMemory": 87273576,
+        "peakMemory": 109736096
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 109742512,
+        "peakMemory": 131529600
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 132004360,
+        "peakMemory": 154006016
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1095455,
+        "baselineMemory": 154222304,
+        "peakMemory": 197589328
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 62169632,
+        "peakMemory": 151180296
+      },
+      {
+        "run": 8,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 151504640,
+        "peakMemory": 191867144
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 211741,
+        "baselineMemory": 68916272,
+        "peakMemory": 90309480
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 90658056,
+        "peakMemory": 113038152
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 113038152,
+        "peakMemory": 135497648
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1207727,
+        "baselineMemory": 135497648,
+        "peakMemory": 194466376
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 47673032,
+        "peakMemory": 136219512
+      },
+      {
+        "run": 9,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 119,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 136219512,
+        "peakMemory": 196365344
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 50,
+        "sampledPeakBuffered": 169403,
+        "baselineMemory": 46663688,
+        "peakMemory": 69887320
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 55,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 69903160,
+        "peakMemory": 91235312
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 46,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 92053968,
+        "peakMemory": 113434976
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 1038,
+        "sampledPeakBuffered": 3270342,
+        "baselineMemory": 114090840,
+        "peakMemory": 200745488
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 3949111,
+        "baselineMemory": 19658536,
+        "peakMemory": 108635632
+      },
+      {
+        "run": 10,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 3843055,
+        "baselineMemory": 108914432,
+        "peakMemory": 193502328
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 335395,
+        "baselineMemory": 22953384,
+        "peakMemory": 44842328
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 45323768,
+        "peakMemory": 67197320
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 67206760,
+        "peakMemory": 89568608
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 1151459,
+        "baselineMemory": 89568608,
+        "peakMemory": 179243376
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 14224,
+        "baselineMemory": 179932544,
+        "peakMemory": 192448032
+      },
+      {
+        "run": 11,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 113,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 96387096,
+        "peakMemory": 185047632
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 297684,
+        "baselineMemory": 186910328,
+        "peakMemory": 197627568
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 27570656,
+        "peakMemory": 50244016
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 50428696,
+        "peakMemory": 72919208
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1253430,
+        "baselineMemory": 72919208,
+        "peakMemory": 162048168
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 162048168,
+        "peakMemory": 194548952
+      },
+      {
+        "run": 12,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 76006088,
+        "peakMemory": 165031152
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 316404,
+        "baselineMemory": 166792912,
+        "peakMemory": 188738424
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 189188648,
+        "peakMemory": 193980600
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 2464,
+        "baselineMemory": 32519568,
+        "peakMemory": 54574776
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 123,
+        "sampledPeakBuffered": 1153201,
+        "baselineMemory": 55184560,
+        "peakMemory": 145102152
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 145310928,
+        "peakMemory": 197365272
+      },
+      {
+        "run": 13,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 115,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 52202632,
+        "peakMemory": 140833360
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 318511,
+        "baselineMemory": 142581144,
+        "peakMemory": 164216816
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 164837840,
+        "peakMemory": 187630472
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 187663272,
+        "peakMemory": 190778192
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 1150184,
+        "baselineMemory": 36056600,
+        "peakMemory": 124931736
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 124931736,
+        "peakMemory": 194303384
+      },
+      {
+        "run": 14,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 35439376,
+        "peakMemory": 124725256
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 301487,
+        "baselineMemory": 126236928,
+        "peakMemory": 147807832
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 147996936,
+        "peakMemory": 170421376
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 170677536,
+        "peakMemory": 191555888
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 118,
+        "sampledPeakBuffered": 1210176,
+        "baselineMemory": 18568848,
+        "peakMemory": 107417552
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 112,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 107663816,
+        "peakMemory": 193361696
+      },
+      {
+        "run": 15,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 19265800,
+        "peakMemory": 108078224
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 315152,
+        "baselineMemory": 110012024,
+        "peakMemory": 131704288
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 132195472,
+        "peakMemory": 154139472
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 154139472,
+        "peakMemory": 177464592
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 1188207,
+        "baselineMemory": 177464592,
+        "peakMemory": 194077856
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 110,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 91159632,
+        "peakMemory": 181411024
+      },
+      {
+        "run": 16,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 181411024,
+        "peakMemory": 193809152
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 29,
+        "sampledPeakBuffered": 303472,
+        "baselineMemory": 95972368,
+        "peakMemory": 117597696
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 117818808,
+        "peakMemory": 140535288
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 2480,
+        "baselineMemory": 140535288,
+        "peakMemory": 163047816
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 1071755,
+        "baselineMemory": 163062848,
+        "peakMemory": 195539912
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 71964928,
+        "peakMemory": 160759008
+      },
+      {
+        "run": 17,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 121,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 161063848,
+        "peakMemory": 193659936
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 31,
+        "sampledPeakBuffered": 242244,
+        "baselineMemory": 76978424,
+        "peakMemory": 99047584
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 99047584,
+        "peakMemory": 121009864
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 27,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 121353056,
+        "peakMemory": 144206488
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 120,
+        "sampledPeakBuffered": 1139772,
+        "baselineMemory": 144206488,
+        "peakMemory": 194106896
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 111,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 55463032,
+        "peakMemory": 145032808
+      },
+      {
+        "run": 18,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 117,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 145234672,
+        "peakMemory": 194116816
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 30,
+        "sampledPeakBuffered": 302550,
+        "baselineMemory": 58453160,
+        "peakMemory": 80443592
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 80508600,
+        "peakMemory": 102796464
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 1,
+        "bytes": 4194304,
+        "elapsedMs": 28,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 102796464,
+        "peakMemory": 125637696
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 0,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 122,
+        "sampledPeakBuffered": 1208208,
+        "baselineMemory": 125637696,
+        "peakMemory": 192882432
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 1,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11744,
+        "baselineMemory": 38541280,
+        "peakMemory": 127223960
+      },
+      {
+        "run": 19,
+        "protocol": "session",
+        "iteration": 2,
+        "concurrent": 4,
+        "bytes": 16777216,
+        "elapsedMs": 116,
+        "sampledPeakBuffered": 11760,
+        "baselineMemory": 127617728,
+        "peakMemory": 195849888
+      }
+    ]
+  },
+  "baselineFailures": [
+    {
+      "name": "legacy-jvm-final-reproduction",
+      "commit": "b73bddf8",
+      "tests": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "stage": "warmup-receive",
+      "timeoutMs": 120000,
+      "senderState": "Completed",
+      "receiverState": "InProgress",
+      "dataChannels": "Open/Open",
+      "cleanupRemainingProcesses": 0,
+      "note": "No benchmark sample completed in this run. Prior successful baseline samples are retained; this failed reproduction is not counted as a successful test."
+    }
+  ],
+  "summaries": {
+    "legacy-jvm": {
+      "1": {
+        "samples": 3,
+        "medianElapsedMs": 29,
+        "maxElapsedMs": 42,
+        "p95ElapsedMs": 42,
+        "medianThroughputMiBPerSecond": 137.93103448275863,
+        "sampledPeakBufferedBytes": 3371328,
+        "sampledPeakMemoryBytes": 65879520
+      },
+      "4": {
+        "samples": 3,
+        "medianElapsedMs": 107,
+        "maxElapsedMs": 116,
+        "p95ElapsedMs": 116,
+        "medianThroughputMiBPerSecond": 149.53271028037383,
+        "sampledPeakBufferedBytes": 6185004,
+        "sampledPeakMemoryBytes": 174096000
+      }
+    },
+    "legacy-js": {
+      "1": {
+        "samples": 3,
+        "medianElapsedMs": 134,
+        "maxElapsedMs": 141,
+        "p95ElapsedMs": 141,
+        "medianThroughputMiBPerSecond": 29.850746268656717,
+        "sampledPeakBufferedBytes": 2064888,
+        "sampledPeakMemoryBytes": 209680477
+      },
+      "4": {
+        "samples": 3,
+        "medianElapsedMs": 522,
+        "maxElapsedMs": 525,
+        "p95ElapsedMs": 525,
+        "medianThroughputMiBPerSecond": 30.65134099616858,
+        "sampledPeakBufferedBytes": 1573248,
+        "sampledPeakMemoryBytes": 275672768
+      }
+    },
+    "legacy-android-redmi": {
+      "1": {
+        "samples": 1,
+        "medianElapsedMs": 156,
+        "maxElapsedMs": 156,
+        "p95ElapsedMs": 156,
+        "medianThroughputMiBPerSecond": 25.641025641025642,
+        "sampledPeakBufferedBytes": 3137120,
+        "sampledPeakMemoryBytes": 21248624
+      }
+    },
+    "session-jvm": {
+      "1": {
+        "samples": 3,
+        "medianElapsedMs": 37,
+        "maxElapsedMs": 46,
+        "p95ElapsedMs": 46,
+        "medianThroughputMiBPerSecond": 108.10810810810811,
+        "sampledPeakBufferedBytes": 255546,
+        "sampledPeakMemoryBytes": 95001120
+      },
+      "4": {
+        "samples": 3,
+        "medianElapsedMs": 130,
+        "maxElapsedMs": 132,
+        "p95ElapsedMs": 132,
+        "medianThroughputMiBPerSecond": 123.07692307692308,
+        "sampledPeakBufferedBytes": 533440,
+        "sampledPeakMemoryBytes": 204642696
+      }
+    },
+    "session-js": {
+      "1": {
+        "samples": 3,
+        "medianElapsedMs": 69,
+        "maxElapsedMs": 106,
+        "p95ElapsedMs": 106,
+        "medianThroughputMiBPerSecond": 57.971014492753625,
+        "sampledPeakBufferedBytes": 942156,
+        "sampledPeakMemoryBytes": 199418270
+      },
+      "4": {
+        "samples": 3,
+        "medianElapsedMs": 265,
+        "maxElapsedMs": 268,
+        "p95ElapsedMs": 268,
+        "medianThroughputMiBPerSecond": 60.37735849056604,
+        "sampledPeakBufferedBytes": 3794746,
+        "sampledPeakMemoryBytes": 313615483
+      }
+    },
+    "session-android-redmi": {
+      "1": {
+        "samples": 3,
+        "medianElapsedMs": 179,
+        "maxElapsedMs": 217,
+        "p95ElapsedMs": 217,
+        "medianThroughputMiBPerSecond": 22.3463687150838,
+        "sampledPeakBufferedBytes": 145851,
+        "sampledPeakMemoryBytes": 59225680
+      },
+      "4": {
+        "samples": 3,
+        "medianElapsedMs": 563,
+        "maxElapsedMs": 563,
+        "p95ElapsedMs": 563,
+        "medianThroughputMiBPerSecond": 28.41918294849023,
+        "sampledPeakBufferedBytes": 941315,
+        "sampledPeakMemoryBytes": 21282336
+      }
+    },
+    "legacy-jvm-20-pairs": {
+      "1": {
+        "samples": 60,
+        "medianElapsedMs": 28.0,
+        "maxElapsedMs": 42,
+        "p95ElapsedMs": 34,
+        "medianThroughputMiBPerSecond": 142.85714285714286,
+        "sampledPeakBufferedBytes": 3590944,
+        "sampledPeakMemoryBytes": 68334416
+      },
+      "4": {
+        "samples": 60,
+        "medianElapsedMs": 107.0,
+        "maxElapsedMs": 116,
+        "p95ElapsedMs": 115,
+        "medianThroughputMiBPerSecond": 149.53271028037383,
+        "sampledPeakBufferedBytes": 6648972,
+        "sampledPeakMemoryBytes": 174625696
+      }
+    },
+    "session-jvm-20-pairs": {
+      "1": {
+        "samples": 60,
+        "medianElapsedMs": 29.0,
+        "maxElapsedMs": 55,
+        "p95ElapsedMs": 46,
+        "medianThroughputMiBPerSecond": 137.93103448275863,
+        "sampledPeakBufferedBytes": 340775,
+        "sampledPeakMemoryBytes": 202734848
+      },
+      "4": {
+        "samples": 60,
+        "medianElapsedMs": 117.0,
+        "maxElapsedMs": 1038,
+        "p95ElapsedMs": 145,
+        "medianThroughputMiBPerSecond": 136.75213675213675,
+        "sampledPeakBufferedBytes": 3949111,
+        "sampledPeakMemoryBytes": 200745488
+      }
+    }
+  },
+  "percentileMethod": "nearest-rank: sorted samples at 1-based index ceil(p * count)"
+}

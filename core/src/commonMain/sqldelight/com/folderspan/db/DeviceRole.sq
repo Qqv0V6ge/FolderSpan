@@ -1,0 +1,51 @@
+CREATE TABLE DeviceRole (
+    id         INTEGER  NOT NULL CONSTRAINT DeviceRole_pk PRIMARY KEY AUTOINCREMENT CONSTRAINT DeviceRole_pk_2 UNIQUE,
+    name       TEXT     NOT NULL,
+    comment    TEXT,
+    sortOrder  INTEGER  NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX DeviceRole_id_uindex
+    ON DeviceRole (id);
+
+-- Insert a new role
+-- Insert predefined roles
+INSERT INTO DeviceRole (id, name, comment, sortOrder) VALUES
+    (1, '超级管理员', '设置后设备将有所有权限，不建议使用到陌生设备', 999),
+    (2, '游客', '该角色可以设置任意的设备', 1);
+
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+insert:
+INSERT INTO DeviceRole (name, comment, sortOrder) VALUES (?, ?, ?);
+
+insertWithId:
+INSERT OR REPLACE INTO DeviceRole (id, name, comment, sortOrder) VALUES (?, ?, ?, ?);
+
+-- Read all roles
+selectAll:
+SELECT dr.*,
+       COUNT(drdp.deviceRoleId) AS roleCount
+FROM DeviceRole dr
+LEFT JOIN DeviceRoleDevicePermission drdp ON dr.id = drdp.deviceRoleId
+GROUP BY dr.id, dr.name ORDER BY sortOrder DESC;
+
+-- Select By Id
+selectById:
+SELECT * FROM DeviceRole WHERE id = ?;
+
+-- Select Name By Id
+selectNameById:
+SELECT name FROM DeviceRole WHERE id = ?;
+
+-- Update a role by id
+updateRoleById:
+UPDATE DeviceRole SET name = ?, comment = ? WHERE id = ?;
+
+-- Delete a role by id
+deleteRoleById:
+DELETE FROM DeviceRole WHERE id = ?;
+
+deleteAll:
+DELETE FROM DeviceRole;

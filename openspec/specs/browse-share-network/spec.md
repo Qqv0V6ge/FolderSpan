@@ -1,0 +1,373 @@
+# browse-share-network Specification
+
+## Purpose
+TBD - created by archiving change add-share-network-disk. Update Purpose after archive.
+## Requirements
+### Requirement: ShareNetwork disk entry
+The system SHALL expose a `ShareNetwork` DiskBase entry that represents a link-share HTTP endpoint and can be selected from the network disk switch list.
+
+#### Scenario: Select ShareNetwork from disk switch
+- **WHEN** a ShareNetwork entry is present in `NetworkState` and the user selects it
+- **THEN** the current desk is set to that ShareNetwork entry
+
+### Requirement: ShareNetwork list requests
+When the current desk is ShareNetwork, the system SHALL request directory listings from the link-share Route server using `X-API-Request: true`, a `pwd` query parameter sourced from `ShareNetwork.password`, and a User-Agent derived from `getSocketDevice()`.
+The system SHALL tag returned entries with `FileProtocol.Network` and a stable `protocolId` for the ShareNetwork instance.
+
+#### Scenario: List root directory with credentials
+- **WHEN** the user opens the ShareNetwork root path
+- **THEN** the client issues a Route-mode HTTP GET with `X-API-Request: true`
+- **AND** the request includes `pwd` when `ShareNetwork.password` is not blank
+- **AND** the User-Agent is derived from `getSocketDevice()`
+- **AND** the returned file entries are labeled as `FileProtocol.Network`
+
+### Requirement: ShareNetwork file download
+When a user downloads or opens a file from ShareNetwork, the system SHALL download the file bytes from the link-share Route server using `X-API-Request: true`, optional `pwd`, and User-Agent derived from `getSocketDevice()`.
+
+#### Scenario: Download a ShareNetwork file
+- **WHEN** the user triggers a download/open for a ShareNetwork file
+- **THEN** the client downloads the file via a Route-mode HTTP GET with `X-API-Request: true`
+- **AND** the request includes `pwd` when `ShareNetwork.password` is not blank
+
+### Requirement: Link-share server Disk permissions
+The link-share HTTP server SHALL expose only shared files whose source Disk has `DiskMenuPermission.share == true`.
+
+#### Scenario: Shareable Disk files are served
+- **WHEN** an authorized link-share request targets a file from a Disk with `share=true`
+- **THEN** the server resolves the file through that Disk protocol
+- **AND** the server returns listing or download content using the existing link-share response format
+
+#### Scenario: Non-shareable Disk files are rejected
+- **WHEN** a link-share authorization snapshot contains a file from a Disk with `share=false`
+- **THEN** the file is omitted from link-share listings
+- **AND** direct route access to that file is rejected without reading its path as a local file
+
+### Requirement: Link-share browser streamed batch download
+The link-share browser page SHALL provide a batch download action that streams the current shared path into a ZIP archive in the browser, using `folder-zip-worker.js` with `fflate.min.js` and a streaming browser save path without buffering the full archive in memory.
+
+#### Scenario: Stream current share path as ZIP
+- **GIVEN** the browser has an authorized link-share session
+- **AND** the current path contains files or directories
+- **WHEN** the user starts streamed batch download
+- **THEN** the page recursively requests directory listings using the existing link-share JSON listing contract
+- **AND** streams each included file into the ZIP worker under its relative archive path
+- **AND** writes ZIP chunks to the browser save stream as they are produced
+- **AND** the resulting archive preserves nested directory structure.
+
+#### Scenario: Streamed batch download unavailable
+- **GIVEN** the browser cannot use the secure streamed save path, StreamSaver cannot initialize, or the ZIP worker cannot initialize before archive output starts
+- **WHEN** the user starts streamed batch download
+- **THEN** the page explains that streamed batch download is unavailable
+- **AND** keeps the existing script download option available as a fallback.
+
+#### Scenario: Streamed batch download locks the progress dialog
+- **GIVEN** a streamed batch download is running
+- **WHEN** the user clicks outside the ZIP progress dialog, presses Escape, or uses visible dialog controls
+- **THEN** the page keeps the progress dialog open
+- **AND** does not expose a cancel action until the download finishes or fails.
+
+### Requirement: Link-share batch downloads preserve share boundaries
+Streamed batch downloads SHALL enforce the same link-share authorization, hidden-file visibility, and Disk share permission boundaries as normal link-share browsing and direct file downloads.
+
+#### Scenario: Hidden or unauthorized entries are excluded
+- **GIVEN** the active link-share session is not allowed to view hidden files
+- **WHEN** the user starts streamed batch download from a shared directory that contains hidden children
+- **THEN** hidden children are not listed into the ZIP traversal
+- **AND** direct reads for hidden paths are rejected if requested manually.
+
+#### Scenario: Share permission changes during traversal
+- **GIVEN** an entry was visible when traversal began
+- **AND** the source Disk becomes unavailable or loses link-share permission before that file is read
+- **WHEN** the batch download attempts to read the file
+- **THEN** the server rejects the read using the existing link-share response semantics
+- **AND** the page reports the batch download failure or partial failure without bypassing the permission check.
+
+### Requirement: Link-share custom server compatibility
+The link-share browser server SHALL preserve the existing browser and API contract when served by the first-party HTTP server instead of Ktor server engines.
+
+#### Scenario: Browser page and static assets remain compatible
+- **GIVEN** a user has an authorized link-share session
+- **WHEN** the user opens the shared root or a shared directory in a browser
+- **THEN** the server returns the same HTML page contract, static asset routes, content types, security headers, and cache headers required by the current link-share page
+- **AND** browser navigation, search, breadcrumbs, script download, and ZIP-download controls continue to work.
+
+#### Scenario: JSON listing remains compatible
+- **GIVEN** a ShareNetwork or browser ZIP traversal client sends `X-API-Request: true`
+- **WHEN** the client requests the shared root or a shared directory
+- **THEN** the server returns the existing JSON listing shape and status-code semantics
+- **AND** hidden-file and Disk share permission filtering are applied exactly as normal link-share browsing applies them.
+
+#### Scenario: File download remains compatible
+- **GIVEN** an authorized link-share request targets a shared file
+- **WHEN** the client downloads the file with or without a valid `Range` header
+- **THEN** the server returns the same download headers, content type, byte body, partial-content behavior, and error semantics that existing link-share clients expect.
+
+#### Scenario: Upload remains compatible
+- **GIVEN** uploads are enabled for the active link-share session
+- **WHEN** the browser calls upload-check or upload routes using the existing query parameters, headers, and request body format
+- **THEN** the server accepts, rejects, overwrites, and reports upload results with the same status codes and response bodies as the current link-share upload flow.
+
+### Requirement: Link-share per-device upload authorization
+The link-share server SHALL enforce upload permission per authorized device/session, independently from browse and download authorization.
+
+#### Scenario: Authorized device without upload permission checks upload
+- **GIVEN** a link-share device has valid browse/download authorization
+- **AND** that device does not have upload permission
+- **WHEN** the device calls upload-check for a shared path
+- **THEN** the server rejects the upload capability check without changing browse/download access
+
+#### Scenario: Authorized device with upload permission uploads
+- **GIVEN** a link-share device has valid browse/download authorization
+- **AND** that device has upload permission
+- **WHEN** the device calls upload-check or upload routes for an allowed shared path
+- **THEN** the server accepts the request using the existing upload route contract
+
+#### Scenario: Host revokes one device upload permission
+- **GIVEN** two link-share devices are authorized to browse the same share
+- **AND** both devices initially have upload permission
+- **WHEN** the host revokes upload permission for one device
+- **THEN** upload routes for that device are rejected
+- **AND** upload routes for the other device continue to use its own upload permission
+
+### Requirement: Link-share upload permission requests
+The link-share server SHALL allow an already authorized browse/download device to request upload permission, and the request SHALL be reviewable by the host.
+
+#### Scenario: Device requests upload permission
+- **GIVEN** a link-share device has valid browse/download authorization
+- **AND** the device does not have upload permission
+- **WHEN** the device sends an upload permission request
+- **THEN** the server records a pending upload request for that device
+- **AND** the host can see the device as requesting upload permission
+
+#### Scenario: Duplicate upload permission request
+- **GIVEN** a link-share device already has a pending upload permission request
+- **WHEN** the same device sends another upload permission request
+- **THEN** the server keeps one pending request for that device
+- **AND** the response indicates the request is already pending
+
+#### Scenario: Device requests after upload rejection
+- **GIVEN** a link-share device has valid browse/download authorization
+- **AND** the host has rejected upload permission for that device
+- **WHEN** the device sends an upload permission request
+- **THEN** the server does not create a pending upload request
+- **AND** the response indicates upload permission was rejected
+
+#### Scenario: Host approves upload request
+- **GIVEN** a link-share device has a pending upload permission request
+- **WHEN** the host approves the request
+- **THEN** the device gains upload permission
+- **AND** the pending upload request is cleared
+
+#### Scenario: Host rejects upload request
+- **GIVEN** a link-share device has a pending upload permission request
+- **WHEN** the host rejects the request
+- **THEN** the device remains authorized for browse/download
+- **AND** the device does not have upload permission
+- **AND** the pending upload request is cleared
+
+### Requirement: 链接分享必须执行真实路径边界校验
+
+链接分享的浏览、单文件下载、批量下载和上传 MUST 将用户选定共享根解析为信任边界，并在每次 IO 前验证请求目标仍位于该根内。共享根之下的符号链接不得作为递归入口；任何经过链接解析到根外的请求 MUST 被拒绝。
+
+#### Scenario: 浏览根内的外部目录链接
+
+- **WHEN** 共享根内存在指向根外目录的符号链接，访客请求浏览该路径
+- **THEN** 服务端拒绝进入链接目标
+- **AND** 响应不泄露目标目录清单或元数据
+
+#### Scenario: 下载经过链接解析到根外的文件
+
+- **WHEN** 访客请求下载的表面路径在共享根内，但解析后文件位于根外
+- **THEN** 服务端在打开文件之前拒绝请求
+
+#### Scenario: 上传目标包含目录链接
+
+- **WHEN** 上传目标的任一父组件是共享根内的目录符号链接
+- **THEN** 服务端在创建临时文件或写入内容前拒绝请求
+- **AND** 根外目标保持不变
+
+#### Scenario: 批量下载包含链接
+
+- **WHEN** 批量下载选中的目录树包含符号链接
+- **THEN** 服务端不会把链接目标的后代加入归档或下载流
+- **AND** 批量操作在有限时间和有界遍历状态下结束
+
+### Requirement: 链接分享提供浏览器原生文件预览
+
+链接分享浏览器页面 SHALL 仅为媒体类型和扩展名落在保守浏览器原生预览范围内的普通文件提供“在浏览器中打开/预览”入口，并 SHALL 让文件卡片主体和独立下载图标均执行下载。预览请求 MUST 使用与普通下载可区分的请求语义；普通下载和 `X-API-Request` 文件读取契约 MUST 保持原有下载行为。
+
+#### Scenario: 从目录列表打开文件预览
+
+- **GIVEN** 访客已获得目标文件的链接分享访问权限
+- **WHEN** 访客在目录列表中触发该文件的浏览器预览入口
+- **THEN** 页面使用明确的预览请求打开文件
+- **AND** 下载入口仍使用不带预览语义的原文件地址
+
+#### Scenario: 从目录列表显式下载文件
+
+- **GIVEN** 一个文件同时显示预览入口和下载入口
+- **WHEN** 访客触发下载入口
+- **THEN** 服务端返回附件下载响应
+- **AND** 浏览器页面不把该操作转换为预览请求
+
+#### Scenario: 点击文件卡片主体下载
+
+- **GIVEN** 目录列表显示一个普通文件卡片
+- **WHEN** 访客点击文件信息区域或卡片中未被操作图标占用的区域
+- **THEN** 页面请求不带预览语义的原文件地址
+- **AND** 浏览器按附件下载该文件
+- **AND** 打开图标仍是独立的浏览器预览入口
+
+#### Scenario: 未知或非展示型文件仅提供下载
+
+- **GIVEN** 文件媒体类型或扩展名无法可靠确定，或不属于浏览器原生预览候选类别
+- **WHEN** 页面渲染该文件卡片
+- **THEN** 页面不生成浏览器预览入口
+- **AND** 文件仍具有明确的下载入口
+
+#### Scenario: 打开单文件分享
+
+- **GIVEN** 链接分享仅包含一个普通文件
+- **WHEN** 访客通过非 API 浏览器请求打开分享根地址
+- **THEN** 服务端使用浏览器预览响应语义提供该文件
+- **AND** 当前浏览器决定显示或下载该响应
+
+#### Scenario: API 客户端读取共享文件
+
+- **GIVEN** 客户端使用 `X-API-Request` 读取共享文件
+- **WHEN** 请求不包含浏览器预览语义
+- **THEN** 服务端保持现有附件下载、状态码和字节响应契约
+
+### Requirement: 当前访问浏览器决定文件显示能力
+
+链接分享服务 SHALL 先使用与浏览器品牌无关的保守媒体类别和已知扩展名判断文件是否具备原生预览资格；仅具备资格的预览响应 SHALL 使用可确定的真实媒体类型和 `Content-Disposition: inline`，并 MUST 将具体容器、编码是否能够显示以及如何显示交给当前访问浏览器决定。服务端 MUST NOT 根据 User-Agent 选择文件格式，MUST NOT 维护按浏览器品牌划分的格式兼容表，并 MUST NOT 为不支持的格式执行转码或自定义渲染。
+
+#### Scenario: 当前浏览器支持响应媒体类型
+
+- **GIVEN** 服务端能够确定共享文件的媒体类型
+- **AND** 当前浏览器原生支持该媒体类型及文件编码
+- **WHEN** 浏览器收到预览响应
+- **THEN** 浏览器使用自身原生查看器或媒体能力显示文件
+
+#### Scenario: 当前浏览器不支持响应媒体类型
+
+- **GIVEN** 服务端返回带真实媒体类型的预览响应
+- **AND** 当前浏览器不支持该媒体类型或文件编码
+- **WHEN** 浏览器处理该响应
+- **THEN** 浏览器按照自身行为下载文件或提示无法打开
+- **AND** 服务端不伪装为其他媒体类型或启动格式转换
+
+#### Scenario: 浏览器明确报告不支持候选媒体
+
+- **GIVEN** 页面为候选 PDF、音频或视频文件生成了打开入口
+- **AND** 当前浏览器通过公开能力 API 明确报告不支持该媒体类型
+- **WHEN** 页面初始化文件操作
+- **THEN** 页面移除该文件的打开入口
+- **AND** 下载入口仍保持可用
+
+#### Scenario: 无法可靠确定媒体类型
+
+- **GIVEN** 文件元数据和文件名都不能可靠确定媒体类型或已知展示型扩展名
+- **WHEN** 服务端处理预览请求
+- **THEN** 服务端使用 `application/octet-stream` 作为保守回退类型
+- **AND** 服务端使用附件下载响应而不是内联显示
+
+#### Scenario: 非浏览器展示型媒体类型
+
+- **GIVEN** 服务端能够确定文件媒体类型
+- **AND** 该类型不属于文本、常见图片/音视频、PDF 等浏览器原生预览候选类别
+- **WHEN** 客户端手工添加预览请求语义
+- **THEN** 服务端忽略内联预览要求并使用附件下载响应
+
+#### Scenario: 平台 MIME 提示与已知预览扩展名冲突
+
+- **GIVEN** 文件具有已知浏览器预览扩展名
+- **AND** 平台 MIME 提示是非展示型或非标准类型
+- **WHEN** 页面生成的预览 URL 请求该文件
+- **THEN** 服务端使用该扩展名对应的规范预览 MIME
+- **AND** 响应保持 `Content-Disposition: inline` 而不是降级为附件
+
+#### Scenario: 不同浏览器打开同一文件
+
+- **GIVEN** 两个浏览器对同一媒体类型具有不同原生能力
+- **WHEN** 它们分别请求同一共享文件的预览
+- **THEN** 服务端返回相同的媒体类型和预览语义
+- **AND** 每个浏览器根据自身能力独立决定显示结果
+
+### Requirement: 文件卡片操作图标具有独立单层悬停状态
+
+链接分享页面 MUST 将打开和下载渲染为两个互不重叠的独立图标链接。每个图标链接 MUST 在指针悬停时呈现自身的单层状态背景和强调色，MUST NOT 在图标内部再嵌套第二层 ripple，并 MUST 保留可见的键盘焦点和无障碍标签。
+
+#### Scenario: 指针移入打开或下载图标
+
+- **GIVEN** 文件卡片同时包含预览和下载操作
+- **WHEN** 指针移入其中一个图标链接
+- **THEN** 仅该图标显示圆形 hover 状态背景和强调色
+- **AND** 另一个图标不显示 hover 状态
+- **AND** 点击打开图标不会命中下载链接
+
+### Requirement: 预览响应保留流式与字节范围能力
+
+链接分享服务 SHALL 使用现有流式文件读取路径生成预览响应，并 SHALL 保留有效 `Range` 请求的部分内容语义，以支持浏览器 PDF 查看、音视频定位和大文件渐进读取。
+
+#### Scenario: 完整预览请求
+
+- **GIVEN** 访客对共享文件具有访问权限
+- **WHEN** 浏览器发起不带 `Range` 的预览请求
+- **THEN** 服务端以 `200`、正确内容长度、媒体类型和内联处置返回文件流
+
+#### Scenario: 字节范围预览请求
+
+- **GIVEN** 访客对共享文件具有访问权限
+- **WHEN** 浏览器使用有效 `Range` 请求预览文件的一段字节
+- **THEN** 服务端以 `206`、`Content-Range`、范围内容长度和相同媒体类型返回对应字节流
+
+### Requirement: 文本预览显式声明字符集
+
+链接分享服务 MUST 为内联预览的 `text/*` 响应在 `Content-Type` 中声明 `charset=UTF-8`，避免浏览器使用本地默认字符集猜测文本编码。服务端 MUST 保持文件原始字节且 MUST NOT 为预览执行字符集转换；附件下载响应 MUST 保持原有媒体类型和原始字节语义。
+
+#### Scenario: 预览 UTF-8 中文文本
+
+- **GIVEN** 一个具备预览资格的 UTF-8 文本文件包含中文内容
+- **WHEN** 浏览器请求预览该文件
+- **THEN** 响应使用 `text/*; charset=UTF-8`
+- **AND** 响应体保持文件原始 UTF-8 字节
+
+#### Scenario: 下载文本文件
+
+- **GIVEN** 一个文本文件通过显式下载入口请求
+- **WHEN** 服务端返回附件响应
+- **THEN** 响应保持附件处置和原始媒体类型
+- **AND** 服务端不转码或改写文件字节
+
+### Requirement: 预览不得削弱链接分享安全边界
+
+预览请求 MUST 执行与目录浏览和直接下载相同的会话授权、隐藏文件可见性、Disk 分享权限、共享根真实路径及符号链接边界校验。能够执行主动内容的媒体类型 MUST 在不授予脚本执行和应用同源权限的隔离策略下返回；若不能建立该隔离，服务端 MUST 改为附件下载。
+
+#### Scenario: 未授权路径请求预览
+
+- **GIVEN** 访客未获得目标文件或隐藏路径的访问权限
+- **WHEN** 访客为该路径添加预览请求参数
+- **THEN** 服务端在打开文件流之前拒绝或重定向请求
+- **AND** 预览参数不改变原有授权结果
+
+#### Scenario: 预览符号链接逃逸目标
+
+- **GIVEN** 请求路径表面位于共享根内但真实解析结果位于共享根外
+- **WHEN** 访客请求预览该路径
+- **THEN** 服务端在执行文件 IO 前拒绝请求
+- **AND** 响应不泄露根外文件内容或元数据
+
+#### Scenario: 浏览器预览主动内容
+
+- **GIVEN** 文件媒体类型能够包含可执行脚本或同源网络操作
+- **WHEN** 服务端允许浏览器以内联方式显示该文件
+- **THEN** 响应使用禁止脚本执行且不授予应用同源身份的沙箱策略
+- **AND** 文件不能借助链接分享会话访问受保护接口
+
+#### Scenario: 主动内容无法安全隔离
+
+- **GIVEN** 当前响应运行时无法为主动内容建立要求的沙箱策略
+- **WHEN** 访客请求预览该文件
+- **THEN** 服务端使用附件下载响应而不是内联显示
+

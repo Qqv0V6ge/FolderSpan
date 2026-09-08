@@ -1,0 +1,15 @@
+"share_importing_title" = "正在导入内容";
+"share_reading_files" = "正在读取所选内容";
+"share_done" = "完成";
+"share_app_icon" = "FolderSpan 应用图标";
+"share_no_files" = "没有找到可导入的内容";
+"share_reading_count" = "正在读取 %d 项内容";
+"share_group_unavailable" = "无法访问共享存储，请检查 App Group 配置";
+"share_staging_failed" = "内容暂存失败";
+"share_received_count" = "已接收 %d 项内容";
+"share_partial_failure" = "另有 %d 项内容读取失败，其余内容已安全保存。";
+"share_saved" = "内容已安全保存，打开 FolderSpan 后即可查看。";
+"share_finish_hint" = "点击“完成”返回，然后打开 FolderSpan。";
+"share_import_failed" = "导入失败";
+"share_read_failed" = "无法读取所选内容";
+"share_retry_hint" = "请返回后重新选择内容再试。";

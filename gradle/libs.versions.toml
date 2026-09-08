@@ -1,0 +1,232 @@
+[versions]
+# Android 平台
+agp = "9.1.1"
+android-compileSdk = "37"
+android-minSdk = "26"
+android-targetSdk = "37"
+android-material3 = "1.14.0"
+androidx-activity = "1.13.0"
+androidx-core = "1.19.0"
+androidx-espresso = "3.7.0"
+androidx-lifecycle = "2.11.0"
+androidx-paging = "3.5.1"
+androidx-testExt = "1.3.0"
+androidx-testRunner = "1.7.0"
+datastore = "1.2.1"
+shizuku = "13.1.5"
+libsu = "6.0.0"
+
+# Kotlin 基础
+kotlin = "2.4.10"
+kotlinx-coroutines = "1.11.0"
+kotlinx-datetime = "0.8.0"
+kotlinx-html = "0.12.0"
+kotlinx-serialization = "1.11.0"
+
+# Compose 界面
+composeMultiplatform = "1.12.0"
+composeHotReload = "1.2.0"
+compose-material-icons-extended = "1.7.3"
+compose-image-loader = "1.10.0"
+compose-settings = "3.2.0"
+compose-native-tray = "1.3.3"
+material3 = "1.12.0-alpha03"
+material-kolor = "5.0.1"
+reorderable = "3.1.0"
+libres = "1.2.4"
+
+# 导航
+androidx-navigation3 = "1.1.1"
+androidx-navigationevent = "1.1.0"
+
+# 网络 (Ktor)
+ktor = "3.5.2"
+
+# 依赖注入 (Koin)
+koin = "4.2.2"
+koin-compose = "4.2.2"
+
+# 数据库 (SQLDelight)
+sqldelight = "2.3.2"
+
+# 加密 / 安全
+tink = "1.23.0"
+bcprov = "1.85"
+
+# 远程协议
+commons-net = "3.13.0"
+sshd = "2.19.0"
+smbj = "0.15.0"
+
+# 实时通信 (WebRTC)
+webrtc-java = "0.16.0"
+webrtc-kmp = "0.125.11"
+
+# 日志
+napier = "2.7.1"
+
+# 存储 / IO
+okio = "3.18.1"
+zstd-kmp = "0.4.0"
+korlibs = "6.0.2"
+korlibsCrypto = "6.0.1"
+multiplatform-settings = "1.3.0"
+
+# 工具库
+build-config = "6.0.10"
+qrcoder = "4.5.0"
+kmpnotifier = "2.0.1"
+nucleus = "2.5.12"
+
+# 测试
+junit = "4.13.2"
+
+[libraries]
+# 测试
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+junit = { module = "junit:junit", version.ref = "junit" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-testRunner" }
+androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
+
+# Android 平台
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+androidx-material3 = { module = "com.google.android.material:material", version.ref = "android-material3" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
+shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
+libsu-core = { module = "com.github.topjohnwu.libsu:core", version.ref = "libsu" }
+libsu-service = { module = "com.github.topjohnwu.libsu:service", version.ref = "libsu" }
+
+# 生命周期
+androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+
+# Kotlin 基础
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+
+# Compose 界面
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
+compose-material3WindowSizeClass = { module = "org.jetbrains.compose.material3:material3-window-size-class", version.ref = "material3" }
+compose-material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "compose-material-icons-extended" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
+compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
+compose-ui-tooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
+compose-native-tray = { module = "io.github.kdroidfilter:composenativetray", version.ref = "compose-native-tray" }
+compose-image-loader = { module = "io.github.qdsfdhvh:image-loader", version.ref = "compose-image-loader" }
+compose-settings-ui = { module = "com.github.alorma.compose-settings:ui-tiles", version.ref = "compose-settings" }
+compose-settings-ui-extended = { module = "com.github.alorma.compose-settings:ui-tiles-extended", version.ref = "compose-settings" }
+material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "material-kolor" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+libres = { module = "io.github.skeptick.libres:libres-compose", version.ref = "libres" }
+
+# 导航
+androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "androidx-navigation3" }
+androidx-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "androidx-navigation3" }
+androidx-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "androidx-navigationevent" }
+androidx-paging-common = { module = "androidx.paging:paging-common", version.ref = "androidx-paging" }
+androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "androidx-paging" }
+
+# 网络 (Ktor 客户端)
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
+ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+
+# 网络 (Ktor 通用)
+ktor-http = { module = "io.ktor:ktor-http", version.ref = "ktor" }
+ktor-serialization-kotlinx-protobuf = { module = "io.ktor:ktor-serialization-kotlinx-protobuf", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# HTML 模板
+kotlinx-html = { module = "org.jetbrains.kotlinx:kotlinx-html", version.ref = "kotlinx-html" }
+
+# 依赖注入 (Koin)
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin-compose" }
+
+# 数据库 (SQLDelight)
+sqldelight-driver-sqlite = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqldelight-driver-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
+sqldelight-driver-native = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+sqldelight-driver-js = { module = "app.cash.sqldelight:web-worker-driver", version.ref = "sqldelight" }
+sqldelight-driver-adapters = { module = "app.cash.sqldelight:primitive-adapters", version.ref = "sqldelight" }
+
+# 加密 / 安全
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprov" }
+bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bcprov" }
+
+# 远程协议
+commons-net = { module = "commons-net:commons-net", version.ref = "commons-net" }
+apache-sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
+apache-sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }
+smbj = { module = "com.hierynomus:smbj", version.ref = "smbj" }
+
+# 实时通信 (WebRTC)
+webrtc-java = { module = "dev.onvoid.webrtc:webrtc-java", version.ref = "webrtc-java" }
+webrtc-kmp = { module = "com.shepeliev:webrtc-kmp", version.ref = "webrtc-kmp" }
+
+# 日志
+napier = { module = "io.github.aakira:napier", version.ref = "napier" }
+
+# 存储 / IO
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+zstd-kmp-okio = { module = "com.squareup.zstd:zstd-kmp-okio", version.ref = "zstd-kmp" }
+zstd-kmp = { module = "com.squareup.zstd:zstd-kmp", version.ref = "zstd-kmp" }
+korlibs-io = { module = "com.soywiz:korlibs-io", version.ref = "korlibs" }
+korlibs-crypto = { module = "com.soywiz:korlibs-crypto", version.ref = "korlibsCrypto" }
+multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatform-settings" }
+multiplatform-settings-test = { module = "com.russhwolf:multiplatform-settings-test", version.ref = "multiplatform-settings" }
+
+# 工具库
+qrcoder = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcoder" }
+kmpnotifier-core = { module = "io.github.mirzemehdi:kmpnotifier-core", version.ref = "kmpnotifier" }
+kmpnotifier-local = { module = "io.github.mirzemehdi:kmpnotifier-local", version.ref = "kmpnotifier" }
+nucleus-notification-common = { module = "dev.nucleusframework:nucleus.notification-common", version.ref = "nucleus" }
+
+[plugins]
+# Android 平台
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+
+# Kotlin
+kotlin-native-cocoapods = { id = "org.jetbrains.kotlin.native.cocoapods", version.ref = "kotlin" }
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+
+# Compose
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
+
+# 网络
+ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
+
+# 数据库
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+
+# 工具库
+libres = { id = "io.github.skeptick.libres", version.ref = "libres" }
+build-config = { id = "com.github.gmazzo.buildconfig", version.ref = "build-config" }

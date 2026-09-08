@@ -1,0 +1,45 @@
+# Markdown Files
+
+本文件用于汇总仓库中的专项 Markdown 文件及其路径；同步范围排除根目录其他通用文档和 `server/`，`openspec/` 仅登记主规范、活跃变更与已归档变更；描述按“目录名 + 文档内容”生成。
+
+- docs / 跨模块文档分类、主题索引与维护约定：docs/README.md
+- docs/delivery / FolderSpan Android、Desktop（含双架构 Linux 与 Windows ARM64 便携包）、iOS 与 Web Release 打包命令、签名准备及产物位置：docs/delivery/release-packaging.md
+- docs/delivery / FolderSpan develop 预览与正式 Release 工作流、Android 临时签名 Secrets、多平台产物、版本发布及故障排查：docs/delivery/ci-cd-pipeline.md
+- docs/networking / 网络协议新增/维护需求清单（含 S3 Ktor 实现、iOS/Web 与断点续传）：docs/networking/network-protocol-requirements.md
+- docs/networking / iOS 原生网络依赖（FTP/SFTP/SMB）：docs/networking/ios-native-libs.md
+- docs/networking / Device HTTP 路由客户端 requestId、batchId 请求取消说明（Remote Share 使用 Session，不在此范围）：docs/networking/http-client-request-cancel.md
+- docs/networking / MCP Streamable HTTP 服务（含 Token Scope、本机默认监听与可选局域网、HTTP/HTTPS 端点、工具清单、四数据源跨源操作、4 MiB 范围读取、512 KiB 直接写入/追加、目录创建、乐观并发条件、敏感度标记与安全说明）：docs/networking/mcp-http-server.md
+- docs/networking / 同账号设备局域网自动连接（含本机默认关闭开关、五分钟可信快照、严格身份字段、显式授权模式、发现/连接签名证明、防重放与临时授权撤销）：docs/networking/account-device-lan-auto-connect.md
+- docs/networking / WebRTC 作为统一 Device Session 字节载体的建连审批、一次性授权、可靠有序通道、背压上限、关闭链路、平台装配及验证说明：docs/networking/device-session-over-webrtc.md
+- docs/networking / 唯一 FSAR2 小文件流格式、codec 能力协商、Session/WebRTC/链接分享映射、设备分享 Session 边界与跨平台回滚说明：docs/networking/fsar-stream-transfer.md
+- docs/product / 权限需求与新增指引：docs/product/permissions.md
+- docs/product / 通知开发说明、跨平台系统通知与 Desktop 原生动作按钮、前后台与设备连接强提醒分发策略、账号通知 Markdown、链接与图片编写契约、路由目录、公开公告目录客户端及公告扇出边界、公开最新应用更新客户端（含 release/beta 渠道、打开关于页与切换渠道不请求、历史版本列表、本地页签 upsert、不发送系统通知）：docs/product/notifications.md
+- docs/product / Local/Device/Session Share/Network/WebRTC 任务传输与状态提示文本说明（含目录创建路径、扫描速度/并发与传输剩余时间）：docs/product/transfer-task-status-texts.md
+- docs/product / 设置与数据同步白名单（含远端较新值覆盖策略、文件共享访问密钥、手动同步分类、数据快照 key、配置目标凭据包装密钥 `app.secrets.dataEncryptionKey`、单项上传、失败补推、设备 ID 首次非空写入后不可覆盖或清除、动态设备名不落设置，以及“自动连接我的设备”、公告已读水位线等本机设置排除项）：docs/product/settings-sync-whitelist.md
+- data/main / DiskMenuPermission：core/src/commonMain/kotlin/com/folderspan/data/main/DiskMenuPermission.md
+- ui/components/drawer / 抽屉展开/收起：app/shared/src/commonMain/kotlin/com/folderspan/ui/components/drawer/README.md
+- service/http / AGENTS 指南（HTTP 客户端、Raw HTTP 路由及无兼容回退的独立设备分享审批 TLS 端点规范）：core/src/commonMain/kotlin/com/folderspan/service/http/AGENTS.md
+- service/operation / AGENTS 指南（通用操作遍历/文件执行并发与端点策略组件）：core/src/commonMain/kotlin/com/folderspan/service/operation/AGENTS.md
+- proMain / AGENTS 指南（独立 Pro Kotlin Multiplatform 模块、分层、网络会话、普通用户文案与 UI 状态规范）：proMain/AGENTS.md
+- ui/screen/network/form / 网络表单：app/shared/src/commonMain/kotlin/com/folderspan/ui/screen/network/form/README.md
+- ui / UI Agents 概览：app/shared/src/commonMain/kotlin/com/folderspan/ui/AGENTS.md
+- ui/components / 组件规范：app/shared/src/commonMain/kotlin/com/folderspan/ui/components/README.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads / 复用既有分享入口、URL 元数据进入侧栏来源与粘贴确认下载的变更提案：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/proposal.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads / 移除独立导入桥接、URL 文件浏览与目标交付、延迟分享、任务数据映射及成功清理设计：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/design.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads / 分享入口复用、URL 交付与任务清理、桥接移除回归及跨端编译、验收范围、用户确认收尾和归档记录：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/tasks.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/open-clipboard-items / URL 元数据文件列表、复制粘贴下载确认与隐私日志增量规范：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/open-clipboard-items/spec.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/paste-clipboard-files / 多平台剪贴板文件优先及非编辑态文字转交增量规范：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/paste-clipboard-files/spec.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/pasted-url-downloads / 主动粘贴 URL 下载任务、响应检查、重试、请求头、线程、通用任务数据映射、结果交付与成功任务清理规范：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/pasted-url-downloads/spec.md
+- openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/share-list-drop-import / 外部文件分享导入、URL 系统分享文件列表、下载结果合并与资源生命周期规范：openspec/changes/archive/2026-09-05-handle-pasted-url-downloads/specs/share-list-drop-import/spec.md
+- openspec/changes/reuse-device-session-over-webrtc / 共享 Session 运行时、一次性审批授权与有界字节通道设计：openspec/changes/reuse-device-session-over-webrtc/design.md
+- openspec/changes/reuse-device-session-over-webrtc / WebRTC 复用统一 Device Session 的变更提案：openspec/changes/reuse-device-session-over-webrtc/proposal.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/connect-browser-device-webrtc / connect-browser-device-webrtc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/connect-browser-device-webrtc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/device-session-over-webrtc / device-session-over-webrtc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/device-session-over-webrtc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-data-channel-file-transfer / webrtc-data-channel-file-transfer 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-data-channel-file-transfer/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-bookmark-rpc / webrtc-device-bookmark-rpc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-bookmark-rpc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-file-rpc / webrtc-device-file-rpc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-file-rpc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-file-transfer-performance / webrtc-device-file-transfer-performance 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-file-transfer-performance/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-path-rpc / webrtc-device-path-rpc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-path-rpc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-rpc / webrtc-device-rpc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-rpc/spec.md
+- openspec/changes/reuse-device-session-over-webrtc / 实现任务及全平台验证收尾状态：openspec/changes/reuse-device-session-over-webrtc/tasks.md
+- openspec/changes/reuse-device-session-over-webrtc / 真实传输回归矩阵、全平台证据、权限边界及新旧性能对比与取舍：openspec/changes/reuse-device-session-over-webrtc/verification.md

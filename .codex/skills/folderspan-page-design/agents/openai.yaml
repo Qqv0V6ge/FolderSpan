@@ -1,0 +1,4 @@
+interface:
+  display_name: "FolderSpan 页面设计"
+  short_description: "按仓库规范设计和重构 Compose Multiplatform 页面"
+  default_prompt: "使用 $folderspan-page-design 按仓库规范设计或重构一个 FolderSpan Compose Multiplatform 页面。"

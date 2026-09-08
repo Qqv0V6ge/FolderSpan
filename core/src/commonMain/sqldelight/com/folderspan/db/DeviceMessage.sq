@@ -1,0 +1,159 @@
+import kotlin.Boolean;
+
+CREATE TABLE DeviceMessage (
+    localId             INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    messageId           TEXT    NOT NULL,
+    peerDeviceId        TEXT    NOT NULL,
+    direction           TEXT    NOT NULL CHECK (direction IN ('Incoming', 'Outgoing')),
+    body                TEXT    NOT NULL,
+    bodyUtf8Length      INTEGER NOT NULL CHECK (bodyUtf8Length BETWEEN 1 AND 1048576),
+    bodySha256          TEXT    NOT NULL,
+    sentAtMillis        INTEGER NOT NULL,
+    receivedAtMillis    INTEGER,
+    status              TEXT    NOT NULL CHECK (status IN ('Sending', 'Delivered', 'Failed', 'Unconfirmed', 'Received')),
+    isRead              INTEGER AS Boolean NOT NULL DEFAULT 0,
+    createdAtMillis     INTEGER NOT NULL,
+    CONSTRAINT unique_peer_message_direction UNIQUE (peerDeviceId, messageId, direction)
+);
+
+CREATE INDEX DeviceMessage_peer_page_idx
+ON DeviceMessage(peerDeviceId, sentAtMillis DESC, localId DESC);
+
+CREATE INDEX DeviceMessage_status_idx
+ON DeviceMessage(status);
+
+CREATE TABLE DeviceConversation (
+    peerDeviceId        TEXT    NOT NULL PRIMARY KEY,
+    lastMessageAtMillis INTEGER NOT NULL,
+    unreadCount         INTEGER NOT NULL DEFAULT 0 CHECK (unreadCount >= 0)
+);
+
+CREATE INDEX DeviceConversation_recent_idx
+ON DeviceConversation(lastMessageAtMillis DESC, peerDeviceId);
+
+insertOutgoing:
+INSERT OR IGNORE INTO DeviceMessage (
+    messageId,
+    peerDeviceId,
+    direction,
+    body,
+    bodyUtf8Length,
+    bodySha256,
+    sentAtMillis,
+    receivedAtMillis,
+    status,
+    isRead,
+    createdAtMillis
+) VALUES (?, ?, 'Outgoing', ?, ?, ?, ?, NULL, 'Sending', 1, ?);
+
+insertIncoming:
+INSERT OR IGNORE INTO DeviceMessage (
+    messageId,
+    peerDeviceId,
+    direction,
+    body,
+    bodyUtf8Length,
+    bodySha256,
+    sentAtMillis,
+    receivedAtMillis,
+    status,
+    isRead,
+    createdAtMillis
+) VALUES (?, ?, 'Incoming', ?, ?, ?, ?, ?, 'Received', ?, ?);
+
+selectByIdentity:
+SELECT *
+FROM DeviceMessage
+WHERE peerDeviceId = ? AND messageId = ? AND direction = ?;
+
+selectByLocalId:
+SELECT *
+FROM DeviceMessage
+WHERE localId = ?;
+
+selectPage:
+SELECT *
+FROM DeviceMessage
+WHERE peerDeviceId = ?
+ORDER BY sentAtMillis DESC, localId DESC
+LIMIT ? OFFSET ?;
+
+selectPageBefore:
+SELECT *
+FROM DeviceMessage
+WHERE peerDeviceId = ?
+  AND (sentAtMillis < ? OR (sentAtMillis = ? AND localId < ?))
+ORDER BY sentAtMillis DESC, localId DESC
+LIMIT ?;
+
+countByPeer:
+SELECT COUNT(*)
+FROM DeviceMessage
+WHERE peerDeviceId = ?;
+
+updateOutgoingStatus:
+UPDATE DeviceMessage
+SET status = ?, receivedAtMillis = ?
+WHERE peerDeviceId = ? AND messageId = ? AND direction = 'Outgoing';
+
+updateOutgoingForExplicitRetry:
+UPDATE DeviceMessage
+SET status = 'Sending', receivedAtMillis = NULL
+WHERE peerDeviceId = ? AND messageId = ? AND direction = 'Outgoing';
+
+recoverSendingAsUnconfirmed:
+UPDATE DeviceMessage
+SET status = 'Unconfirmed'
+WHERE direction = 'Outgoing' AND status = 'Sending';
+
+markPeerRead:
+UPDATE DeviceMessage
+SET isRead = 1
+WHERE peerDeviceId = ? AND direction = 'Incoming' AND isRead = 0;
+
+deleteByPeer:
+DELETE FROM DeviceMessage
+WHERE peerDeviceId = ?;
+
+upsertConversationOutgoing:
+INSERT OR REPLACE INTO DeviceConversation (peerDeviceId, lastMessageAtMillis, unreadCount)
+VALUES (
+    :peerDeviceId,
+    MAX(COALESCE((SELECT lastMessageAtMillis FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0), :messageAtMillis),
+    COALESCE((SELECT unreadCount FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0)
+);
+
+upsertConversationIncomingUnread:
+INSERT OR REPLACE INTO DeviceConversation (peerDeviceId, lastMessageAtMillis, unreadCount)
+VALUES (
+    :peerDeviceId,
+    MAX(COALESCE((SELECT lastMessageAtMillis FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0), :messageAtMillis),
+    COALESCE((SELECT unreadCount FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0) + 1
+);
+
+upsertConversationIncomingRead:
+INSERT OR REPLACE INTO DeviceConversation (peerDeviceId, lastMessageAtMillis, unreadCount)
+VALUES (
+    :peerDeviceId,
+    MAX(COALESCE((SELECT lastMessageAtMillis FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0), :messageAtMillis),
+    COALESCE((SELECT unreadCount FROM DeviceConversation WHERE peerDeviceId = :peerDeviceId), 0)
+);
+
+selectConversations:
+SELECT *
+FROM DeviceConversation
+ORDER BY lastMessageAtMillis DESC, peerDeviceId;
+
+selectConversationByPeer:
+SELECT *
+FROM DeviceConversation
+WHERE peerDeviceId = ?;
+
+clearConversationUnread:
+UPDATE DeviceConversation
+SET unreadCount = 0
+WHERE peerDeviceId = ?;
+
+deleteConversationByPeer:
+DELETE FROM DeviceConversation
+WHERE peerDeviceId = ?;

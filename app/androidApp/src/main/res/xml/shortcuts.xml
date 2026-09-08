@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="open_file_share"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_quick_share"
+        android:shortcutLongLabel="@string/shortcut_quick_share">
+        <intent
+            android:action="com.folderspan.action.OPEN_FILE_SHARE"
+            android:targetPackage="com.folderspan"
+            android:targetClass="com.folderspan.MainActivity">
+            <extra
+                android:name="com.folderspan.extra.OPEN_FILE_SHARE"
+                android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>

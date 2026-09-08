@@ -1,0 +1,393 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_releaseVersion: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '1.0.0' }}
+  ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
+
+jobs:
+  quality:
+    name: Test shared code (${{ matrix.edition }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro, no-pro]
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run JVM tests
+        run: ./gradlew :core:jvmTest :app:shared:jvmTest :core:verifyNotificationRoutes --stacktrace
+
+      - name: Upload notification route catalog
+        uses: actions/upload-artifact@v7
+        with:
+          name: notification-routes-release-${{ matrix.edition }}
+          path: notification-routes.json
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    name: Package Android (${{ matrix.edition }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro, no-pro]
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Validate and restore Android release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [[ -z "$ANDROID_KEYSTORE_BASE64" ]] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [[ -z "$ANDROID_STORE_PASSWORD" ]] && missing+=("ANDROID_STORE_PASSWORD")
+          [[ -z "$ANDROID_KEY_ALIAS" ]] && missing+=("ANDROID_KEY_ALIAS")
+          [[ -z "$ANDROID_KEY_PASSWORD" ]] && missing+=("ANDROID_KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing Android signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
+          keystore_path="$RUNNER_TEMP/folderspan-release.keystore"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          echo "ANDROID_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build signed release AAB
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          ./gradlew :app:androidApp:bundleRelease
+          -PandroidEnableAbiSplits=false
+          --stacktrace
+
+      - name: Stage release AAB
+        shell: bash
+        run: |
+          mkdir -p release-artifacts/android
+          cp app/androidApp/build/outputs/bundle/release/*.aab release-artifacts/android/
+
+      - name: Build signed release APKs
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:androidApp:clean :app:androidApp:assembleRelease --stacktrace
+
+      - name: Stage release APKs
+        shell: bash
+        run: cp app/androidApp/build/outputs/apk/release/*.apk release-artifacts/android/
+
+      - name: Upload Android release packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-android-${{ matrix.edition }}
+          path: release-artifacts/android/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove temporary Android keystore
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${ANDROID_STORE_FILE:-}" ]]; then
+            rm -f -- "$ANDROID_STORE_FILE"
+          fi
+
+  web:
+    name: Package Web (${{ matrix.edition }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro, no-pro]
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build JS and Wasm production distribution
+        run: ./gradlew :app:webApp:composeCompatibilityBrowserDistribution --stacktrace
+
+      - name: Create Web release archive
+        shell: bash
+        run: |
+          archive="$GITHUB_WORKSPACE/folderspan-web-${ORG_GRADLE_PROJECT_releaseVersion#v}.zip"
+          cd app/webApp/build/dist/composeWebCompatibility/productionExecutable
+          zip -q -r "$archive" .
+
+      - name: Upload Web package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-web-${{ matrix.edition }}
+          path: folderspan-web-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  desktop:
+    name: Package Desktop (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    needs: quality
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro, no-pro]
+        platform:
+          - os: ubuntu-24.04
+            label: linux-x64
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/**/*.deb
+              app/desktopApp/build/compose/binaries/main-release/**/*.rpm
+              app/desktopApp/build/compose/binaries/main-release/**/*.tar.gz
+              app/desktopApp/build/compose/binaries/main-release/**/*.flatpak
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/**/*.deb
+              app/desktopApp/build/compose/binaries/main-release/**/*.rpm
+              app/desktopApp/build/compose/binaries/main-release/**/*.tar.gz
+              app/desktopApp/build/compose/binaries/main-release/**/*.flatpak
+          - os: windows-2025
+            label: windows-x64
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/**/*.msi
+              app/desktopApp/build/compose/binaries/main-release/**/*.exe
+          - os: windows-11-arm
+            label: windows-arm64
+            java_distribution: microsoft
+            tasks: :app:desktopApp:packageReleaseAppImage
+            paths: app/desktopApp/build/compose/binaries/main-release/**/*.zip
+          - os: macos-15-intel
+            label: macos-x64
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/**/*.dmg
+              app/desktopApp/build/compose/binaries/main-release/**/*.pkg
+          - os: macos-15
+            label: macos-arm64
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/**/*.dmg
+              app/desktopApp/build/compose/binaries/main-release/**/*.pkg
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          BUILD_LINUX_NATIVE_INSTALLERS: ${{ startsWith(matrix.platform.label, 'linux-') }}
+        run: |
+          sudo apt-get update
+          packages=(
+            appstream
+            desktop-file-utils
+            flatpak
+            flatpak-builder
+          )
+          if [[ "$BUILD_LINUX_NATIVE_INSTALLERS" == "true" ]]; then
+            packages+=(fakeroot rpm)
+          fi
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Install Flatpak SDK
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          flatpak remote-add --user --if-not-exists \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub \
+            org.freedesktop.Platform//25.08 \
+            org.freedesktop.Sdk//25.08
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build native installers
+        run: >-
+          ./gradlew ${{ matrix.platform.tasks }}
+          -Dorg.gradle.jvmargs=-Xmx3g
+          -Pkotlin.daemon.jvmargs=-Xmx2g
+          --stacktrace
+
+      - name: Build Flatpak bundle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          release_date="$(date -u +%F)"
+          metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
+          manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
+          sed -i -E \
+            's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
+            "$metainfo"
+
+          desktop-file-validate \
+            packaging/flatpak/com.folderspan.FolderSpan.desktop
+          appstreamcli validate --no-net "$metainfo"
+
+          flatpak_builder_dir="$RUNNER_TEMP/folderspan-flatpak-build"
+          flatpak_repo_dir="$RUNNER_TEMP/folderspan-flatpak-repo"
+          flatpak_output_dir="app/desktopApp/build/compose/binaries/main-release/flatpak"
+          mkdir -p "$flatpak_output_dir"
+
+          flatpak-builder --user --force-clean \
+            --repo="$flatpak_repo_dir" \
+            "$flatpak_builder_dir" \
+            "$manifest"
+
+          flatpak_arch="$(flatpak --default-arch)"
+          flatpak build-bundle \
+            --arch="$flatpak_arch" \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            "$flatpak_repo_dir" \
+            "$flatpak_output_dir/FolderSpan-${version}-${flatpak_arch}.flatpak" \
+            com.folderspan.FolderSpan
+
+      - name: Package Windows ARM64 portable archive
+        if: matrix.platform.label == 'windows-arm64'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion -replace '^v', ''
+          $appImage = 'app/desktopApp/build/compose/binaries/main-release/app/FolderSpan'
+          $outputDir = 'app/desktopApp/build/compose/binaries/main-release/zip'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-windows-arm64.zip" -Force
+
+      - name: Upload Desktop packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-desktop-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - android
+      - web
+      - desktop
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.android.result == 'success' &&
+      needs.web.result == 'success' &&
+      needs.desktop.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: artifacts
+
+      - name: Prepare release assets and checksums
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          asset_count=0
+          while IFS= read -r -d '' source; do
+            relative="${source#artifacts/}"
+            artifact_name="${relative%%/*}"
+            file_name="$(basename "$source")"
+            cp "$source" "release-assets/${artifact_name#release-}-$file_name"
+            ((asset_count += 1))
+          done < <(find artifacts -type f -print0)
+
+          if (( asset_count == 0 )); then
+            echo "::error::No release assets were downloaded."
+            exit 1
+          fi
+
+          cd release-assets
+          sha256sum ./* > SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --verify-tag \
+              --generate-notes
+          fi
