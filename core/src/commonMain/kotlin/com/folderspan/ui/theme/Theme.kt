@@ -1,17 +1,11 @@
 package com.folderspan.ui.theme
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.folderspan.service.data.SerializableColorScheme
@@ -110,28 +104,11 @@ fun FolderSpanTheme(
 
     SystemAppearance(darkTheme, colorScheme)
 
-    val platformFontState = platformFontState()
-    val typography = platformFontState.fontFamily
-        ?.let { Typography.withFontFamily(it) }
-        ?: Typography
-
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = typography,
-    ) {
-        if (platformFontState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(colorScheme.background),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            content()
-        }
-    }
+        typography = Typography,
+        content = content,
+    )
 }
 
 @Composable

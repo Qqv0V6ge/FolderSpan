@@ -4,8 +4,15 @@ import strings.AppStrings
 
 import com.folderspan.pro.test.ChineseLocalizationTest
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class ProSnackbarTest : ChineseLocalizationTest() {
@@ -42,5 +49,24 @@ class ProSnackbarTest : ChineseLocalizationTest() {
                 actionLabel = AppStrings.ui_confirm,
             )?.duration,
         )
+    }
+
+    @Test
+    fun latestPromptReplacesCurrentPrompt() = runTest {
+        val hostState = SnackbarHostState()
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            hostState.showProSnackbar(AppStrings.ui_save_failed)
+        }
+
+        val second = async(start = CoroutineStart.UNDISPATCHED) {
+            hostState.showProSnackbar(AppStrings.ui_confirm)
+        }
+        yield()
+        yield()
+
+        assertEquals(AppStrings.ui_confirm, assertNotNull(hostState.currentSnackbarData).visuals.message)
+        assertEquals(SnackbarResult.Dismissed, first.await())
+        hostState.currentSnackbarData?.dismiss()
+        assertEquals(SnackbarResult.Dismissed, second.await())
     }
 }

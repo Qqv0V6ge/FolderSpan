@@ -52,6 +52,10 @@ deleteById:
 DELETE FROM WebRtcRoom
 WHERE id = ?;
 
+deleteBySource:
+DELETE FROM WebRtcRoom
+WHERE source = ?;
+
 updateById:
 UPDATE WebRtcRoom
 SET name = ?,

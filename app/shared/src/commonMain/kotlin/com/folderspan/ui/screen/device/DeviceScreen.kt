@@ -32,11 +32,14 @@ import com.folderspan.data.main.device.DeviceConnectType.*
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.share.Share
 import com.folderspan.db.FolderSpanDatabase
+import com.folderspan.localization.localizedRoleName
 import com.folderspan.extensions.DeviceIcon
 import com.folderspan.service.data.ConnectType
 import com.folderspan.service.data.ConnectType.*
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.http.tls.TrustedDeviceCertificateStore
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.*
 import com.folderspan.ui.components.drawer.DeviceConnectNewDialog
 import com.folderspan.ui.components.drawer.appDrawerSocketDevicesInDisplayOrder
@@ -84,8 +87,29 @@ private data class AccessStatusUi(
     val tint: Color,
 )
 
+internal suspend fun confirmDeviceDeletion(
+    snackbarHostState: SnackbarHostState,
+    deviceIds: List<String>,
+    message: String = AppStrings.ui_you_sure_you_want_delete_selected_arg0_devices.format(
+        arg0 = deviceIds.size.toString()
+    ),
+    onConfirm: suspend (List<String>) -> Unit,
+) {
+    val pendingIds = deviceIds.toList()
+    if (pendingIds.isEmpty()) return
+    val result = snackbarHostState.showLatestSnackbar(
+        message = message,
+        actionLabel = AppStrings.ui_delete,
+        withDismissAction = true,
+        duration = SnackbarDuration.Short,
+    )
+    if (result == SnackbarResult.ActionPerformed) {
+        onConfirm(pendingIds)
+    }
+}
+
 @Immutable
-private data class DeviceDisplayItem(
+internal data class DeviceDisplayItem(
     val id: String,
     val name: String,
     val type: DeviceType,
@@ -132,9 +156,7 @@ class DeviceScreen : AppScreenRoute {
         var devices by remember { mutableStateOf(emptyList<DbDevice>()) }
         var clientAccessDevices by remember { mutableStateOf(emptyList<DeviceJoinDeviceRole>()) }
         var showEditDialog by remember { mutableStateOf(false) }
-        var showDeleteDialog by remember { mutableStateOf(false) }
         var selectedDevice by remember { mutableStateOf<DbDevice?>(null) }
-        var selectedDeleteItem by remember { mutableStateOf<DeviceDisplayItem?>(null) }
         var selectedManagedItem by remember { mutableStateOf<DeviceDisplayItem?>(null) }
         var editedName by remember { mutableStateOf("") }
         var deviceType by remember { mutableStateOf<DeviceType?>(null) }
@@ -142,10 +164,10 @@ class DeviceScreen : AppScreenRoute {
         var selectedDeviceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
         var showBatchServerAccessDialog by remember { mutableStateOf(false) }
         var showBatchClientAccessDialog by remember { mutableStateOf(false) }
-        var showBatchDeleteDialog by remember { mutableStateOf(false) }
         var incomingConnectedDevices by remember { mutableStateOf(emptyList<DbDevice>()) }
 
         val scope = rememberCoroutineScope()
+        val snackbarHostState = remember { SnackbarHostState() }
         val accessDevicesById = deviceSettingsState.devices.associateBy { item -> item.id }
         val displayItems = buildDeviceDisplayItems(
             devices = devices,
@@ -305,14 +327,6 @@ class DeviceScreen : AppScreenRoute {
             deviceSettingsState.refresh()
         }
 
-        suspend fun deleteSelectedDevice() {
-            selectedDeleteItem?.let { item ->
-                deleteDevices(listOf(item.id))
-                showDeleteDialog = false
-                selectedDeleteItem = null
-            }
-        }
-
         LaunchedEffect(Unit) {
             refreshDevices()
         }
@@ -341,17 +355,6 @@ class DeviceScreen : AppScreenRoute {
             if (selectionMode && selectableDeviceIds.isEmpty()) {
                 clearSelection(exitSelectionMode = true)
             }
-        }
-
-        if (showDeleteDialog && selectedDeleteItem != null) {
-            DeleteDeviceDialog(
-                deviceName = selectedDeleteItem!!.name,
-                onConfirm = { scope.launch { deleteSelectedDevice() } },
-                onDismiss = {
-                    showDeleteDialog = false
-                    selectedDeleteItem = null
-                }
-            )
         }
 
         if (showEditDialog && selectedDevice != null) {
@@ -508,21 +511,8 @@ class DeviceScreen : AppScreenRoute {
             )
         }
 
-        if (showBatchDeleteDialog) {
-            DeviceBatchDeleteDialog(
-                count = selectedDeviceIds.size,
-                onDismissRequest = { showBatchDeleteDialog = false },
-                onConfirm = {
-                    scope.launch {
-                        deleteDevices(selectedDisplayItems.map { item -> item.id })
-                        clearSelection()
-                        showBatchDeleteDialog = false
-                    }
-                }
-            )
-        }
-
         AppScaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -582,7 +572,15 @@ class DeviceScreen : AppScreenRoute {
                         DeviceBatchActionsFab(
                             onBatchServerAccess = { showBatchServerAccessDialog = true },
                             onBatchClientAccess = { showBatchClientAccessDialog = true },
-                            onBatchDelete = { showBatchDeleteDialog = true }
+                            onBatchDelete = {
+                                val deviceIds = selectedDisplayItems.map { item -> item.id }
+                                scope.launch {
+                                    confirmDeviceDeletion(snackbarHostState, deviceIds) { pendingIds ->
+                                        deleteDevices(pendingIds)
+                                        clearSelection()
+                                    }
+                                }
+                            }
                         )
                     }
 
@@ -658,8 +656,14 @@ class DeviceScreen : AppScreenRoute {
                                 }
                             },
                             onDeleteClick = {
-                                selectedDeleteItem = item
-                                showDeleteDialog = true
+                                scope.launch {
+                                    confirmDeviceDeletion(
+                                        snackbarHostState = snackbarHostState,
+                                        deviceIds = listOf(item.id),
+                                        message = AppStrings.dialog_delete_device.format(deviceName = item.name),
+                                        onConfirm = ::deleteDevices,
+                                    )
+                                }
                             },
                             onForceCloseIncoming = {
                                 disconnectIncomingDevice(item.id)
@@ -693,7 +697,11 @@ class DeviceScreen : AppScreenRoute {
                             onOutgoingPrimaryAction = { connection ->
                                 when (connection.connectType) {
                                     UnConnect, Fail, Rejected -> connectDevice(connection)
-                                    New -> deviceState.requestConnectNewDevice(connection)
+                                    New -> if (connection.discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+                                        connectDevice(connection)
+                                    } else {
+                                        deviceState.requestConnectNewDevice(connection)
+                                    }
                                     Connect -> openConnectedDevice(connection)
                                     Loading -> {
                                         deviceState.disconnectSocketDevice(connection)
@@ -819,9 +827,12 @@ class DeviceScreen : AppScreenRoute {
                     }
                 }
 
-                if (!item.isManageable && (item.outgoingConnections.isNotEmpty() || item.hasIncomingConnection)) {
+                val visibleConnections = item.outgoingConnections.filter { connection ->
+                    !item.isManageable || connection.discoveryStatus == DeviceDiscoveryStatus.Unverified
+                }
+                if (visibleConnections.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item.outgoingConnections.forEach { connection ->
+                        visibleConnections.forEach { connection ->
                             DeviceOutgoingConnectionBlock(
                                 connection = connection,
                                 enabled = !selectionMode,
@@ -840,12 +851,15 @@ class DeviceScreen : AppScreenRoute {
                 }
 
                 if (item.isManageable) {
+                    val identityVerified = item.outgoingConnections.none {
+                        it.discoveryStatus == DeviceDiscoveryStatus.Unverified
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         DeviceAccessBlock(
                             label = AppStrings.ui_visited,
                             category = DeviceCategory.SERVER,
                             device = item.serverAccess,
-                            enabled = !selectionMode,
+                            enabled = !selectionMode && identityVerified,
                             showForceClose = item.hasIncomingConnection,
                             onConnectionTypeChange = { connectionType ->
                                 onQuickUpdateAccess(DeviceCategory.SERVER, connectionType)
@@ -859,7 +873,7 @@ class DeviceScreen : AppScreenRoute {
                             label = AppStrings.ui_access_other_devices,
                             category = DeviceCategory.CLIENT,
                             device = item.clientAccess,
-                            enabled = !selectionMode,
+                            enabled = !selectionMode && identityVerified,
                             showForceClose = item.hasActiveOutgoingConnection,
                             onConnectionTypeChange = { connectionType ->
                                 onQuickUpdateAccess(DeviceCategory.CLIENT, connectionType)
@@ -897,6 +911,9 @@ private fun DeviceSectionPlaceholder(
 private fun rememberSocketConnectionStatus(
     connection: SocketDevice
 ): AccessStatusUi {
+    if (connection.discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+        return AccessStatusUi(Icons.Default.Warning, AppStrings.ui_device_identity_unverified, colorScheme.tertiary)
+    }
     return when (connection.connectType) {
         Connect -> AccessStatusUi(Icons.Default.CheckCircle, AppStrings.ui_connected, colorScheme.primary)
         Fail -> AccessStatusUi(Icons.Default.Cancel, AppStrings.ui_connection_failed, colorScheme.error)
@@ -908,17 +925,18 @@ private fun rememberSocketConnectionStatus(
 }
 
 @Composable
-private fun DeviceOutgoingConnectionBlock(
+internal fun DeviceOutgoingConnectionBlock(
     connection: SocketDevice,
     enabled: Boolean,
     onPrimaryAction: () -> Unit,
     onDisconnect: () -> Unit
 ) {
     val status = rememberSocketConnectionStatus(connection)
-    val actionLabel = when (connection.connectType) {
-        Connect -> null
-        Loading -> AppStrings.ui_cancel
-        New -> AppStrings.ui_process
+    val actionLabel = when {
+        connection.connectType == Loading -> AppStrings.ui_cancel
+        connection.discoveryStatus == DeviceDiscoveryStatus.Unverified -> AppStrings.ui_device_identity_confirm
+        connection.connectType == Connect -> null
+        connection.connectType == New -> AppStrings.ui_process
         else -> AppStrings.ui_connect
     }
 
@@ -948,7 +966,7 @@ private fun DeviceOutgoingConnectionBlock(
                 ConnectionStatusIndicator(status)
             }
 
-            actionLabel?.takeIf { label -> label != AppStrings.ui_connect }?.let { label ->
+            actionLabel?.let { label ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1155,7 +1173,7 @@ internal fun DeviceAccessBlock(
 
             if (category == DeviceCategory.SERVER) {
                 Text(
-                    text = AppStrings.ui_role_arg0.format(arg0 = device?.roleName?.takeIf { roleName -> roleName.isNotBlank() } ?: AppStrings.ui_not_set),
+                    text = AppStrings.ui_role_arg0.format(arg0 = device?.localizedRoleName?.takeIf { roleName -> roleName.isNotBlank() } ?: AppStrings.ui_not_set),
                     style = typography.bodySmall,
                     color = colorScheme.onSurfaceVariant
                 )
@@ -1281,7 +1299,7 @@ private suspend fun queryAccessDevices(
     }
 }
 
-private fun buildDeviceDisplayItems(
+internal fun buildDeviceDisplayItems(
     devices: List<DbDevice>,
     serverAccessById: Map<String, DeviceJoinDeviceRole>,
     clientAccessDevices: List<DeviceJoinDeviceRole>,
@@ -1297,10 +1315,11 @@ private fun buildDeviceDisplayItems(
     val drawerDeviceOrderById = buildDrawerDeviceOrderById(socketDevices)
     val orderedIds = linkedSetOf<String>().apply {
         addAll(devices.map { device -> device.id })
+        addAll(socketDevices.map { device -> device.id })
     }
 
     return orderedIds.mapNotNull { deviceId ->
-        val device = devicesById[deviceId] ?: return@mapNotNull null
+        val device = devicesById[deviceId]
         val serverAccess = serverAccessById[deviceId]
         val clientAccess = clientAccessById[deviceId]
         val outgoingConnections = socketDevicesById[deviceId]
@@ -1310,9 +1329,11 @@ private fun buildDeviceDisplayItems(
                     .thenBy { connection -> connection.transportType.name }
             )
         val incomingConnected = incomingConnectedById.containsKey(deviceId)
-        val resolvedName = device.name.takeIf { storedName -> storedName.isNotBlank() }
+        val discovered = outgoingConnections.firstOrNull()
+        val resolvedName = device?.name?.takeIf { storedName -> storedName.isNotBlank() }
+            ?: discovered?.name?.takeIf { it.isNotBlank() }
             ?: return@mapNotNull null
-        val resolvedType = device.type
+        val resolvedType = device?.type ?: discovered?.type ?: return@mapNotNull null
 
         if (deviceType != null && resolvedType != deviceType) {
             return@mapNotNull null

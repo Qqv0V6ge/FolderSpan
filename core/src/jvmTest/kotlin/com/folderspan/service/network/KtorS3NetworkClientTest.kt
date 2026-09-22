@@ -24,6 +24,30 @@ import kotlin.test.assertTrue
 
 class KtorS3NetworkClientTest {
     @Test
+    fun listedObjectsAndVirtualDirectoriesHaveKnownNonLinkMetadata() = runBlocking {
+        val engine = MockEngine {
+            respond(
+                content = """
+                    <ListBucketResult>
+                      <CommonPrefixes><Prefix>nested/</Prefix></CommonPrefixes>
+                      <Contents><Key>file.txt</Key><Size>7</Size></Contents>
+                    </ListBucketResult>
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/xml"),
+            )
+        }
+        HttpClient(engine).use { httpClient ->
+            val client = KtorS3NetworkClient(buildNetwork(), httpClient)
+            val entries = client.list("/").getOrThrow()
+
+            assertEquals(setOf("/nested", "/file.txt"), entries.map { it.path }.toSet())
+            assertTrue(entries.single { it.path == "/nested" }.isDirectory)
+            assertTrue(entries.all { it.isSymbolicLinkKnown && !it.isSymbolicLink })
+        }
+    }
+
+    @Test
     fun copyFileUsesS3ServerSideCopyWithoutDownloadUploadOrDeleteFallback() = runBlocking {
         val requests = mutableListOf<HttpRequestData>()
         val engine = MockEngine { request ->

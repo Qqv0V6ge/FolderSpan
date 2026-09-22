@@ -3,11 +3,9 @@ package com.folderspan.pro.presentation.screen.profile
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,6 +13,7 @@ import com.folderspan.pro.core.ui.components.AuthStatusTone
 import com.folderspan.pro.core.ui.components.ProSnackbarEffect
 import com.folderspan.pro.core.ui.components.ProSnackbarHost
 import com.folderspan.pro.core.ui.components.proSnackbarPrompt
+import com.folderspan.pro.core.ui.components.showProSnackbar
 import strings.AppStrings
 
 @Composable
@@ -48,6 +47,21 @@ fun EditProfilePage(
         hostState = snackbarHostState,
         prompt = snackbarPrompt,
     )
+    LaunchedEffect(state.isAvatarRemovalConfirmationVisible) {
+        if (state.isAvatarRemovalConfirmationVisible) {
+            val result = snackbarHostState.showProSnackbar(
+                message = AppStrings.ui_profile_avatar_remove_confirm_message,
+                tone = AuthStatusTone.Error,
+                actionLabel = AppStrings.ui_profile_avatar_remove,
+                withDismissAction = true,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                onConfirmAvatarRemoval()
+            } else {
+                onDeclineAvatarRemoval()
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AccountEditorScaffold(
@@ -91,22 +105,5 @@ fun EditProfilePage(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-        if (state.isAvatarRemovalConfirmationVisible) {
-            AlertDialog(
-                onDismissRequest = onDeclineAvatarRemoval,
-                title = { Text(AppStrings.ui_profile_avatar_remove_confirm_title) },
-                text = { Text(AppStrings.ui_profile_avatar_remove_confirm_message) },
-                confirmButton = {
-                    Button(onClick = onConfirmAvatarRemoval) {
-                        Text(AppStrings.ui_profile_avatar_remove)
-                    }
-                },
-                dismissButton = {
-                    OutlinedButton(onClick = onDeclineAvatarRemoval) {
-                        Text(AppStrings.ui_cancel)
-                    }
-                },
-            )
-        }
     }
 }

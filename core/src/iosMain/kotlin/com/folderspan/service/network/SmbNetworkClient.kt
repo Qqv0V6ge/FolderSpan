@@ -13,15 +13,20 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.refTo
 import kotlinx.cinterop.toKString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.posix.*
 import platform.smb2.SMB2_TYPE_DIRECTORY
+import platform.smb2.SMB2_TYPE_FILE
+import platform.smb2.SMB2_TYPE_LINK
 import platform.smb2.smb2_close
 import platform.smb2.smb2_closedir
 import platform.smb2.smb2_connect_share
 import platform.smb2.smb2_destroy_context
 import platform.smb2.smb2_disconnect_share
+import platform.smb2.smb2_echo
+import platform.smb2.smb2_set_timeout
 import platform.smb2.smb2_get_error
 import platform.smb2.smb2_init_context
 import platform.smb2.smb2_mkdir
@@ -47,26 +52,32 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient {
             val normalized = normalizePath(path)
             val dir = smb2_opendir(ctx, normalized) ?: return@withShare Result.failure(Exception(smbError(ctx)))
             val entries = mutableListOf<NetworkFileEntry>()
-            while (true) {
-                val entry = smb2_readdir(ctx, dir) ?: break
-                val name = entry.pointed.name?.toKString().orEmpty()
-                if (isUnsafeNetworkPathSegment(name)) continue
-                val stat = entry.pointed.st
-                val isDir = stat.smb2_type.toInt() == SMB2_TYPE_DIRECTORY
-                val mtime = stat.smb2_mtime.toLong() * 1000
-                entries.add(
-                    NetworkFileEntry(
-                        name = name,
-                        path = joinPath(path, name),
-                        isDirectory = isDir,
-                        size = if (isDir) -1L else stat.smb2_size.toLong(),
-                        createdDate = mtime,
-                        updatedDate = mtime,
-                        isHidden = name.startsWith(".")
+            try {
+                while (true) {
+                    val entry = smb2_readdir(ctx, dir) ?: break
+                    val name = entry.pointed.name?.toKString().orEmpty()
+                    if (isUnsafeNetworkPathSegment(name)) continue
+                    val stat = entry.pointed.st
+                    val isDir = stat.smb2_type.toInt() == SMB2_TYPE_DIRECTORY
+                    val mtime = stat.smb2_mtime.toLong() * 1000
+                    entries.add(
+                        NetworkFileEntry(
+                            name = name,
+                            path = joinPath(path, name),
+                            isDirectory = isDir,
+                            size = if (isDir) -1L else stat.smb2_size.toLong(),
+                            createdDate = mtime,
+                            updatedDate = mtime,
+                            isHidden = name.startsWith("."),
+                            isSymbolicLink = stat.smb2_type.toInt() == SMB2_TYPE_LINK,
+                            isSymbolicLinkKnown = stat.smb2_type.toInt() in
+                                setOf(SMB2_TYPE_FILE, SMB2_TYPE_DIRECTORY, SMB2_TYPE_LINK),
+                        )
                     )
-                )
+                }
+            } finally {
+                smb2_closedir(ctx, dir)
             }
-            smb2_closedir(ctx, dir)
             LogKit.i(AppStrings.ui_smb_list_arg0_count_arg1.format(arg0 = normalized, arg1 = (entries.size).toString()))
             Result.success(entries)
         }
@@ -155,7 +166,7 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient {
                                     uBuffer.refTo(offset),
                                     (readCount.toInt() - offset).toUInt()
                                 )
-                                if (written < 0) {
+                                if (written <= 0) {
                                     return@withShare Result.failure(Exception(smbError(ctx)))
                                 }
                                 offset += written
@@ -199,7 +210,7 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient {
                                 uBuffer.refTo(offset),
                                 (chunk.size - offset).toUInt()
                             )
-                            if (written < 0) {
+                            if (written <= 0) {
                                 return@withShare Result.failure(Exception(smbError(ctx)))
                             }
                             offset += written
@@ -251,40 +262,51 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient {
         }
     }
 
-    private suspend fun <T> withShare(block: (CPointer<smb2_context>) -> Result<T>): Result<T> = withContext(Dispatchers.Default) {
-        val ctx = smb2_init_context() ?: return@withContext Result.failure(Exception(AppStrings.ui_initialization_of_smb_failed))
-        detectSmbStub(ctx)?.let { message ->
-            smb2_destroy_context(ctx)
-            LogKit.w(message)
-            return@withContext Result.failure(IllegalStateException(message))
+    private suspend fun <T> withShare(block: (CPointer<smb2_context>) -> Result<T>): Result<T> =
+        withContext(Dispatchers.Default) {
+            try {
+                val key = networkSessionKey(network, 445)
+                Result.success(sessions.use(key, { connectShare(key) }) { block(it).getOrThrow() })
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                LogKit.w(AppStrings.ui_smb_connection_failed_arg0.format(arg0 = error.message.toString()), error)
+                Result.failure(error)
+            }
         }
+
+    private fun connectShare(key: NetworkSessionKey): CPointer<smb2_context> {
+        val ctx = smb2_init_context() ?: error(AppStrings.ui_initialization_of_smb_failed)
+        var connected = false
         try {
-            val resolved = NetworkHostUtils.resolveHostPort(network.host, 445)
-            val host = resolved.host
-            val port = resolved.port ?: 445
-            val smbExtras = network.extras.smb
-            val sharePreview = smbExtras.share.ifBlank { "<empty>" }
-            val domainPreview = smbExtras.domain.ifBlank { "default" }
-            LogKit.i(AppStrings.ui_smb_connection_arg0_arg1_share_arg2_domain_arg3_user.format(arg0 = host, arg1 = (port).toString(), arg2 = sharePreview, arg3 = domainPreview, arg4 = network.username))
+            detectSmbStub(ctx)?.let { error(it) }
+            val extras = network.extras.smb
+            val share = extras.share.ifBlank { error(AppStrings.ui_smb_share_name_cannot_be_empty) }
+            val hostPort = if (key.port != 445) NetworkHostUtils.combineHostPort(key.host, key.port) else key.host
+            LogKit.i(AppStrings.ui_smb_connection_arg0_arg1_share_arg2_domain_arg3_user.format(
+                arg0 = key.host, arg1 = key.port.toString(), arg2 = share,
+                arg3 = extras.domain.ifBlank { "default" }, arg4 = network.username,
+            ))
+            smb2_set_timeout(ctx, 10)
             smb2_set_user(ctx, network.username)
             smb2_set_password(ctx, network.password)
-            if (smbExtras.domain.isNotBlank()) {
-                smb2_set_domain(ctx, smbExtras.domain)
-            }
-            val share = smbExtras.share.ifBlank { return@withContext Result.failure(Exception(AppStrings.ui_smb_share_name_cannot_be_empty)) }
-            val hostPort = if (port != 445) NetworkHostUtils.combineHostPort(host, port) else host
-            val rc = smb2_connect_share(ctx, hostPort, share, network.username)
-            if (rc != 0) {
-                val error = smbError(ctx)
-                LogKit.w(AppStrings.ui_smb_connection_failed_arg0.format(arg0 = error))
-                return@withContext Result.failure(Exception(error))
-            }
-            LogKit.i(AppStrings.ui_smb_is_connected_arg0_share_arg1.format(arg0 = (hostPort).toString(), arg1 = (share).toString()))
-            block(ctx)
+            if (extras.domain.isNotBlank()) smb2_set_domain(ctx, extras.domain)
+            check(smb2_connect_share(ctx, hostPort, share, network.username) == 0) { smbError(ctx) }
+            LogKit.i(AppStrings.ui_smb_is_connected_arg0_share_arg1.format(arg0 = hostPort, arg1 = share))
+            return ctx.also { connected = true }
         } finally {
-            smb2_disconnect_share(ctx)
-            smb2_destroy_context(ctx)
+            if (!connected) smb2_destroy_context(ctx)
         }
+    }
+
+    companion object {
+        private val sessions = NetworkSessionCache<CPointer<smb2_context>>(
+            isOpen = { smb2_echo(it) == 0 },
+            close = { smb2_disconnect_share(it); smb2_destroy_context(it) },
+            isConnectionFailure = { true },
+            // libsmb2 的同步上下文由单个操作独占，完成后交回缓存复用。
+            exclusive = true,
+        )
     }
 
     private fun detectSmbStub(ctx: CPointer<smb2_context>): String? {

@@ -49,6 +49,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,6 +89,7 @@ import com.folderspan.ui.components.grid.GridListFabPadding
 import com.folderspan.ui.components.menu.EditableExposedDropdownMenu
 import com.folderspan.ui.components.model.StringListUiState
 import com.folderspan.ui.components.scaffold.AppScaffold
+import com.folderspan.ui.screen.device.confirmDeviceDeletion
 import com.folderspan.ui.screen.device.defaultDeviceTypeOptions
 import com.folderspan.ui.screen.device.hasAllVisibleDevicesSelected
 import com.folderspan.ui.screen.device.retainVisibleDeviceSelection
@@ -128,6 +131,7 @@ class FileShareManageScreen : AppScreenRoute {
         val navigator = LocalAppNavigator.currentOrThrow
         val database = koinInject<FolderSpanDatabase>()
         val scope = rememberCoroutineScope()
+        val snackbarHostState = remember { SnackbarHostState() }
 
         var devices by remember { mutableStateOf(emptyList<SelectAll>()) }
         var selectedDeviceType by remember { mutableStateOf<DeviceType?>(null) }
@@ -140,7 +144,6 @@ class FileShareManageScreen : AppScreenRoute {
         var selectedDeviceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
         var selectedDevice by remember { mutableStateOf<SelectAll?>(null) }
         var showBatchEditDialog by remember { mutableStateOf(false) }
-        var pendingDeleteDevices by remember { mutableStateOf<List<SelectAll>>(emptyList()) }
 
         val displayDevices = remember(devices, selectedDeviceType, searchQuery, statusFilter, pathFilter) {
             devices
@@ -268,21 +271,6 @@ class FileShareManageScreen : AppScreenRoute {
                         clearSelection()
                     }
                 }
-            )
-        }
-
-        if (pendingDeleteDevices.isNotEmpty()) {
-            DeleteShareDevicesDialog(
-                devices = pendingDeleteDevices,
-                onConfirm = {
-                    val deleteIds = pendingDeleteDevices.map { device -> device.id }
-                    scope.launch {
-                        deleteDevices(deleteIds)
-                        pendingDeleteDevices = emptyList()
-                        clearSelection(exitSelectionMode = true)
-                    }
-                },
-                onDismiss = { pendingDeleteDevices = emptyList() }
             )
         }
 
@@ -416,10 +404,25 @@ class FileShareManageScreen : AppScreenRoute {
                 if (showBatchActions) {
                     ShareBatchActionsFab(
                         onEdit = { showBatchEditDialog = true },
-                        onDelete = { pendingDeleteDevices = selectedDevices }
+                        onDelete = {
+                            val deleteIds = selectedDevices.map { device -> device.id }
+                            scope.launch {
+                                confirmDeviceDeletion(
+                                    snackbarHostState = snackbarHostState,
+                                    deviceIds = deleteIds,
+                                    message = AppStrings.dialog_delete_selected_devices.format(
+                                        count = deleteIds.size.toString(),
+                                    ),
+                                ) {
+                                    deleteDevices(it)
+                                    clearSelection(exitSelectionMode = true)
+                                }
+                            }
+                        }
                     )
                 }
-            }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
             GridList(
                 modifier = Modifier
@@ -476,7 +479,20 @@ class FileShareManageScreen : AppScreenRoute {
                                 }
                             },
                             onEditClick = { selectedDevice = device },
-                            onDeleteClick = { pendingDeleteDevices = listOf(device) },
+                            onDeleteClick = {
+                                scope.launch {
+                                    confirmDeviceDeletion(
+                                        snackbarHostState = snackbarHostState,
+                                        deviceIds = listOf(device.id),
+                                        message = AppStrings.dialog_delete_device.format(
+                                            deviceName = device.name,
+                                        ),
+                                    ) {
+                                        deleteDevices(it)
+                                        clearSelection(exitSelectionMode = true)
+                                    }
+                                }
+                            },
                             onConnectionTypeChange = { connectionType ->
                                 scope.launch {
                                     val nextPath = when {
@@ -949,39 +965,6 @@ private fun ShareBatchEditDialog(
                 }
             ) {
                 Text(AppStrings.ui_save)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(AppStrings.ui_cancel)
-            }
-        }
-    )
-}
-
-@Composable
-private fun DeleteShareDevicesDialog(
-    devices: List<SelectAll>,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val message = if (devices.size == 1) {
-        AppStrings.dialog_delete_device.format(
-            deviceName = devices.first().name,
-        )
-    } else {
-        AppStrings.dialog_delete_selected_devices.format(
-            count = devices.size.toString(),
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(AppStrings.ui_confirm_deletion) },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(AppStrings.ui_delete)
             }
         },
         dismissButton = {

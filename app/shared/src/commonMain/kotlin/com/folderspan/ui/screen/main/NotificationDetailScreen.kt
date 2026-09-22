@@ -28,6 +28,7 @@ import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.extensions.timestampToSyncDate
 import com.folderspan.notification.*
 import com.folderspan.service.data.SocketDevice
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.DeviceRoleSelectionDialog
 import com.folderspan.ui.components.dialog.DeviceShareSavePathDialog
 import com.folderspan.ui.components.model.buildDeviceRoleOptionsUiState
@@ -179,10 +180,11 @@ internal fun DeviceNotificationDetailContent(notification: Notification) {
                         if (requestInfo == null) {
                             IconButton(onClick = {
                                 scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
+                                    val result = snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.ui_notification_delete_selected_arg0.format(arg0 = "1"),
                                         actionLabel = AppStrings.ui_delete,
                                         withDismissAction = true,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (result == SnackbarResult.ActionPerformed) {
                                         notificationState.delete(notification.id)
@@ -231,7 +233,7 @@ internal fun DeviceNotificationDetailContent(notification: Notification) {
                             onClick = {
                                 val markRead = !notification.isRead
                                 scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
+                                    val result = snackbarHostState.showLatestSnackbar(
                                         message = if (markRead) {
                                             AppStrings.ui_notification_mark_selected_read_arg0.format(arg0 = "1")
                                         } else {
@@ -243,6 +245,7 @@ internal fun DeviceNotificationDetailContent(notification: Notification) {
                                             AppStrings.ui_mark_unread
                                         },
                                         withDismissAction = true,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (result == SnackbarResult.ActionPerformed) {
                                         if (markRead) {

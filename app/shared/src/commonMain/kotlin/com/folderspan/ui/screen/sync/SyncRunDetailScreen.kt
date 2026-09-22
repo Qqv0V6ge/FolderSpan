@@ -18,6 +18,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.extensions.timestampToYMDHM
+import com.folderspan.ui.components.confirmSnackbarAction
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
 import com.folderspan.ui.components.model.StringMapUiState
@@ -44,7 +46,6 @@ class SyncRunDetailScreen(
         val database = koinInject<FolderSpanDatabase>()
         val snackbarHostState = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()
-        var confirmClearRecords by remember(taskId) { mutableStateOf(false) }
 
         val task = syncState.getTask(taskId)
         val records = syncState.recordsFor(taskId)
@@ -99,7 +100,20 @@ class SyncRunDetailScreen(
             floatingActionButton = if (showClearRecordsAction) {
                 {
                     ExtendedFloatingActionButton(
-                        onClick = { confirmClearRecords = true },
+                        onClick = {
+                            val recordCount = records.size
+                            scope.launch {
+                                snackbarHostState.confirmSnackbarAction(
+                                    message = AppStrings.ui_arg0_execution_records_current_task_will_cleared_this_action.format(
+                                        arg0 = recordCount.toString(),
+                                    ),
+                                    actionLabel = AppStrings.ui_clear,
+                                ) {
+                                    syncState.clearRunRecords(taskId)
+                                    snackbarHostState.showLatestSnackbar(AppStrings.ui_execution_records_cleared)
+                                }
+                            }
+                        },
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                         icon = { Icon(Icons.Default.Delete, contentDescription = null) },
@@ -162,7 +176,7 @@ class SyncRunDetailScreen(
                                 onRetry = {
                                     syncState.retryFailedItems(task.id, record.runId)
                                     scope.launch {
-                                        snackbarHostState.showSnackbar(AppStrings.ui_retry_failed_item_triggered)
+                                        snackbarHostState.showLatestSnackbar(AppStrings.ui_retry_failed_item_triggered)
                                     }
                                 }
                             )
@@ -172,37 +186,6 @@ class SyncRunDetailScreen(
             }
         }
 
-        if (confirmClearRecords && task != null) {
-            AlertDialog(
-                onDismissRequest = { confirmClearRecords = false },
-                icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                title = { Text(AppStrings.ui_clear_execution_records) },
-                text = {
-                    Text(AppStrings.ui_arg0_execution_records_current_task_will_cleared_this_action.format(arg0 = (records.size).toString()))
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            syncState.clearRunRecords(task.id)
-                            confirmClearRecords = false
-                            scope.launch {
-                                snackbarHostState.showSnackbar(AppStrings.ui_execution_records_cleared)
-                            }
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) {
-                        Text(AppStrings.ui_clear)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmClearRecords = false }) {
-                        Text(AppStrings.ui_cancel)
-                    }
-                },
-            )
-        }
     }
 }
 

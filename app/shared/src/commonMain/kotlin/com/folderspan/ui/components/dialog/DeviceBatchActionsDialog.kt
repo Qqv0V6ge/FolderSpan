@@ -216,26 +216,3 @@ private fun DeviceBatchConnectionSection(
         )
     }
 }
-
-@Composable
-fun DeviceBatchDeleteDialog(
-    count: Int,
-    onDismissRequest: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(AppStrings.ui_delete_devices_batches) },
-        text = { Text(AppStrings.ui_you_sure_you_want_delete_selected_arg0_devices.format(arg0 = (count).toString())) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(AppStrings.ui_delete)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(AppStrings.ui_cancel)
-            }
-        }
-    )
-}

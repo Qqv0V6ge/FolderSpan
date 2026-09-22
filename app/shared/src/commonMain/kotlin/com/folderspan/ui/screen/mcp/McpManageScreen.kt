@@ -60,8 +60,10 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -103,6 +105,7 @@ import com.folderspan.service.mcp.auth.McpTokenScope
 import com.folderspan.service.mcp.http.McpAdvertisedEndpoint
 import com.folderspan.service.mcp.http.McpHttpServiceInterface
 import com.folderspan.service.mcp.http.McpHttpServiceStatus
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.scaffold.AppScaffold
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.navigation.LocalAppNavigator
@@ -135,12 +138,11 @@ internal object McpManageScreen : AppScreenRoute {
         var showTokenEditor by remember { mutableStateOf(false) }
         var editingToken by remember { mutableStateOf<McpTokenRecord?>(null) }
         var rotatingToken by remember { mutableStateOf<McpTokenRecord?>(null) }
-        var deletingToken by remember { mutableStateOf<McpTokenRecord?>(null) }
         var oneTimeSecret by remember { mutableStateOf<McpOneTimeTokenSecret?>(null) }
         var qrCodeUrl by remember { mutableStateOf<String?>(null) }
 
         fun showMessage(message: String) {
-            scope.launch { snackbarHostState.showSnackbar(message) }
+            scope.launch { snackbarHostState.showLatestSnackbar(message) }
         }
 
         fun refreshTokens() {
@@ -327,7 +329,15 @@ internal object McpManageScreen : AppScreenRoute {
                             }
                         },
                         onRotate = { rotatingToken = it },
-                        onDelete = { deletingToken = it },
+                        onDelete = { token ->
+                            scope.launch {
+                                confirmMcpTokenDeletion(snackbarHostState) {
+                                    runCatching { tokenRepository.delete(token.lookupId) }
+                                        .onSuccess { refreshTokens() }
+                                        .onFailure { showMessage(AppStrings.ui_mcp_action_failed) }
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("mcp_token_card"),
@@ -386,23 +396,6 @@ internal object McpManageScreen : AppScreenRoute {
             )
         }
 
-        deletingToken?.let { token ->
-            McpConfirmationDialog(
-                title = AppStrings.ui_mcp_delete_token,
-                message = AppStrings.ui_mcp_delete_confirmation,
-                confirmText = AppStrings.ui_delete,
-                onDismiss = { deletingToken = null },
-                onConfirm = {
-                    deletingToken = null
-                    scope.launch {
-                        runCatching { tokenRepository.delete(token.lookupId) }
-                            .onSuccess { refreshTokens() }
-                            .onFailure { showMessage(AppStrings.ui_mcp_action_failed) }
-                    }
-                },
-            )
-        }
-
         oneTimeSecret?.let { secret ->
             McpOneTimeSecretDialog(
                 secret = secret.token,
@@ -428,6 +421,21 @@ internal object McpManageScreen : AppScreenRoute {
                 onDismiss = { qrCodeUrl = null },
             )
         }
+    }
+}
+
+internal suspend fun confirmMcpTokenDeletion(
+    snackbarHostState: SnackbarHostState,
+    onConfirm: suspend () -> Unit,
+) {
+    val result = snackbarHostState.showLatestSnackbar(
+        message = AppStrings.ui_mcp_delete_confirmation,
+        actionLabel = AppStrings.ui_delete,
+        withDismissAction = true,
+        duration = SnackbarDuration.Short,
+    )
+    if (result == SnackbarResult.ActionPerformed) {
+        onConfirm()
     }
 }
 
@@ -463,7 +471,6 @@ internal fun mcpPresetScopes(preset: McpTokenPreset): Set<McpTokenScope> {
             McpTokenScope.FavoritesWrite,
             McpTokenScope.RecentsWrite,
             McpTokenScope.TasksControl,
-            McpTokenScope.DevicesScan,
             McpTokenScope.DevicesConnect,
             McpTokenScope.NetworksConnect,
             McpTokenScope.SyncRun,
@@ -513,7 +520,6 @@ internal fun McpTokenScope.permissionArea(): McpPermissionArea = when (this) {
     McpTokenScope.TasksRead,
     McpTokenScope.TasksControl -> McpPermissionArea.Tasks
     McpTokenScope.DevicesRead,
-    McpTokenScope.DevicesScan,
     McpTokenScope.DevicesConnect -> McpPermissionArea.Devices
     McpTokenScope.NetworksRead,
     McpTokenScope.NetworksConnect -> McpPermissionArea.Networks
@@ -1183,7 +1189,6 @@ private fun McpTokenScope.actionTitle(): String = when (this) {
     McpTokenScope.FavoritesWrite,
     McpTokenScope.RecentsWrite -> AppStrings.ui_mcp_action_manage
     McpTokenScope.TasksControl -> AppStrings.ui_mcp_action_control
-    McpTokenScope.DevicesScan -> AppStrings.ui_mcp_action_scan
     McpTokenScope.DevicesConnect,
     McpTokenScope.NetworksConnect -> AppStrings.ui_mcp_action_connect
     McpTokenScope.SyncRun -> AppStrings.ui_mcp_action_run

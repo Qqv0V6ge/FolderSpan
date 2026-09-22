@@ -25,6 +25,7 @@ import com.folderspan.data.main.Local
 import com.folderspan.data.main.network.buildProtocolId
 import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.ignore.normalizeSupportedIgnoreFileNames
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.SyncPathSelectorDialog
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
@@ -174,13 +175,13 @@ class SyncEditScreen(
         fun openSourcePathSelector() {
             if (sourceType != SyncEndpointType.Local && sourceRef.isBlank()) {
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar(AppStrings.ui_please_select_source_endpoint_first)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_please_select_source_endpoint_first)
                 }
                 return
             }
             if (sourceSelectorDesk == null) {
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar(AppStrings.ui_source_endpoint_unavailable_path_cannot_selected)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_source_endpoint_unavailable_path_cannot_selected)
                 }
                 return
             }
@@ -191,13 +192,13 @@ class SyncEditScreen(
         fun openTargetPathSelector() {
             if (targetType != SyncEndpointType.Local && targetRef.isBlank()) {
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar(AppStrings.ui_please_select_target_endpoint_first)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_please_select_target_endpoint_first)
                 }
                 return
             }
             if (targetSelectorDesk == null) {
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar(AppStrings.ui_target_endpoint_unavailable_path_cannot_selected)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_target_endpoint_unavailable_path_cannot_selected)
                 }
                 return
             }
@@ -352,7 +353,7 @@ class SyncEditScreen(
                     onClick = {
                         if (validationError != null) {
                             coroutineScope.launch {
-                                snackbarHostState.showSnackbar(validationError)
+                                snackbarHostState.showLatestSnackbar(validationError)
                             }
                             return@ExtendedFloatingActionButton
                         }
@@ -383,7 +384,7 @@ class SyncEditScreen(
                             if (result.isSuccess) {
                                 navigator.pop()
                             } else {
-                                snackbarHostState.showSnackbar(
+                                snackbarHostState.showLatestSnackbar(
                                     result.exceptionOrNull()?.message ?: AppStrings.ui_save_failed
                                 )
                             }

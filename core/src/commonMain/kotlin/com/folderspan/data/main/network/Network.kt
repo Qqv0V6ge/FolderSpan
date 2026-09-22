@@ -104,6 +104,8 @@ open class Network(
             updatedDate = entry.updatedDate,
             protocol = FileProtocol.Network,
             protocolId = protocolId,
+            isSymbolicLink = entry.isSymbolicLink,
+            isSymbolicLinkKnown = entry.isSymbolicLinkKnown,
         )
     }
 

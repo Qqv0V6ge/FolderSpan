@@ -65,7 +65,7 @@ private fun connectDeviceSessionChannel(
     port: Int,
     expectedFingerprintSha256: String?,
 ): DeviceSessionBootstrapConnection {
-    LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = (host).toString(), arg1 = (port).toString()))
+    LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = host, arg1 = (port).toString()))
     val ctx = fm_create_client_ctx() ?: throw DeviceSessionIoException("TLS client context failed")
     val fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
     if (fd < 0) {
@@ -87,13 +87,13 @@ private fun connectDeviceSessionChannel(
             }
         }
         val ssl = SSL_new(ctx) ?: throw DeviceSessionIoException("SSL_new failed")
-        LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = (host).toString()))
+        LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = host))
         if (SSL_set_fd(ssl, fd) != 1 || SSL_connect(ssl) != 1) {
             SSL_free(ssl)
             throw DeviceSessionIoException("TLS handshake failed")
         }
         if (fm_ssl_alpn_is_folderspan(ssl) != 1) {
-            LogKit.w(AppStrings.ui_device_session_client_missing_alpn_arg0_host_arg1.format(arg0 = (DEVICE_SESSION_ALPN).toString(), arg1 = (host).toString()))
+            LogKit.w(AppStrings.ui_device_session_client_missing_alpn_arg0_host_arg1.format(arg0 = DEVICE_SESSION_ALPN, arg1 = host))
             SSL_free(ssl)
             throw DeviceSessionIoException("missing ALPN $DEVICE_SESSION_ALPN")
         }
@@ -104,11 +104,11 @@ private fun connectDeviceSessionChannel(
         }
         val expected = expectedFingerprintSha256?.let(::normalizeTlsFingerprintSha256).orEmpty()
         if (expected.isNotBlank() && actual != expected) {
-            LogKit.w(AppStrings.ui_device_session_client_certificate_fingerprint_mismatch_host_arg0.format(arg0 = (host).toString()))
+            LogKit.w(AppStrings.ui_device_session_client_certificate_fingerprint_mismatch_host_arg0.format(arg0 = host))
             SSL_free(ssl)
             throw DeviceSessionIoException(AppStrings.ui_device_tls_certificate_fingerprint_does_not_match)
         }
-        LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = (host).toString(), arg1 = (DEVICE_SESSION_ALPN).toString()))
+        LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = host, arg1 = DEVICE_SESSION_ALPN))
         return DeviceSessionBootstrapConnection(
             channel = IosDeviceSessionByteChannel(ssl, ctx, fd),
             peerFingerprintSha256 = actual,

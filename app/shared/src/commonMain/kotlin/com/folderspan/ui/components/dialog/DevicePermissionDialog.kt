@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.file.FileFilterType
 import com.folderspan.db.DevicePermission
+import com.folderspan.localization.localizedComment
 import com.folderspan.ui.components.file.FileSelectorEntryRegion
 import com.folderspan.ui.components.model.FileFilterTypeListUiState
 import com.folderspan.ui.components.model.FileSelectionUiState
@@ -33,7 +34,7 @@ fun DevicePermissionEditDialog(
         mutableStateOf(initialPermission?.path ?: PathUtils.getHomePath())
     }
     var comment by rememberSaveable(permissionKey) {
-        mutableStateOf(initialPermission?.comment ?: "")
+        mutableStateOf(initialPermission?.localizedComment.orEmpty())
     }
     var showFileSelector by rememberSaveable(permissionKey) { mutableStateOf(false) }
     var selectedPath by rememberSaveable(permissionKey) {
@@ -98,7 +99,14 @@ fun DevicePermissionEditDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSave(path, comment.ifEmpty { null })
+                    val savedComment = if (
+                        initialPermission != null && comment == initialPermission.localizedComment.orEmpty()
+                    ) {
+                        initialPermission.comment
+                    } else {
+                        comment.ifEmpty { null }
+                    }
+                    onSave(path, savedComment)
                     onDismiss()
                 },
                 enabled = path.isNotEmpty(),

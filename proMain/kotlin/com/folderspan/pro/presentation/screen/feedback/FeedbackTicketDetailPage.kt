@@ -27,6 +27,7 @@ import com.folderspan.pro.core.ui.components.AuthStatusTone
 import com.folderspan.pro.core.ui.components.ProSnackbarEffect
 import com.folderspan.pro.core.ui.components.ProSnackbarHost
 import com.folderspan.pro.core.ui.components.proSnackbarPrompt
+import com.folderspan.pro.core.ui.components.showProSnackbar
 import com.folderspan.pro.domain.model.FeedbackAttachment
 import com.folderspan.pro.domain.model.FeedbackEvent
 import com.folderspan.ui.components.pagestate.PageErrorState
@@ -55,8 +56,8 @@ internal fun FeedbackTicketDetailPane(
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmWithdraw by remember { mutableStateOf(false) }
-    var attachmentPendingDelete by remember { mutableStateOf<FeedbackAttachment?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val busy = state.operation != null || state.attachmentTransfer?.isActive == true
     val snackbarTone = if (state.refreshMessage == AppStrings.ui_feedback_attachment_saved) {
         AuthStatusTone.Success
@@ -95,7 +96,21 @@ internal fun FeedbackTicketDetailPane(
                 onRequestWithdraw = { confirmWithdraw = true },
                 onUploadAttachment = onUploadAttachment,
                 onDownloadAttachment = onDownloadAttachment,
-                onRequestDeleteAttachment = { attachmentPendingDelete = it },
+                onRequestDeleteAttachment = { attachment ->
+                    scope.launch {
+                        val result = snackbarHostState.showProSnackbar(
+                            message = AppStrings.ui_feedback_confirm_delete_attachment_message_arg0.format(
+                                arg0 = attachment.originalName.ifBlank { AppStrings.ui_feedback_attachments },
+                            ),
+                            tone = AuthStatusTone.Error,
+                            actionLabel = AppStrings.ui_delete,
+                            withDismissAction = true,
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            onDeleteAttachment(attachment.uuid)
+                        }
+                    }
+                },
                 onCancelOperation = onCancelOperation,
                 onRetryUploadAttachment = onRetryUploadAttachment,
                 modifier = Modifier.fillMaxSize(),
@@ -147,35 +162,6 @@ internal fun FeedbackTicketDetailPane(
         )
     }
 
-    attachmentPendingDelete?.let { attachment ->
-        AlertDialog(
-            onDismissRequest = { if (!busy) attachmentPendingDelete = null },
-            title = { Text(AppStrings.ui_feedback_confirm_delete_attachment_title) },
-            text = {
-                Text(
-                    AppStrings.ui_feedback_confirm_delete_attachment_message_arg0.format(
-                        arg0 = attachment.originalName.ifBlank { AppStrings.ui_feedback_attachments },
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        attachmentPendingDelete = null
-                        onDeleteAttachment(attachment.uuid)
-                    },
-                    enabled = !busy,
-                ) {
-                    Text(AppStrings.ui_feedback_delete_attachment, color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { attachmentPendingDelete = null }, enabled = !busy) {
-                    Text(AppStrings.ui_cancel)
-                }
-            },
-        )
-    }
 }
 
 @Composable

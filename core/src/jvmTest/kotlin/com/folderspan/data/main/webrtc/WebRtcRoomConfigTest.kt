@@ -5,6 +5,7 @@ import strings.AppStrings
 import com.folderspan.service.webrtc.signaling.generateRoomId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class WebRtcRoomConfigTest {
@@ -59,6 +60,36 @@ class WebRtcRoomConfigTest {
         )
 
         assertTrue(room.matchesActiveConfig(activeConfig))
+    }
+
+    @Test
+    fun officialCatalogKeyUsesRoomIdAndOtherUsesLocalId() {
+        val official = officialWebRtcRoomProfile(name = "Office", roomId = "room-official")
+        val other = webRtcRoomProfile(source = WebRtcRoomSource.Other).copy(id = 12L)
+
+        assertEquals("official:room-official", official.catalogKey)
+        assertEquals("other:12", other.catalogKey)
+    }
+
+    @Test
+    fun officialRoomCanSaveWithNameOnly() {
+        val official = WebRtcRoomInput(
+            name = "Office",
+            wssUrl = "",
+            roomId = "",
+            stunUrl = "",
+            turnUrl = "",
+            turnUsername = "",
+            turnPassword = "",
+            source = WebRtcRoomSource.Official,
+        )
+        val other = official.copy(source = WebRtcRoomSource.Other)
+
+        assertTrue(official.canSave())
+        assertFalse(other.canSave())
+        assertFalse(official.copy(name = "  ").canSave())
+        assertTrue(official.copy(name = "x".repeat(OfficialRoomNameMaxLength)).canSave())
+        assertFalse(official.copy(name = "x".repeat(OfficialRoomNameMaxLength + 1)).canSave())
     }
 }
 

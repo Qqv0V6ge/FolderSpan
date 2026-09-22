@@ -10,8 +10,13 @@ import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.main.device.DeviceCategory
 import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
+import com.folderspan.data.main.webrtc.OfficialWebRtcRoomPage
+import com.folderspan.data.main.webrtc.WebRtcOfficialRooms
+import com.folderspan.data.main.webrtc.WebRtcOfficialRoomsClient
 import com.folderspan.data.main.webrtc.WebRtcRoomInput
+import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcRoomSource
+import com.folderspan.data.main.webrtc.officialWebRtcRoomProfile
 import com.folderspan.db.*
 import com.folderspan.service.webrtc.signaling.generateRoomId
 import com.folderspan.ui.state.file.DrawerBookmarkType
@@ -55,14 +60,13 @@ class WebRtcRoomStateTest {
             name = AppStrings.ui_test_web_rtc_room_state_updated_room,
             roomId = generateRoomId(),
             turnPassword = "secret-b",
-            source = WebRtcRoomSource.Official,
         )
         assertTrue(state.updateRoom(roomId, updatedRoom))
 
         val updatedRow = database.webRtcRoomQueries.selectById(roomId).executeAsOneAwait()
         assertEquals(AppStrings.ui_test_web_rtc_room_state_updated_room, updatedRow.name)
-        assertEquals(WebRtcRoomSource.Official.name, updatedRow.source)
-        assertEquals(WebRtcRoomSource.Official, state.rooms.single().source)
+        assertEquals(WebRtcRoomSource.Other.name, updatedRow.source)
+        assertEquals(WebRtcRoomSource.Other, state.rooms.single().source)
         assertTrue(state.rooms.single().roomIdValid)
         assertEquals("secret-b", state.rooms.single().turnPassword)
 
@@ -86,7 +90,7 @@ class WebRtcRoomStateTest {
             turnUrl = "turn:persisted.example:3478",
             turnUsername = "persisted-user",
             turnPassword = existingPassword,
-            source = WebRtcRoomSource.Official.name,
+            source = WebRtcRoomSource.Other.name,
             pinned = 0L,
             sortOrder = 0L,
             createdAt = 1L,
@@ -98,7 +102,7 @@ class WebRtcRoomStateTest {
 
         assertEquals(1, state.rooms.size)
         assertEquals(AppStrings.ui_test_web_rtc_room_state_there_is_a_room, state.rooms.single().name)
-        assertEquals(WebRtcRoomSource.Official, state.rooms.single().source)
+        assertEquals(WebRtcRoomSource.Other, state.rooms.single().source)
         assertEquals("persisted-secret", state.rooms.single().turnPassword)
         assertEquals(false, state.rooms.single().pinned)
     }
@@ -259,6 +263,189 @@ class WebRtcRoomStateTest {
         assertEquals(2, state.deleteRooms(listOf(firstId, thirdId)))
         assertEquals(listOf(secondId), state.rooms.map { item -> item.id })
         assertEquals(1, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+    }
+
+    @Test
+    fun leftoverOfficialRowsAreRemovedOnLoad() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        database.webRtcRoomQueries.insert(
+            name = AppStrings.ui_test_web_rtc_room_state_there_is_a_room,
+            wssUrl = "wss://official.example/ws",
+            roomId = generateRoomId(),
+            stunUrl = "",
+            turnUrl = "",
+            turnUsername = "",
+            turnPassword = "",
+            source = WebRtcRoomSource.Official.name,
+            pinned = 0L,
+            sortOrder = 0L,
+            createdAt = 1L,
+            updatedAt = 1L
+        ).awaitDatabaseReady()
+        database.webRtcRoomQueries.insert(
+            name = AppStrings.ui_test_web_rtc_room_state_common_room,
+            wssUrl = "wss://other.example/ws",
+            roomId = generateRoomId(),
+            stunUrl = "",
+            turnUrl = "",
+            turnUsername = "",
+            turnPassword = "",
+            source = WebRtcRoomSource.Other.name,
+            pinned = 0L,
+            sortOrder = 1L,
+            createdAt = 1L,
+            updatedAt = 1L
+        ).awaitDatabaseReady()
+
+        val state = WebRtcRoomState(database)
+        state.loadPersisted()
+
+        assertEquals(listOf(WebRtcRoomSource.Other), state.rooms.map { item -> item.source })
+        assertEquals(1, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+        assertEquals(
+            WebRtcRoomSource.Other.name,
+            database.webRtcRoomQueries.selectAll().executeAsListAwait().single().source,
+        )
+    }
+
+    @Test
+    fun officialRoomsComeFromRemoteClientAndAreNotPersisted() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        val state = WebRtcRoomState(database)
+        val previousClient = WebRtcOfficialRooms.client
+        val remoteRoom = officialWebRtcRoomProfile(
+            name = "Remote Office",
+            roomId = "official-room-1",
+            turnPassword = "turn-secret",
+        )
+        val client = FakeOfficialRoomsClient(
+            listPages = listOf(
+                OfficialWebRtcRoomPage(
+                    rooms = listOf(remoteRoom),
+                    total = 1,
+                    page = 1,
+                    pageSize = WebRtcOfficialRooms.DefaultPageSize,
+                ),
+            ),
+        )
+        WebRtcOfficialRooms.client = client
+        try {
+            val createdId = assertNotNull(
+                state.addRoom(
+                    WebRtcRoomInput(
+                        name = "Created Office",
+                        wssUrl = "",
+                        roomId = "",
+                        stunUrl = "",
+                        turnUrl = "",
+                        turnUsername = "",
+                        turnPassword = "created-secret",
+                        source = WebRtcRoomSource.Official,
+                    )
+                )
+            )
+            assertEquals(0L, createdId)
+            assertEquals(1, client.created.size)
+            assertEquals("Created Office", state.rooms.single().name)
+            assertEquals("", state.rooms.single().turnPassword)
+            assertEquals(0, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+            val createdLive = assertNotNull(state.getOfficialRoom("created-official"))
+            assertEquals("created-secret", createdLive.turnPassword)
+            assertEquals("", state.rooms.single().turnPassword)
+
+            state.loadOfficialRooms(reset = true)
+            assertEquals(listOf("official-room-1"), state.rooms.map { item -> item.roomId })
+            assertEquals("", state.rooms.single().turnPassword)
+            val listedLive = assertNotNull(state.getOfficialRoom("official-room-1"))
+            assertEquals("turn-secret", listedLive.turnPassword)
+            assertEquals("", state.rooms.single().turnPassword)
+            assertEquals(0, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+
+            assertTrue(state.deleteRoom(state.rooms.single()))
+            assertEquals(listOf("official-room-1"), client.deleted)
+            assertTrue(state.rooms.none { item -> item.source == WebRtcRoomSource.Official })
+        } finally {
+            WebRtcOfficialRooms.client = previousClient
+        }
+    }
+
+    @Test
+    fun officialListFailureDoesNotPersistRooms() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        val state = WebRtcRoomState(database)
+        val previousClient = WebRtcOfficialRooms.client
+        WebRtcOfficialRooms.client = FakeOfficialRoomsClient(
+            listError = IllegalStateException(AppStrings.ui_log_in_before_connecting_official_webrtc_room),
+        )
+        try {
+            state.loadOfficialRooms(reset = true)
+            assertEquals(AppStrings.ui_log_in_before_connecting_official_webrtc_room, state.officialError?.message)
+            assertTrue(state.rooms.none { item -> item.source == WebRtcRoomSource.Official })
+            assertEquals(0, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+        } finally {
+            WebRtcOfficialRooms.client = previousClient
+        }
+    }
+}
+
+private class FakeOfficialRoomsClient(
+    private val listPages: List<OfficialWebRtcRoomPage> = emptyList(),
+    private val listError: Throwable? = null,
+) : WebRtcOfficialRoomsClient {
+    val created = mutableListOf<WebRtcRoomInput>()
+    val deleted = mutableListOf<String>()
+    private val roomsById = mutableMapOf<String, WebRtcRoomProfile>()
+
+    override suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage> {
+        listError?.let { return Result.failure(it) }
+        val payload = listPages.firstOrNull { item -> item.page == page }
+            ?: OfficialWebRtcRoomPage(emptyList(), total = 0, page = page, pageSize = pageSize)
+        return Result.success(payload)
+    }
+
+    override suspend fun getRoom(roomId: String): Result<WebRtcRoomProfile> {
+        listError?.let { return Result.failure(it) }
+        roomsById[roomId]?.let { return Result.success(it) }
+        listPages.asSequence()
+            .flatMap { item -> item.rooms.asSequence() }
+            .firstOrNull { item -> item.roomId == roomId }
+            ?.let { return Result.success(it) }
+        return Result.failure(IllegalStateException(AppStrings.ui_failed_load_webrtc_room_arg0.format(arg0 = roomId)))
+    }
+
+    override suspend fun createRoom(input: WebRtcRoomInput): Result<WebRtcRoomProfile> {
+        created += input
+        val profile = officialWebRtcRoomProfile(
+            name = input.name,
+            roomId = "created-official",
+            stunUrl = input.stunUrl,
+            turnUrl = input.turnUrl,
+            turnUsername = input.turnUsername,
+            turnPassword = input.turnPassword,
+        )
+        roomsById[profile.roomId] = profile
+        return Result.success(profile)
+    }
+
+    override suspend fun updateRoom(roomId: String, input: WebRtcRoomInput): Result<WebRtcRoomProfile> {
+        return Result.success(
+            officialWebRtcRoomProfile(
+                name = input.name,
+                roomId = roomId,
+                stunUrl = input.stunUrl,
+                turnUrl = input.turnUrl,
+                turnUsername = input.turnUsername,
+                turnPassword = input.turnPassword,
+            )
+        )
+    }
+
+    override suspend fun deleteRoom(roomId: String): Result<Unit> {
+        deleted += roomId
+        return Result.success(Unit)
     }
 }
 

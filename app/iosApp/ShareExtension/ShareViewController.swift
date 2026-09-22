@@ -121,14 +121,19 @@ final class ShareViewController: UIViewController {
         detailLabel.text = ShareLocalization.text("share_reading_files")
         detailLabel.adjustsFontForContentSizeCategory = true
 
-        doneButton.setTitle(ShareLocalization.text("share_done"), for: .normal)
-        doneButton.backgroundColor = Palette.brand
-        doneButton.tintColor = .white
-        doneButton.setTitleColor(.white, for: .normal)
-        doneButton.layer.cornerRadius = 16
-        doneButton.layer.cornerCurve = .continuous
-        doneButton.contentEdgeInsets = UIEdgeInsets(top: 15, left: 24, bottom: 15, right: 24)
-        doneButton.titleLabel?.font = .preferredFont(forTextStyle: .headline).withWeight(.semibold)
+        var doneButtonConfiguration = UIButton.Configuration.filled()
+        doneButtonConfiguration.title = ShareLocalization.text("share_done")
+        doneButtonConfiguration.baseBackgroundColor = Palette.brand
+        doneButtonConfiguration.baseForegroundColor = .white
+        doneButtonConfiguration.cornerStyle = .fixed
+        doneButtonConfiguration.background.cornerRadius = 16
+        doneButtonConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 24, bottom: 15, trailing: 24)
+        doneButtonConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var attributes = attributes
+            attributes.font = UIFont.preferredFont(forTextStyle: .headline).withWeight(.semibold)
+            return attributes
+        }
+        doneButton.configuration = doneButtonConfiguration
         doneButton.accessibilityIdentifier = "share-extension-done-button"
         doneButton.isHidden = true
         doneButton.addTarget(self, action: #selector(finish), for: .touchUpInside)

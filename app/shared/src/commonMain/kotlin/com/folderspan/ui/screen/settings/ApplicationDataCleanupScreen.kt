@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.cleanup.ApplicationDataCleanupCategory
 import com.folderspan.cleanup.ApplicationDataCleanupState
 import com.folderspan.crash.exitApp
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.scaffold.AppScaffold
 import com.folderspan.ui.navigation.AppScreenRoute
@@ -170,7 +171,7 @@ class ApplicationDataCleanupScreen : AppScreenRoute {
                                     onSuccess = { exitApp() },
                                     onFailure = {
                                         cleanupRequested = false
-                                        snackbarHostState.showSnackbar(
+                                        snackbarHostState.showLatestSnackbar(
                                             AppStrings.developer_cleanup_application_data_failed
                                         )
                                     },

@@ -11,6 +11,34 @@ import kotlin.test.assertEquals
 
 class FileListFilterTest {
     @Test
+    fun dateSortingMixesFilesAndDirectories() {
+        val folderA = file("/folder-a", "folder-a", isDirectory = true)
+            .copy(createdDate = 20, updatedDate = 10)
+        val folderB = file("/folder-b", "folder-b", isDirectory = true)
+            .copy(createdDate = 40, updatedDate = 30)
+        val fileA = file("/a.txt", "a.txt").copy(createdDate = 10, updatedDate = 40)
+        val fileB = file("/b.txt", "b.txt").copy(createdDate = 30, updatedDate = 20)
+        val files = listOf(folderB, fileA, folderA, fileB)
+
+        assertEquals(
+            listOf(fileA, folderA, fileB, folderB),
+            files.filter(sortType = FileFilterSort.CreatedDateAsc),
+        )
+        assertEquals(
+            listOf(folderB, fileB, folderA, fileA),
+            files.filter(sortType = FileFilterSort.CreatedDateDesc),
+        )
+        assertEquals(
+            listOf(folderA, fileB, folderB, fileA),
+            files.filter(sortType = FileFilterSort.UpdatedDateAsc),
+        )
+        assertEquals(
+            listOf(fileA, folderB, fileB, folderA),
+            files.filter(sortType = FileFilterSort.UpdatedDateDesc),
+        )
+    }
+
+    @Test
     fun extensionIndexMatchesLinearLookupAndKeepsFirstDuplicate() {
         val imageFilter = fileFilters().first()
         val fallbackFilter = FileFilter(

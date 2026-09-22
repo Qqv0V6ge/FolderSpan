@@ -61,6 +61,7 @@ import com.folderspan.service.message.DeviceMessageTransport
 import com.folderspan.service.message.IncomingDeviceMessageCoordinator
 import com.folderspan.service.message.SqlDelightDeviceMessageStore
 import com.folderspan.service.path.DevicePathService
+import com.folderspan.service.session.DeviceIdentityTrust
 import com.folderspan.service.session.DeviceLanBeaconListener
 import com.folderspan.service.session.DeviceLanBeacons
 import com.folderspan.service.session.DeviceSessionClientManager
@@ -913,13 +914,10 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         }
     }
 
+    // 手动指定发现地址，设备保存和连接策略与自动发现共用同一流程。
     suspend fun connectDeviceByAddress(ip: String, port: Int): SocketDevice? {
         return when (resolveDeviceAddressConnectMode(PlatformType)) {
-            DeviceAddressConnectMode.BrowserWebRtc -> {
-                val device = discoverBrowserWebRtcDevice(ip, port) ?: return null
-                connectBrowserWebRtcDevice(device)
-                device
-            }
+            DeviceAddressConnectMode.BrowserWebRtc -> discoverBrowserWebRtcDevice(ip, port)
 
             DeviceAddressConnectMode.SessionPort -> {
                 LogKit.i(AppStrings.ui_manual_ip_session_connection_host_arg0_port_arg1.format(arg0 = (ip), arg1 = (port).toString()))
@@ -929,14 +927,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                     knownDevices = snapshotSocketDevices(DeviceTransportType.Session),
                     identify = ::identifyDeviceSessionEndpoint,
                 )
-                withContext(Dispatchers.Main) {
-                    upsertDiscoveredSocketDevice(
-                        socketDevices = socketDevices,
-                        device = socketDevice,
-                        browserWebRtcTransport = false,
-                    )
-                }
-                connect(socketDevice)
+                ingestDiscoveredLanDevice(socketDevice, getLocalIpv4Set())
                 socketDevice
             }
         }
@@ -950,19 +941,28 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             localDeviceHost = self?.host,
         )
         val beacon = DeviceLanBeacons.decode(payload) ?: return
-        if (!DeviceLanBeacons.verify(beacon)) {
-            LogKit.w(AppStrings.ui_ignore_beacon_signature_invalid_host_arg0_id_arg1.format(arg0 = (host), arg1 = (beacon.deviceId)))
-            return
-        }
         if (!shouldAcceptLanBeacon(host, beacon.deviceId, localDeviceId, localIpSet)) {
             return
         }
-        ingestDiscoveredLanDevice(DeviceLanBeacons.toSocketDevice(beacon, host), localIpSet)
+        val status = DeviceLanBeacons.discoveryStatus(beacon) ?: return
+        ingestDiscoveredLanDevice(
+            DeviceLanBeacons.toSocketDevice(beacon, host).withCopy(discoveryStatus = status),
+            localIpSet,
+        )
     }
 
     private suspend fun ingestDiscoveredLanDevice(device: SocketDevice, localIpSet: Set<String>) {
         if (device.id.isBlank()) return
         if (device.host in localIpSet) {
+            return
+        }
+        if (device.discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+            // Discovery is visible, but cannot persist peer metadata or trigger saved auto-connect policies.
+            withContext(Dispatchers.Main) {
+                device.connectType = ConnectType.UnConnect
+                val stored = upsertDiscoveredSocketDevice(socketDevices, device, browserWebRtcTransport = false)
+                if (stored === device) presenceMonitor.markSeen(device.id)
+            }
             return
         }
         presenceMonitor.markSeen(device.id)
@@ -1982,7 +1982,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         val allowedPaths = fileShareState.shareToDevices[device.id]
             ?.second
             .orEmpty()
-            .map { file -> DeviceSharePathGrant(file.path, file.isDirectory) }
+            .map { file -> DeviceSharePathGrant(file.path, file.isDirectory, displayName = file.name) }
         if (allowedPaths.isEmpty()) return
         val grant = DeviceShareConnectionGrant(
             deviceId = device.id,
@@ -2132,19 +2132,26 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             }
 
             try {
-                LogKit.i(AppStrings.ui_initiate_shared_short_polling_deviceid_arg0_host_arg1_arg2.format(arg0 = device.id, arg1 = device.host, arg2 = (device.port).toString()))
+                val trustedDevice = DeviceIdentityTrust.shared.resolve(device)
+                if (trustedDevice !== device) {
+                    val index = socketDevices.indexOfFirst { it.matchesRecord(device) }
+                    if (index >= 0 && socketDevices[index].discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+                        socketDevices[index] = trustedDevice.withCopy(connectType = socketDevices[index].connectType)
+                    }
+                }
+                LogKit.i(AppStrings.ui_initiate_shared_short_polling_deviceid_arg0_host_arg1_arg2.format(arg0 = trustedDevice.id, arg1 = trustedDevice.host, arg2 = (trustedDevice.port).toString()))
                 val shareConnectNonce = 32.randomString(includeSpecial = false)
                 val selfDevice = getSocketDevice()
                 val requestDevice = selfDevice.withCopy(
                     host = selectAdvertisedHttpHost(
                         currentHost = selfDevice.host,
-                        targetHost = device.host,
+                        targetHost = trustedDevice.host,
                         candidateHosts = getAllIPAddresses(SocketClientIPEnum.IPV4_UP),
                     )
                 )
-                val tlsFingerprint = device.normalizedTlsFingerprint()
+                val tlsFingerprint = trustedDevice.normalizedTlsFingerprint()
                 val encryptedTransport = usePlainHttpDeviceTransport()
-                val baseUrl = device.deviceShareApprovalBaseUrl()
+                val baseUrl = trustedDevice.deviceShareApprovalBaseUrl()
                 httpClient = createPinnedNoProxyHttpClient(tlsFingerprint) {
                     expectSuccess = false
                     install(HttpTimeout) {
@@ -2185,7 +2192,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                                 "HTTP ${response.status.value} ${error.message}"
                         )
                         if (keepCompletedSessionAfterPollFailure("HTTP ${response.status.value} ${error.message}")) continue
-                        fileShareState.sendFile[device.id] = FileShareStatus.ERROR
+                        fileShareState.sendFile[trustedDevice.id] = FileShareStatus.ERROR
                         break
                     }
 
@@ -2197,23 +2204,23 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                     } catch (e: Exception) {
                         LogKit.e(AppStrings.ui_shared_short_poll_parsing_failed_arg0.format(arg0 = (e.message).toString()), e)
                         if (keepCompletedSessionAfterPollFailure(e.message.orEmpty())) continue
-                        fileShareState.sendFile[device.id] = FileShareStatus.ERROR
+                        fileShareState.sendFile[trustedDevice.id] = FileShareStatus.ERROR
                         break
                     }
                     completedPollFailures = 0
 
                     val fileShareStatus = pollResponse.status
                     val responseMessage = pollResponse.message
-                    LogKit.d(AppStrings.ui_shared_short_polling_status_status_arg0_deviceid_arg1.format(arg0 = (fileShareStatus).toString(), arg1 = device.id))
+                    LogKit.d(AppStrings.ui_shared_short_polling_status_status_arg0_deviceid_arg1.format(arg0 = (fileShareStatus).toString(), arg1 = trustedDevice.id))
                     if (completedOnce && fileShareStatus != FileShareStatus.COMPLETED) {
-                        LogKit.i(AppStrings.ui_shared_connection_has_been_disconnected_clean_up_session_deviceid.format(arg0 = device.id))
-                        markShareDisconnected(device.id)
+                        LogKit.i(AppStrings.ui_shared_connection_has_been_disconnected_clean_up_session_deviceid.format(arg0 = trustedDevice.id))
+                        markShareDisconnected(trustedDevice.id)
                         return@launch
                     }
                     if (fileShareStatus == FileShareStatus.REJECTED) {
-                        LogKit.i(AppStrings.ui_sharing_request_denied_clearing_session_deviceid_arg0.format(arg0 = device.id))
+                        LogKit.i(AppStrings.ui_sharing_request_denied_clearing_session_deviceid_arg0.format(arg0 = trustedDevice.id))
                         markShareRejected(
-                            deviceId = device.id,
+                            deviceId = trustedDevice.id,
                             message = responseMessage.ifBlank { AppStrings.ui_other_party_did_not_receive }
                         )
                         return@launch
@@ -2222,24 +2229,24 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                         FileShareStatus.SENDING -> {}
                         FileShareStatus.ERROR -> {
                             if (responseMessage.isNotBlank()) {
-                                fileShareState.sendFileMessage[device.id] = responseMessage
+                                fileShareState.sendFileMessage[trustedDevice.id] = responseMessage
                             }
                         }
 
                         FileShareStatus.COMPLETED -> {
                             if (!completedOnce) {
-                                LogKit.i(AppStrings.ui_shared_short_polling_completed_other_party_allowed_connect_deviceid.format(arg0 = device.id))
-                                allowDeviceShareConnection(device, shareConnectNonce)
+                                LogKit.i(AppStrings.ui_shared_short_polling_completed_other_party_allowed_connect_deviceid.format(arg0 = trustedDevice.id))
+                                allowDeviceShareConnection(trustedDevice, shareConnectNonce)
                                 completedOnce = true
                             }
                         }
 
                         FileShareStatus.WAITING -> {
-                            LogKit.d(AppStrings.ui_shared_short_polling_waiting_confirmation_other_party_deviceid_arg0.format(arg0 = device.id))
+                            LogKit.d(AppStrings.ui_shared_short_polling_waiting_confirmation_other_party_deviceid_arg0.format(arg0 = trustedDevice.id))
                             if (!recordedWaiting) {
                                 recordedWaiting = true
                                 withContext(Dispatchers.Default) {
-                                    fileShareState.shareToDevices[device.id]?.second?.forEach { fileSimpleInfo ->
+                                    fileShareState.shareToDevices[trustedDevice.id]?.second?.forEach { fileSimpleInfo ->
                                         shareHistoryStore.add(
                                             ShareHistoryInput(
                                                 fileName = fileSimpleInfo.name,
@@ -2249,9 +2256,9 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                                                 sourceDeviceId = "",
                                                 sourceDeviceName = AppStrings.ui_me,
                                                 sourceDeviceType = DeviceType.JS,
-                                                targetDeviceId = device.id,
-                                                targetDeviceName = device.name,
-                                                targetDeviceType = device.type,
+                                                targetDeviceId = trustedDevice.id,
+                                                targetDeviceName = trustedDevice.name,
+                                                targetDeviceType = trustedDevice.type,
                                                 isOutgoing = true,
                                                 status = fileShareStatus,
                                                 errorMessage = "",
@@ -2263,7 +2270,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                             }
                         }
                     }
-                    fileShareState.sendFile[device.id] = fileShareStatus
+                    fileShareState.sendFile[trustedDevice.id] = fileShareStatus
 
                     if (!completedOnce &&
                         fileShareStatus != FileShareStatus.WAITING &&

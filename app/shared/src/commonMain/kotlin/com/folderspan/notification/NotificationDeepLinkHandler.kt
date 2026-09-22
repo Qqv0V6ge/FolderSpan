@@ -202,7 +202,7 @@ object NotificationDeepLinkHandler : KoinComponent {
             RequestNotificationKind.DeviceShare -> {
                 val socketDevice = deviceState.resolveShareRequestDevice(requestInfo.deviceId)
                 if (socketDevice == null) {
-                    LogKit.w(AppStrings.ui_not_found_to_share_device_arg0.format(arg0 = (requestInfo.deviceId).toString()))
+                    LogKit.w(AppStrings.ui_not_found_to_share_device_arg0.format(arg0 = requestInfo.deviceId))
                     return
                 }
                 handlerScope.launch {

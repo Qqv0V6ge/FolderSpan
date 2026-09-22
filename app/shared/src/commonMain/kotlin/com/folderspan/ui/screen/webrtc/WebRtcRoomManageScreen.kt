@@ -20,14 +20,18 @@ import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcRoomSource
 import com.folderspan.data.main.webrtc.isBusy
 import com.folderspan.data.main.webrtc.matchesActiveConfig
+import com.folderspan.isProAuthenticated
 import com.folderspan.service.webrtc.models.WebRtcConfig
 import com.folderspan.service.webrtc.models.WebRtcConnectionStatus
 import com.folderspan.service.webrtc.models.toRoomDisplayLabel
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.filter.FilterOptionChip
 import com.folderspan.ui.components.filter.FilterSectionCard
 import com.folderspan.ui.components.filter.FilterSheetFrame
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
+import com.folderspan.ui.components.pagestate.PageAppendState
+import com.folderspan.ui.components.pagestate.PageRefreshState
 import com.folderspan.ui.components.scaffold.AppScaffold
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.navigation.LocalAppNavigator
@@ -37,8 +41,8 @@ import com.folderspan.ui.state.main.WebRtcRoomState
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-private val WebRtcRoomIdSetSaver = listSaver<Set<Long>, Long>(
-    save = { ids -> ids.toList() },
+private val WebRtcRoomKeySetSaver = listSaver<Set<String>, String>(
+    save = { keys -> keys.toList() },
     restore = { values -> values.toSet() }
 )
 
@@ -77,19 +81,24 @@ class WebRtcRoomManageScreen : AppScreenRoute {
         var connectionFilterDraft by rememberSaveable { mutableStateOf(WebRtcRoomConnectionFilter.All) }
         var pinFilter by rememberSaveable { mutableStateOf(WebRtcRoomPinFilter.All) }
         var pinFilterDraft by rememberSaveable { mutableStateOf(WebRtcRoomPinFilter.All) }
-        var sourceFilter by rememberSaveable { mutableStateOf(WebRtcRoomSourceFilter.All) }
-        var sourceFilterDraft by rememberSaveable { mutableStateOf(WebRtcRoomSourceFilter.All) }
+        var selectedSource by rememberSaveable { mutableStateOf(WebRtcRoomSource.Other) }
         var selectionMode by rememberSaveable { mutableStateOf(false) }
-        var selectedRoomIds by rememberSaveable(stateSaver = WebRtcRoomIdSetSaver) {
+        var selectedRoomKeys by rememberSaveable(stateSaver = WebRtcRoomKeySetSaver) {
             mutableStateOf(emptySet())
         }
+
+        val loggedIn = isProAuthenticated()
+        val sourceOptions = webRtcRoomSourceOptions(canUseOfficialGateway = loggedIn)
+        val visibleSource = resolveWebRtcRoomSource(
+            source = selectedSource,
+            canUseOfficialGateway = loggedIn,
+        )
 
         val keyword = searchQuery.trim()
         val activeFilterCount =
             (if (searchQuery.isNotBlank()) 1 else 0) +
                 (if (connectionFilter != WebRtcRoomConnectionFilter.All) 1 else 0) +
-                (if (pinFilter != WebRtcRoomPinFilter.All) 1 else 0) +
-                (if (sourceFilter != WebRtcRoomSourceFilter.All) 1 else 0)
+                (if (visibleSource == WebRtcRoomSource.Other && pinFilter != WebRtcRoomPinFilter.All) 1 else 0)
         val hasActiveFilter = activeFilterCount > 0
         val filteredRooms = roomState.rooms.filter { room ->
             val matchesSearch = webRtcRoomMatchesSearch(
@@ -105,38 +114,37 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                 WebRtcRoomConnectionFilter.Connected -> isConnectedRoom
                 WebRtcRoomConnectionFilter.Unconnected -> !isConnectedRoom
             }
-            val matchesPin = when (pinFilter) {
+            val matchesPin = visibleSource == WebRtcRoomSource.Official || when (pinFilter) {
                 WebRtcRoomPinFilter.All -> true
                 WebRtcRoomPinFilter.Pinned -> room.pinned
                 WebRtcRoomPinFilter.Unpinned -> !room.pinned
             }
-            val matchesSource = sourceFilter.matches(room.source)
+            val matchesSource = webRtcRoomMatchesSelectedSource(room.source, visibleSource)
             matchesSearch && matchesConnection && matchesPin && matchesSource
         }
-        val filteredRoomIds = filteredRooms.map { room -> room.id }.toSet()
-        val selectedRooms = filteredRooms.filter { room -> room.id in selectedRoomIds }
-        val allVisibleSelected = filteredRoomIds.isNotEmpty() && selectedRoomIds.size == filteredRoomIds.size
+        val filteredRoomKeys = filteredRooms.map { room -> room.catalogKey }.toSet()
+        val selectedRooms = filteredRooms.filter { room -> room.catalogKey in selectedRoomKeys }
+        val allVisibleSelected = filteredRoomKeys.isNotEmpty() && selectedRoomKeys.size == filteredRoomKeys.size
 
         fun openFilterSheet() {
             searchDraft = searchQuery
             connectionFilterDraft = connectionFilter
             pinFilterDraft = pinFilter
-            sourceFilterDraft = sourceFilter
             showFilterSheet = true
         }
 
         fun clearSelection() {
             selectionMode = false
-            selectedRoomIds = emptySet()
+            selectedRoomKeys = emptySet()
         }
 
-        fun toggleSelection(id: Long) {
-            val updatedSelection = if (id in selectedRoomIds) {
-                selectedRoomIds - id
+        fun toggleSelection(catalogKey: String) {
+            val updatedSelection = if (catalogKey in selectedRoomKeys) {
+                selectedRoomKeys - catalogKey
             } else {
-                selectedRoomIds + id
+                selectedRoomKeys + catalogKey
             }
-            selectedRoomIds = updatedSelection
+            selectedRoomKeys = updatedSelection
         }
 
         fun resetFilters() {
@@ -146,14 +154,12 @@ class WebRtcRoomManageScreen : AppScreenRoute {
             connectionFilterDraft = WebRtcRoomConnectionFilter.All
             pinFilter = WebRtcRoomPinFilter.All
             pinFilterDraft = WebRtcRoomPinFilter.All
-            sourceFilter = WebRtcRoomSourceFilter.All
-            sourceFilterDraft = WebRtcRoomSourceFilter.All
         }
 
         suspend fun performBatchPinned(pinned: Boolean) {
-            val updated = roomState.setPinned(selectedRoomIds, pinned)
+            val updated = roomState.setPinned(selectedRooms.map { room -> room.id }, pinned)
             clearSelection()
-            snackbarHostState.showSnackbar(
+            snackbarHostState.showLatestSnackbar(
                 when {
                     updated > 0 && pinned -> AppStrings.ui_pinned_arg0_items.format(arg0 = (updated).toString())
                     updated > 0 -> AppStrings.ui_arg0_items_unpinned.format(arg0 = (updated).toString())
@@ -170,9 +176,9 @@ class WebRtcRoomManageScreen : AppScreenRoute {
             ) {
                 deviceState.disconnectWebRtcRoom()
             }
-            val deleted = roomState.deleteRooms(roomsToDelete.map { room -> room.id })
+            val deleted = roomState.deleteRooms(roomsToDelete)
             clearSelection()
-            snackbarHostState.showSnackbar(
+            snackbarHostState.showLatestSnackbar(
                 if (deleted > 0) {
                     AppStrings.ui_arg0_items_deleted.format(arg0 = (deleted).toString())
                 } else {
@@ -185,20 +191,30 @@ class WebRtcRoomManageScreen : AppScreenRoute {
             if (room.matchesActiveConfig(activeConfig) && connectionStatus.isBusy()) {
                 deviceState.disconnectWebRtcRoom()
             }
-            roomState.deleteRoom(room.id)
-            snackbarHostState.showSnackbar(AppStrings.ui_arg0_deleted.format(arg0 = room.name))
+            roomState.deleteRoom(room)
+            snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_deleted.format(arg0 = room.name))
         }
 
         LaunchedEffect(Unit) {
             roomState.loadPersisted()
         }
 
-        LaunchedEffect(filteredRoomIds, selectionMode) {
+        LaunchedEffect(loggedIn, visibleSource) {
+            if (!loggedIn && selectedSource == WebRtcRoomSource.Official) {
+                selectedSource = WebRtcRoomSource.Other
+                return@LaunchedEffect
+            }
+            if (visibleSource == WebRtcRoomSource.Official) {
+                roomState.loadOfficialRooms(reset = true)
+            }
+        }
+
+        LaunchedEffect(filteredRoomKeys, selectionMode) {
             if (!selectionMode) return@LaunchedEffect
-            val previousSelection = selectedRoomIds
-            val updatedSelection = previousSelection.filter { id -> id in filteredRoomIds }.toSet()
+            val previousSelection = selectedRoomKeys
+            val updatedSelection = previousSelection.filter { key -> key in filteredRoomKeys }.toSet()
             if (updatedSelection != previousSelection) {
-                selectedRoomIds = updatedSelection
+                selectedRoomKeys = updatedSelection
             }
             if (previousSelection.isNotEmpty() && updatedSelection.isEmpty()) {
                 selectionMode = false
@@ -211,7 +227,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                     title = {
                         Text(
                             if (selectionMode) {
-                                AppStrings.ui_arg0_items_selected.format(arg0 = (selectedRoomIds.size).toString())
+                                AppStrings.ui_arg0_items_selected.format(arg0 = (selectedRoomKeys.size).toString())
                             } else {
                                 AppStrings.ui_cross_network_management
                             }
@@ -239,10 +255,10 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                                         clearSelection()
                                     } else {
                                         selectionMode = true
-                                        selectedRoomIds = filteredRoomIds
+                                        selectedRoomKeys = filteredRoomKeys
                                     }
                                 },
-                                enabled = filteredRoomIds.isNotEmpty()
+                                enabled = filteredRoomKeys.isNotEmpty()
                             ) {
                                 Text(if (allVisibleSelected) AppStrings.ui_deselect_all else AppStrings.ui_select_all)
                             }
@@ -273,6 +289,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                     WebRtcRoomBatchBottomBar(
                         hasSelection = selectedRooms.isNotEmpty(),
                         canConnect = selectedRooms.size == 1,
+                        canPin = visibleSource == WebRtcRoomSource.Other,
                         onConnect = {
                             selectedRooms.singleOrNull()?.let { room ->
                                 pendingConnectRoom = room
@@ -292,10 +309,11 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                             val roomsToDelete = selectedRooms.toList()
                             if (roomsToDelete.isNotEmpty()) {
                                 scope.launch {
-                                    val snackbarResult = snackbarHostState.showSnackbar(
+                                    val snackbarResult = snackbarHostState.showLatestSnackbar(
                                         message = webRtcRoomBatchDeleteConfirmMessage(roomsToDelete.size),
                                         actionLabel = WebRtcRoomDeleteActionLabel,
                                         withDismissAction = true,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (snackbarResult == SnackbarResult.ActionPerformed) {
                                         deleteRooms(roomsToDelete)
@@ -317,37 +335,82 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                 }
             }
         ) { padding ->
-            GridList(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                isEmpty = filteredRooms.isEmpty(),
-                floatingActionButtonPadding = if (!selectionMode) GridListFabPadding else 0.dp
+                    .padding(padding)
             ) {
-                items(
-                    count = filteredRooms.size,
-                    key = { index -> filteredRooms[index].id }
-                ) { index ->
+                if (webRtcRoomShowsSourceSelector(sourceOptions)) {
+                    WebRtcRoomSourceSelector(
+                        source = visibleSource,
+                        sourceOptions = sourceOptions,
+                        onSourceChange = { selectedSource = it },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+                GridList(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    isLoading = visibleSource == WebRtcRoomSource.Official && roomState.officialIsLoading,
+                    errorState = if (visibleSource == WebRtcRoomSource.Official && filteredRooms.isEmpty()) {
+                        roomState.officialError
+                    } else {
+                        null
+                    },
+                    isEmpty = filteredRooms.isEmpty(),
+                    refreshState = if (visibleSource == WebRtcRoomSource.Official) {
+                        roomState.officialRefreshState
+                    } else {
+                        PageRefreshState.Idle
+                    },
+                    appendState = if (visibleSource == WebRtcRoomSource.Official) {
+                        roomState.officialAppendState
+                    } else {
+                        PageAppendState.Idle
+                    },
+                    onRefresh = if (visibleSource == WebRtcRoomSource.Official) {
+                        { scope.launch { roomState.loadOfficialRooms(reset = true) } }
+                    } else {
+                        null
+                    },
+                    onRetry = if (visibleSource == WebRtcRoomSource.Official) {
+                        { scope.launch { roomState.loadOfficialRooms(reset = true) } }
+                    } else {
+                        null
+                    },
+                    onLoadMore = if (visibleSource == WebRtcRoomSource.Official && roomState.officialHasMore) {
+                        { scope.launch { roomState.loadOfficialRooms(reset = false) } }
+                    } else {
+                        null
+                    },
+                    floatingActionButtonPadding = if (!selectionMode) GridListFabPadding else 0.dp
+                ) {
+                    items(
+                        count = filteredRooms.size,
+                        key = { index -> filteredRooms[index].catalogKey }
+                    ) { index ->
                     val room = filteredRooms[index]
                     val isActiveRoom = room.matchesActiveConfig(activeConfig)
                     val isConnectedRoom = isActiveRoom && connectionStatus.isBusy()
                     WebRtcRoomListContent(
                         room = room,
-                        isSelected = room.id in selectedRoomIds,
+                        isSelected = room.catalogKey in selectedRoomKeys,
                         selectionMode = selectionMode,
                         connectionStatus = connectionStatus,
                         isActiveRoom = isActiveRoom,
                         isConnectedRoom = isConnectedRoom,
                         deviceCount = if (isActiveRoom) peerSessionStates.size else 0,
                         lastError = if (isActiveRoom) lastError else null,
-                        onSelectionToggle = { toggleSelection(room.id) },
+                        onSelectionToggle = { toggleSelection(room.catalogKey) },
                         onEdit = { navigator.push(WebRtcRoomEditScreen(room)) },
                         onDelete = {
                             scope.launch {
-                                val snackbarResult = snackbarHostState.showSnackbar(
+                                val snackbarResult = snackbarHostState.showLatestSnackbar(
                                     message = webRtcRoomDeleteConfirmMessage(room.name),
                                     actionLabel = WebRtcRoomDeleteActionLabel,
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (snackbarResult == SnackbarResult.ActionPerformed) {
                                     deleteRoom(room)
@@ -363,7 +426,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                         onDisconnect = { deviceState.disconnectWebRtcRoom() },
                         onClick = {
                             if (selectionMode) {
-                                toggleSelection(room.id)
+                                toggleSelection(room.catalogKey)
                             } else {
                                 if (isConnectedRoom) {
                                     navigator.push(WebRtcRoomDevicesScreen())
@@ -374,6 +437,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                         }
                     )
                 }
+            }
             }
         }
 
@@ -386,14 +450,12 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                 onConnectionFilterChange = { connectionFilterDraft = it },
                 pinFilter = pinFilterDraft,
                 onPinFilterChange = { pinFilterDraft = it },
-                sourceFilter = sourceFilterDraft,
-                onSourceFilterChange = { sourceFilterDraft = it },
+                showPinFilter = visibleSource == WebRtcRoomSource.Other,
                 activeFilterCount = activeFilterCount,
                 onApply = {
                     searchQuery = searchDraft.trim()
                     connectionFilter = connectionFilterDraft
                     pinFilter = pinFilterDraft
-                    sourceFilter = sourceFilterDraft
                     showFilterSheet = false
                 },
                 onDismissRequest = { showFilterSheet = false },
@@ -407,32 +469,39 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                 title = { Text(AppStrings.ui_connecting_rooms) },
                 text = {
                     Text(
-                        buildString {
-                            append(AppStrings.ui_whether_connect)
-                            append(room.name)
-                            append("”？")
-                            append('\n')
-                            append('\n')
-                            append(AppStrings.ui_signaling)
-                            append(room.wssUrl)
-                            append('\n')
-                            append("Room ID：")
-                            append(room.roomId)
-                            append('\n')
-                            append(AppStrings.webrtc_source_prefix)
-                            append(room.source.label)
-                        }
+                        webRtcRoomConnectConfirmMessage(
+                            name = room.name,
+                            wssUrl = room.wssUrl,
+                            roomId = room.roomId,
+                            source = room.source,
+                        )
                     )
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
+                            val target = room
                             val shouldClearSelection = selectionMode
                             pendingConnectRoom = null
                             if (shouldClearSelection) {
                                 clearSelection()
                             }
-                            deviceState.connectWebRtcRoom(room)
+                            scope.launch {
+                                val liveRoom = if (target.source == WebRtcRoomSource.Official) {
+                                    roomState.getOfficialRoom(target.roomId)
+                                } else {
+                                    target
+                                }
+                                if (liveRoom == null) {
+                                    snackbarHostState.showLatestSnackbar(
+                                        AppStrings.ui_failed_load_webrtc_room_arg0.format(
+                                            arg0 = AppStrings.ui_operation_failed_please_try_again_later,
+                                        )
+                                    )
+                                } else {
+                                    deviceState.connectWebRtcRoom(liveRoom)
+                                }
+                            }
                         }
                     ) {
                         Text(AppStrings.ui_connect)
@@ -472,14 +541,11 @@ private fun WebRtcRoomListContent(
         !room.roomIdValid -> AppStrings.ui_configuration_exception
         else -> AppStrings.ui_not_connected
     }
-    val supportText = buildString {
-        append(room.wssUrl)
-        if (!lastError.isNullOrBlank()) {
-            append('\n')
-            append(AppStrings.webrtc_error_prefix)
-            append(lastError)
-        }
-    }
+    val supportText = webRtcRoomListSupportText(
+        source = room.source,
+        wssUrl = room.wssUrl,
+        lastError = lastError,
+    )
 
     ListItem(
         modifier = Modifier
@@ -536,7 +602,6 @@ private fun WebRtcRoomListContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(connectionLabel)
-                WebRtcRoomSourceBadge(room.source)
                 if (selectionMode && room.pinned) {
                     Icon(
                         imageVector = Icons.Default.PushPin,
@@ -557,16 +622,20 @@ private fun WebRtcRoomListContent(
                 overflow = TextOverflow.Ellipsis
             )
         },
-        supportingContent = {
-            Text(
-                text = supportText,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
+        supportingContent = if (supportText.isBlank()) {
+            null
+        } else {
+            {
+                Text(
+                    text = supportText,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         },
         trailingContent = if (!selectionMode) {
             {
-                var menuExpanded by remember(room.id) { mutableStateOf(false) }
+                var menuExpanded by remember(room.catalogKey) { mutableStateOf(false) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
@@ -576,16 +645,18 @@ private fun WebRtcRoomListContent(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(if (room.pinned) AppStrings.ui_unpin else AppStrings.ui_pin_top) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onTogglePinned()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.PushPin, contentDescription = null)
-                                }
-                            )
+                            if (room.source != WebRtcRoomSource.Official) {
+                                DropdownMenuItem(
+                                    text = { Text(if (room.pinned) AppStrings.ui_unpin else AppStrings.ui_pin_top) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onTogglePinned()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PushPin, contentDescription = null)
+                                    }
+                                )
+                            }
                             if (isConnectedRoom) {
                                 DropdownMenuItem(
                                     text = { Text(AppStrings.ui_edit) },
@@ -653,6 +724,7 @@ private fun WebRtcRoomListContent(
 private fun WebRtcRoomBatchBottomBar(
     hasSelection: Boolean,
     canConnect: Boolean,
+    canPin: Boolean,
     onConnect: () -> Unit,
     onPin: () -> Unit,
     onUnpin: () -> Unit,
@@ -667,18 +739,20 @@ private fun WebRtcRoomBatchBottomBar(
             enabled = canConnect,
             onClick = onConnect
         )
-        WebRtcRoomBottomBarAction(
-            label = AppStrings.ui_pin_top,
-            icon = Icons.Default.PushPin,
-            enabled = hasSelection,
-            onClick = onPin
-        )
-        WebRtcRoomBottomBarAction(
-            label = AppStrings.ui_unpin,
-            icon = Icons.Default.PushPin,
-            enabled = hasSelection,
-            onClick = onUnpin
-        )
+        if (canPin) {
+            WebRtcRoomBottomBarAction(
+                label = AppStrings.ui_pin_top,
+                icon = Icons.Default.PushPin,
+                enabled = hasSelection,
+                onClick = onPin
+            )
+            WebRtcRoomBottomBarAction(
+                label = AppStrings.ui_unpin,
+                icon = Icons.Default.PushPin,
+                enabled = hasSelection,
+                onClick = onUnpin
+            )
+        }
         WebRtcRoomBottomBarAction(
             label = AppStrings.ui_delete,
             icon = Icons.Default.Delete,
@@ -730,8 +804,7 @@ private fun WebRtcRoomFilterSheet(
     onConnectionFilterChange: (WebRtcRoomConnectionFilter) -> Unit,
     pinFilter: WebRtcRoomPinFilter,
     onPinFilterChange: (WebRtcRoomPinFilter) -> Unit,
-    sourceFilter: WebRtcRoomSourceFilter,
-    onSourceFilterChange: (WebRtcRoomSourceFilter) -> Unit,
+    showPinFilter: Boolean,
     activeFilterCount: Int,
     onApply: () -> Unit,
     onDismissRequest: () -> Unit,
@@ -750,21 +823,6 @@ private fun WebRtcRoomFilterSheet(
             onApply = onApply
         ) {
             FilterSectionCard(
-                title = AppStrings.ui_source,
-                icon = Icons.Default.Info
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WebRtcRoomSourceFilter.entries.forEach { option ->
-                        FilterOptionChip(
-                            selected = sourceFilter == option,
-                            label = option.label,
-                            onClick = { onSourceFilterChange(option) }
-                        )
-                    }
-                }
-            }
-
-            FilterSectionCard(
                 title = AppStrings.ui_connection_status,
                 icon = Icons.Default.Link
             ) {
@@ -779,17 +837,19 @@ private fun WebRtcRoomFilterSheet(
                 }
             }
 
-            FilterSectionCard(
-                title = AppStrings.ui_pinned_status,
-                icon = Icons.Default.PushPin
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WebRtcRoomPinFilter.entries.forEach { option ->
-                        FilterOptionChip(
-                            selected = pinFilter == option,
-                            label = option.label,
-                            onClick = { onPinFilterChange(option) }
-                        )
+            if (showPinFilter) {
+                FilterSectionCard(
+                    title = AppStrings.ui_pinned_status,
+                    icon = Icons.Default.PushPin
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WebRtcRoomPinFilter.entries.forEach { option ->
+                            FilterOptionChip(
+                                selected = pinFilter == option,
+                                label = option.label,
+                                onClick = { onPinFilterChange(option) }
+                            )
+                        }
                     }
                 }
             }
@@ -809,17 +869,10 @@ private enum class WebRtcRoomPinFilter(val label: String) {
     Unpinned(AppStrings.ui_not_pinned)
 }
 
-internal enum class WebRtcRoomSourceFilter(val label: String) {
-    All(AppStrings.ui_all),
-    Other(WebRtcRoomSource.Other.label),
-    Official(WebRtcRoomSource.Official.label);
-
-    fun matches(source: WebRtcRoomSource): Boolean = when (this) {
-        All -> true
-        Other -> source == WebRtcRoomSource.Other
-        Official -> source == WebRtcRoomSource.Official
-    }
-}
+internal fun webRtcRoomMatchesSelectedSource(
+    roomSource: WebRtcRoomSource,
+    selectedSource: WebRtcRoomSource,
+): Boolean = roomSource == selectedSource
 
 internal fun webRtcRoomMatchesSearch(
     name: String,
@@ -829,11 +882,14 @@ internal fun webRtcRoomMatchesSearch(
     keyword: String
 ): Boolean {
     val normalizedKeyword = keyword.trim()
-    return normalizedKeyword.isBlank() || name.contains(normalizedKeyword, ignoreCase = true) ||
-            wssUrl.contains(normalizedKeyword, ignoreCase = true) ||
-            roomId.contains(normalizedKeyword, ignoreCase = true) ||
-            source.label.contains(normalizedKeyword, ignoreCase = true) ||
-            source.name.contains(normalizedKeyword, ignoreCase = true)
+    if (normalizedKeyword.isBlank()) return true
+    val matchesConnectionAddress = webRtcRoomShowsConnectionFields(source) &&
+        wssUrl.contains(normalizedKeyword, ignoreCase = true)
+    return name.contains(normalizedKeyword, ignoreCase = true) ||
+        matchesConnectionAddress ||
+        roomId.contains(normalizedKeyword, ignoreCase = true) ||
+        source.label.contains(normalizedKeyword, ignoreCase = true) ||
+        source.name.contains(normalizedKeyword, ignoreCase = true)
 }
 
 private fun WebRtcRoomProfile.matchesConnectedState(

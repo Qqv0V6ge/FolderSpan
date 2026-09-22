@@ -5,6 +5,7 @@ import com.folderspan.data.device.DeviceRole
 import com.folderspan.data.file.FileFilterType
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.device.DeviceConnectType
+import com.folderspan.localization.localizedName
 import com.folderspan.ui.components.drawer.ClipboardPathCandidate
 
 @Immutable
@@ -93,7 +94,7 @@ fun buildDeviceRoleOptionsUiState(
         roles = roles.map { role ->
             DeviceRoleOptionUiState(
                 id = role.id,
-                name = role.name,
+                name = role.localizedName,
             )
         }
     )

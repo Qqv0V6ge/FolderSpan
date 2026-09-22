@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.data.device.DeviceRole
 import com.folderspan.db.DevicePermission
 import com.folderspan.db.FolderSpanDatabase
+import com.folderspan.localization.localizedComment
+import com.folderspan.localization.localizedName
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
 import com.folderspan.ui.components.dialog.SearchDialog
@@ -60,8 +63,8 @@ class DeviceRoleScreen : AppScreenRoute {
                     state.roles
                 } else {
                     state.roles.filter { role ->
-                        role.name.contains(searchText, ignoreCase = true) ||
-                                (role.comment?.contains(searchText, ignoreCase = true) ?: false)
+                        role.localizedName.contains(searchText, ignoreCase = true) ||
+                                (role.localizedComment?.contains(searchText, ignoreCase = true) ?: false)
                     }
                 }
             }
@@ -125,8 +128,8 @@ class DeviceRoleScreen : AppScreenRoute {
                         },
                         onDelete = {
                             scope.launch(Dispatchers.Default) {
-                                when (snackbarHostState.showSnackbar(
-                                    message = role.name,
+                                when (snackbarHostState.showLatestSnackbar(
+                                    message = role.localizedName,
                                     actionLabel = AppStrings.ui_delete,
                                     withDismissAction = true,
                                     duration = SnackbarDuration.Short
@@ -167,13 +170,13 @@ class DeviceRoleScreen : AppScreenRoute {
 
     @Composable
     private fun RoleItem(role: DeviceRole, onEdit: () -> Unit, onDelete: () -> Unit) {
-        val comment = role.comment
+        val comment = role.localizedComment
         ListItem(
             modifier = Modifier.clickable(onClick = onEdit),
             overlineContent = {
                 Text(AppStrings.ui_arg0_permissions_configured.format(arg0 = (role.permissionCount).toString()))
             },
-            headlineContent = { Text(role.name) },
+            headlineContent = { Text(role.localizedName) },
             supportingContent =
                 if (comment.isNullOrEmpty())
                     null
@@ -207,8 +210,8 @@ class EditRoleScreen(
         val snackbarHostState = remember { SnackbarHostState() }
         val roleKey = role?.id ?: -1L
 
-        val (name, setName) = rememberSaveable(roleKey) { mutableStateOf(role?.name ?: "") }
-        val (comment, setComment) = rememberSaveable(roleKey) { mutableStateOf(role?.comment ?: "") }
+        val (name, setName) = rememberSaveable(roleKey) { mutableStateOf(role?.localizedName.orEmpty()) }
+        val (comment, setComment) = rememberSaveable(roleKey) { mutableStateOf(role?.localizedComment.orEmpty()) }
 
         LaunchedEffect(roleKey) {
             if (!isEdit) return@LaunchedEffect
@@ -234,7 +237,7 @@ class EditRoleScreen(
                         IconButton(onClick = {
                             if (isNotSave(name, comment)) {
                                 scope.launch(Dispatchers.Default) {
-                                    when (snackbarHostState.showSnackbar(
+                                    when (snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.ui_data_not_saved,
                                         actionLabel = AppStrings.ui_abandon,
                                         withDismissAction = true,
@@ -263,8 +266,8 @@ class EditRoleScreen(
                             var id = role?.id ?: 0L
                             if (isEdit) {
                                 database.deviceRoleQueries.updateRoleById(
-                                    name = name,
-                                    comment = comment,
+                                    name = if (role != null && name == role.localizedName) role.name else name,
+                                    comment = if (comment == role?.localizedComment.orEmpty()) role?.comment else comment,
                                     id = role?.id ?: 0L
                                 ).awaitDatabaseReady()
                             } else {
@@ -478,7 +481,8 @@ class EditRoleScreen(
 
     private fun isNotSave(name: String, comment: String): Boolean {
         return if (isEdit) {
-            name != role!!.name || comment != role.comment || permissionIds.toList() != oldPermissionIds.toList()
+            name != role!!.localizedName || comment != role.localizedComment.orEmpty() ||
+                permissionIds.toList() != oldPermissionIds.toList()
         } else {
             name.isNotEmpty() || comment.isNotEmpty() || permissionIds.isNotEmpty()
         }

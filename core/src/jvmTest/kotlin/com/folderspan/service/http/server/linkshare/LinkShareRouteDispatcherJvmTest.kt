@@ -604,14 +604,25 @@ class LinkShareRouteDispatcherJvmTest : ChineseLocalizationTest() {
                     passwordAuthRequest(LINK_PASSWORD, origin = "https://evil.example")
                 )
                 assertEquals(403, crossOrigin.statusCode, crossOrigin.bodyText())
-                assertEquals(AppStrings.error_auth_request_origin_invalid, crossOrigin.bodyText())
+                assertEquals("text/html; charset=UTF-8", crossOrigin.header("Content-Type"))
+                assertContains(crossOrigin.bodyText(), AppStrings.error_auth_request_origin_invalid)
+                assertContains(crossOrigin.bodyText(), "href=\"/\"")
+                assertContains(crossOrigin.bodyText(), AppStrings.ui_return)
                 assertTrue(state.authorizedLinkShareDevices.isEmpty())
 
                 val missingOrigin = dispatcher.dispatch(
                     passwordAuthRequest(LINK_PASSWORD, origin = null)
                 )
                 assertEquals(403, missingOrigin.statusCode, missingOrigin.bodyText())
-                assertEquals(AppStrings.error_auth_request_origin_invalid, missingOrigin.bodyText())
+                assertEquals("text/html; charset=UTF-8", missingOrigin.header("Content-Type"))
+                assertContains(missingOrigin.bodyText(), AppStrings.error_auth_request_origin_invalid)
+                assertTrue(state.authorizedLinkShareDevices.isEmpty())
+
+                val apiCrossOrigin = dispatcher.dispatch(
+                    passwordAuthRequest(LINK_PASSWORD, origin = "https://evil.example", api = true)
+                )
+                assertEquals(403, apiCrossOrigin.statusCode, apiCrossOrigin.bodyText())
+                assertEquals(AppStrings.error_auth_request_origin_invalid, apiCrossOrigin.bodyText())
                 assertTrue(state.authorizedLinkShareDevices.isEmpty())
 
                 val sameOrigin = dispatcher.dispatch(
@@ -1298,6 +1309,7 @@ class LinkShareRouteDispatcherJvmTest : ChineseLocalizationTest() {
         host: String = "127.0.0.1",
         port: Int = 80,
         scheme: String = "http",
+        api: Boolean = false,
     ): LinkShareHttpRequest {
         val body = "pwd=$password&redirect=%2F".encodeToByteArray()
         val headers = buildList {
@@ -1305,6 +1317,7 @@ class LinkShareRouteDispatcherJvmTest : ChineseLocalizationTest() {
             add("Cookie" to "FolderSpanLinkShareClient=$clientId")
             add("Content-Length" to body.size.toString())
             if (origin != null) add("Origin" to origin)
+            if (api) add("X-API-Request" to "true")
         }
         return LinkShareHttpRequest.from(
             method = "POST",

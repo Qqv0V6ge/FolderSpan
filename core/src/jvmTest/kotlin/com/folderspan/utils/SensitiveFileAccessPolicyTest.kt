@@ -49,6 +49,17 @@ class SensitiveFileAccessPolicyTest {
     }
 
     @Test
+    fun androidContentUriIsNotTreatedAsInvalidFilesystemPath() {
+        val uri = "content://com.android.providers.downloads.documents/document/msf%3A24"
+
+        val classification = SensitiveFileAccessPolicy.classify(uri)
+
+        assertEquals(FileSensitivity.None, classification.sensitivity)
+        assertTrue(classification.isValid)
+        assertNull(SensitiveFileAccessPolicy.deniedException(uri))
+    }
+
+    @Test
     fun classifyUsesCaseInsensitiveWindowsPathComparison() {
         val classification = SensitiveFileAccessPolicy.classify(
             path = "C:\\APP\\PRIVATE\\Token.bin",

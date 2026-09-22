@@ -59,9 +59,15 @@ internal data class DeviceSessionWindowPlan(
                     streamWindowBytes = DEVICE_SESSION_CRITICAL_WINDOW_BYTES,
                     maxFileStreams = 1,
                 )
-                tight || heapSmall -> DeviceSessionWindowPlan(
+                tight -> DeviceSessionWindowPlan(
                     sessionWindowBytes = DEVICE_SESSION_TIGHT_WINDOW_BYTES,
                     streamWindowBytes = DEVICE_SESSION_CRITICAL_WINDOW_BYTES,
+                    maxFileStreams = 4,
+                )
+                // A small maximum heap limits concurrency, not the bandwidth of one file.
+                heapSmall -> DeviceSessionWindowPlan(
+                    sessionWindowBytes = 4 * DEVICE_SESSION_TIGHT_WINDOW_BYTES,
+                    streamWindowBytes = DEVICE_SESSION_TIGHT_WINDOW_BYTES,
                     maxFileStreams = 4,
                 )
                 moderate -> DeviceSessionWindowPlan(

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FolderSpan</string>
+    <string name="device_role_admin_name">超级管理员</string>
+    <string name="device_role_admin_comment">设置后设备将拥有所有权限，请仅授予可信设备。</string>
+    <string name="device_role_guest_name">游客</string>
+    <string name="device_role_guest_comment">该角色可以分配给任意设备。</string>
+    <string name="device_permission_bookmarks_comment">允许访问书签。</string>
+    <string name="device_permission_root_paths_comment">允许获取根目录。</string>
+    <string name="device_permission_full_access_comment">请仅将此权限分配给超级管理员角色。</string>
+    <string name="device_permission_read_only_comment">允许读取根目录下的文件和文件夹。</string>
     <string name="settings_title">设置</string>
     <string name="settings_appearance_language_title">外观与语言</string>
     <string name="settings_appearance_language_subtitle">配置主题外观与应用语言</string>
@@ -166,7 +174,7 @@
     <string name="file_read_failed">读取文件失败</string>
     <string name="task_transfer_failed">传输失败</string>
     <string name="task_finalize_copy_failed">完成复制结果失败</string>
-    <string name="network_untrusted_symbolic_link_metadata">远端未提供可信的符号链接元数据，请升级或更换协议后重试。</string>
+    <string name="network_untrusted_symbolic_link_metadata">无法确认远端条目是否为符号链接，已停止递归操作。请检查服务器或所用协议是否提供相关元数据。</string>
     <string name="network_same_endpoint_directory_copy_requires_file_tasks">同一网络端点的目录复制必须按文件任务执行。</string>
     <string name="network_source_target_endpoint_mismatch">来源和目标不属于同一个网络端点。</string>
     <string name="network_endpoint_copy_failed">网络端复制失败</string>
@@ -224,7 +232,8 @@
     <string name="ui_official">官方</string>
     <string name="ui_web_client">Web 客户端</string>
     <string name="ui_ignore_file">ignore 文件</string>
-    <string name="ui_known_hosts_optional">known_hosts(可选)</string>
+    <string name="ui_known_hosts_optional">known_hosts（可选，高级）</string>
+    <string name="ui_sftp_known_hosts_help">留空时，首次连接会提示确认服务器指纹并保存在本机。也可手动填写已核验的 known_hosts 条目。</string>
     <string name="ui_bookmark">} - 书签</string>
     <string name="ui_support_small_range_text_replacement">• 支持小范围文本替换</string>
     <string name="ui_newline">↵ 换行</string>
@@ -460,6 +469,7 @@
     <string name="ui_transmission_between_devices_same_network">同网设备传输</string>
     <string name="ui_name">名称</string>
     <string name="ui_name_cannot_empty">名称不能为空</string>
+    <string name="ui_name_cannot_exceed_arg0_characters">名称不能超过 ${arg0} 个字符</string>
     <string name="ui_start">启动</string>
     <string name="ui_enable_ftps">启用 FTPS</string>
     <string name="ui_after_enabling_password_you_can_clear_old_authorization_require">启用密码后，可以清理旧授权并要求设备重新验证；也可以保留旧授权，已授权设备将继续无需输入新密码。</string>
@@ -611,7 +621,6 @@
     <string name="ui_mcp_action_view">查看</string>
     <string name="ui_mcp_action_manage">管理</string>
     <string name="ui_mcp_action_control">控制</string>
-    <string name="ui_mcp_action_scan">扫描</string>
     <string name="ui_mcp_action_connect">连接</string>
     <string name="ui_mcp_action_run">运行</string>
     <string name="ui_mcp_action_modify">修改</string>
@@ -1548,6 +1557,7 @@
     <string name="ui_request_root_startup_arg0">启动时请求 Root: ${arg0}</string>
     <string name="ui_failed_start_simple_sharing_service_arg0">启动简易分享服务失败: ${arg0}</string>
     <string name="ui_online_arg0_station">在线 ${arg0} 台</string>
+    <string name="ui_max_devices_arg0">最多 ${arg0} 台设备</string>
     <string name="ui_basic_statistics_arg0">基础统计 · ${arg0}</string>
     <string name="ui_failed_arg0">失败 (${arg0})</string>
     <string name="ui_will_use_arg0">将使用 ${arg0}</string>
@@ -2475,7 +2485,7 @@
     <string name="ui_file_selector_selection_not_allowed">此项目不可选择</string>
     <string name="ui_invalid_discovery_device_id">无效的发现设备 ID</string>
     <string name="ui_sftp_known_hosts_unparseable_connection_rejected">known_hosts 无法解析，拒绝连接</string>
-    <string name="ui_sftp_known_hosts_missing_connection_rejected">缺少 known_hosts，拒绝 SFTP 连接</string>
+    <string name="ui_sftp_host_key_confirmation_required">首次连接需要确认服务器指纹，请打开应用确认，或填写已核验的 known_hosts 条目。</string>
     <string name="ui_webrtc_only_host_can_approve_browser_connection">只有应用主机可以批准浏览器连接</string>
     <string name="ui_webrtc_configured_file_share_access_key_required">需要已配置的文件分享访问密钥</string>
     <string name="ui_webrtc_client_token_header_required">信令客户端令牌必须通过请求头发送</string>
@@ -2551,6 +2561,7 @@
     <string name="ui_browser_webrtc_secure_page_requires_http_signaling">浏览器 WebRTC 页面必须是安全上下文，设备信令地址必须使用 HTTP</string>
     <string name="ui_join_webrtc_room_first">请先加入 WebRTC 房间</string>
     <string name="ui_device_no_longer_in_current_room">设备已不在当前房间中</string>
+    <string name="ui_cannot_connect_webrtc_device_rejoin_room">暂时无法连接这台设备，请重新加入房间后再试。</string>
     <string name="ui_share_short_poll_failed">共享短轮询失败</string>
     <string name="ui_paste_clipboard_files">粘贴剪贴板文件</string>
     <string name="ui_clipboard_file_paste_permission_denied">当前位置不允许粘贴文件</string>
@@ -3114,7 +3125,7 @@
     <string name="ui_data_channel_empty_timeout">数据通道排空超时</string>
     <string name="ui_shared_list_business_failed_path_arg0">共享列表业务失败: path=${arg0}, </string>
     <string name="legacy_permission_unauthorized_marker">无权</string>
-    <string name="ui_no_trustworthy_metadata_for_remote_links_please_upgrade_the_remote_and_retry">远端未提供可信的符号链接元数据，请升级远端后重试</string>
+    <string name="ui_no_trustworthy_metadata_for_remote_links_please_upgrade_the_remote_and_retry">无法确认远端条目是否为符号链接，已停止递归操作。请检查服务器或所用协议是否提供相关元数据。</string>
     <string name="ui_create_a_bookmark_failure_arg0">创建书签失败: ${arg0}</string>
     <string name="ui_opponent_is_preparing_a_file_please_wait_a_moment">对方正在准备文件，请稍候片刻...</string>
     <string name="ui_adjusting_bookmark_order_failed_http_arg0_arg1">调整书签顺序失败: HTTP ${arg0} ${arg1}</string>
@@ -3535,7 +3546,6 @@
     <string name="ui_replace_the_range_that_exceeds_the_file">替换范围超出文件</string>
     <string name="ui_the_editor_is_busy">文件编辑器正忙</string>
     <string name="ui_s3_access_key_cannot_be_empty">S3 Access Key 不能为空</string>
-    <string name="ui_mcp_device_scan_failed_arg0">MCP 设备扫描失败: ${arg0}</string>
     <string name="ui_get_from_device_id_arg0_name_arg1_type_arg2">链接分享请求 GET / 来自设备: id=${arg0}, name=${arg1}, type=${arg2}</string>
     <string name="ui_length_of_the_read_data_does_not_match_the_request_range">读取的数据长度与请求范围不匹配</string>
     <string name="ui_ftp_login_failed">FTP 登录失败</string>
@@ -3985,4 +3995,22 @@
     <string name="ui_webrtc_session_protocol_incompatible">对端使用了不兼容的 WebRTC Device Session 协议，请更新两端设备。</string>
     <string name="ui_webrtc_session_authentication_timeout">WebRTC Device Session 认证超时。</string>
     <string name="ui_webrtc_session_protocol_error_arg0">WebRTC Device Session 协议错误：${arg0}</string>
+    <string name="ui_sftp_host_key_changed">SFTP 服务器主机密钥已变化，已拒绝连接。请核验变更后再在 known_hosts 中填写新公钥。</string>
+    <string name="ui_sftp_host_key_not_trusted">未信任服务器主机密钥，已取消 SFTP 连接。</string>
+    <string name="ui_sftp_trust_host_title">信任此 SFTP 服务器？</string>
+    <string name="ui_sftp_trust_host_description">这是首次连接此服务器，请向管理员核对以上 SHA-256 指纹。确认信任后会将指纹保存在本机，后续连接时若密钥变化会拒绝连接。</string>
+    <string name="ui_device_identity_unverified">身份未验证</string>
+    <string name="ui_device_identity_trusted">身份已信任</string>
+    <string name="ui_device_identity_confirm">确认身份</string>
+    <string name="ui_device_identity_title">是否信任此设备？</string>
+    <string name="ui_device_identity_description">此设备的发现广播签名未通过验证。请与对方设备上显示的证书指纹核对一致后再信任；确认前无法连接或分享文件。信任后将在本机保存此指纹。</string>
+    <string name="ui_device_identity_changed">此设备的证书指纹已发生变化，可能是设备重装，也可能有人冒充此设备。请先在对方设备上核对新指纹，再决定是否重新信任。</string>
+    <string name="ui_device_identity_fingerprint">证书指纹（SHA-256）</string>
+    <string name="ui_device_identity_previous_fingerprint">之前信任的指纹（SHA-256）</string>
+    <string name="ui_device_identity_trust_continue">信任并继续</string>
+    <string name="ui_device_identity_not_trusted">未信任此设备，已取消操作。</string>
+    <string name="ui_device_identity_confirmation_required">请打开应用，确认设备证书指纹。</string>
+    <string name="ui_device_identity_mismatch">响应设备的身份与所选设备不一致。</string>
+    <string name="ui_device_identity_invalid_fingerprint">设备返回的证书指纹无效。</string>
+    <string name="ui_device_identity_trust_changed">等待确认时，已信任的证书发生了变化，请重试。</string>
 </resources>

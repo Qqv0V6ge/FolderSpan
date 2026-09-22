@@ -168,7 +168,7 @@ class DefaultConfigurationSnapshotsTest {
                             turnUrl = "turn:signal.example:3478",
                             turnUsername = "alice",
                             encryptedTurnPassword = encryptedTurnPassword,
-                            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Official,
+                            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Other,
                             pinned = true,
                             sortOrder = 4L,
                         ),
@@ -179,15 +179,96 @@ class DefaultConfigurationSnapshotsTest {
 
         val stored = database.webRtcRoomQueries.selectAll().executeAsListAwait().single()
         assertEquals(encryptedTurnPassword, stored.turnPassword)
-        assertEquals(com.folderspan.data.main.webrtc.WebRtcRoomSource.Official.name, stored.source)
+        assertEquals(com.folderspan.data.main.webrtc.WebRtcRoomSource.Other.name, stored.source)
         assertEquals(1L, stored.pinned)
         assertEquals(4L, stored.sortOrder)
 
         val snapshot = json.decodeFromJsonElement<WebRtcRoomConfigurationSnapshot>(provider.read())
         assertEquals(encryptedTurnPassword, snapshot.rooms.single().encryptedTurnPassword)
-        assertEquals(com.folderspan.data.main.webrtc.WebRtcRoomSource.Official, snapshot.rooms.single().source)
+        assertEquals(com.folderspan.data.main.webrtc.WebRtcRoomSource.Other, snapshot.rooms.single().source)
         assertTrue(json.encodeToString(snapshot).contains(encryptedTurnPassword))
         assertTrue(!json.encodeToString(snapshot).contains("plain-turn-password"))
+    }
+
+    @Test
+    fun webRtcProviderSkipsOfficialRoomsOnReadAndApply() = runBlocking {
+        val database = createInMemoryDatabase()
+        val provider = WebRtcRoomsConfigurationSnapshotProvider(database, json)
+        database.webRtcRoomQueries.insert(
+            name = "Official leftover",
+            wssUrl = "wss://official.example/ws",
+            roomId = "official-room",
+            stunUrl = "",
+            turnUrl = "",
+            turnUsername = "",
+            turnPassword = "official-secret",
+            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Official.name,
+            pinned = 1L,
+            sortOrder = 1L,
+            createdAt = 1L,
+            updatedAt = 1L,
+        ).awaitDatabaseReady()
+        database.webRtcRoomQueries.insert(
+            name = "Other leftover",
+            wssUrl = "wss://other.example/ws",
+            roomId = "other-room",
+            stunUrl = "",
+            turnUrl = "",
+            turnUsername = "",
+            turnPassword = "other-secret",
+            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Other.name,
+            pinned = 0L,
+            sortOrder = 2L,
+            createdAt = 1L,
+            updatedAt = 1L,
+        ).awaitDatabaseReady()
+
+        val readSnapshot = json.decodeFromJsonElement<WebRtcRoomConfigurationSnapshot>(provider.read())
+        assertEquals(listOf("Other leftover"), readSnapshot.rooms.map { item -> item.name })
+        assertEquals(
+            listOf(com.folderspan.data.main.webrtc.WebRtcRoomSource.Other),
+            readSnapshot.rooms.map { item -> item.source },
+        )
+
+        provider.apply(
+            json.encodeToJsonElement(
+                WebRtcRoomConfigurationSnapshot(
+                    rooms = listOf(
+                        WebRtcRoomSnapshotItem(
+                            name = "Remote Official",
+                            wssUrl = "",
+                            roomId = "remote-official",
+                            stunUrl = "",
+                            turnUrl = "",
+                            turnUsername = "",
+                            encryptedTurnPassword = "remote-official-secret",
+                            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Official,
+                            pinned = true,
+                            sortOrder = 1L,
+                        ),
+                        WebRtcRoomSnapshotItem(
+                            name = "Remote Other",
+                            wssUrl = "wss://remote.example/ws",
+                            roomId = "remote-other",
+                            stunUrl = "",
+                            turnUrl = "",
+                            turnUsername = "",
+                            encryptedTurnPassword = "remote-other-secret",
+                            source = com.folderspan.data.main.webrtc.WebRtcRoomSource.Other,
+                            pinned = false,
+                            sortOrder = 2L,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val stored = database.webRtcRoomQueries.selectAll().executeAsListAwait()
+        assertEquals(listOf("Remote Other"), stored.map { item -> item.name })
+        assertEquals(
+            listOf(com.folderspan.data.main.webrtc.WebRtcRoomSource.Other.name),
+            stored.map { item -> item.source },
+        )
     }
 
     @Test

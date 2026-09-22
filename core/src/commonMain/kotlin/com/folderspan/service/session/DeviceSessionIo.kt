@@ -1,6 +1,13 @@
 package com.folderspan.service.session
 
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+
 internal interface DeviceSessionByteChannel {
+    // Blocking carriers keep the whole frame loop on their I/O dispatcher.
+    val ioContext: CoroutineContext
+        get() = EmptyCoroutineContext
+
     suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int
     suspend fun write(buffer: ByteArray, offset: Int, length: Int)
     suspend fun flush()

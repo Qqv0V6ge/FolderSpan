@@ -186,7 +186,7 @@ interface DeviceFileClient {
     ): Result<Boolean> = coroutineScope {
         val expectedBytes = (endOffset - startOffset).coerceAtLeast(0L)
         var receivedBytes = 0L
-        val chunks = Channel<ByteArray>(capacity = Channel.RENDEZVOUS)
+        val chunks = Channel<ByteArray>(capacity = 1)
         val source = async {
             var closeCause: Throwable? = null
             try {

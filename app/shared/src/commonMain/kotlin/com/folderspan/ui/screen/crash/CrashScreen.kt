@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.folderspan.clipboard.writeClipboardText
 import com.folderspan.crash.exitApp
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.state.main.CrashScreenState
 import kotlinx.coroutines.launch
 
@@ -123,7 +124,7 @@ fun CrashScreen(
                     onClick = {
                         scope.launch {
                             val copied = writeClipboardText(state.reportText)
-                            snackbarHostState.showSnackbar(
+                            snackbarHostState.showLatestSnackbar(
                                 if (copied) AppStrings.ui_error_message_copied else AppStrings.ui_copy_failed
                             )
                         }

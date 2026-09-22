@@ -51,7 +51,7 @@ Android 17（API 37）及以上在打开「允许局域网连接」时会请求�
 | `favorites.read` / `favorites.write` | 列表、添加、移除和置顶收藏 |
 | `recents.read` / `recents.write` | 列表、删除或清空最近记录 |
 | `tasks.read` / `tasks.control` | 查看任务，暂停、继续、取消或删除任务 |
-| `devices.read` / `devices.scan` / `devices.connect` | 查看在线 HTTP/WebRTC 设备、扫描 HTTP 设备、发起连接 |
+| `devices.read` / `devices.connect` | 查看在线 HTTP/WebRTC 设备、发起连接 |
 | `networks.read` / `networks.connect` | 查看网络源并在根目录探测成功后连接 |
 | `sync.read` / `sync.run` | 查看同步任务并手动执行空闲任务 |
 | `files.read` / `files.write` / `files.share` | 列表、元数据、范围读取、直接写入、创建目录、重命名、复制、移动、删除和分享。可写链路分享（`folderspan_files_share_link` 的 `allowUpload=true`）属于 mutation，除 `files.share` + `files.read` 外还需要 `files.write`，并且宿主必须已打开网页上传 |
@@ -64,13 +64,13 @@ Android 17（API 37）及以上在打开「允许局域网连接」时会请求�
 - 收藏：`folderspan_favorites_list/add/remove/pin`
 - 最近：`folderspan_recents_list/delete/clear`
 - 任务：`folderspan_tasks_list/get/pause/resume/cancel/delete`
-- HTTP 设备：`folderspan_device_scan`、`folderspan_device_scan_status`、`folderspan_devices_list`、`folderspan_device_connect`
+- HTTP 设备：`folderspan_devices_list`、`folderspan_device_connect`
 - WebRTC 设备：`folderspan_webrtc_devices_list`、`folderspan_webrtc_device_connect`
 - 网络：`folderspan_networks_list`、`folderspan_network_connect`
 - 同步：`folderspan_sync_list`、`folderspan_sync_run`
 - 文件：`folderspan_files_list`、`folderspan_file_info`、`folderspan_file_read`、`folderspan_file_write`、`folderspan_directory_create`、`folderspan_file_rename`、`folderspan_files_copy/move/delete`、`folderspan_files_share_link/device`
 
-未指定子网时，设备扫描会枚举所有活动 IPv4 接口的网段；也可以传入一个 CIDR。单次指定扫描最多包含 4096 个主机地址，扫描立即返回 operation ID，使用状态工具查询进度。WebRTC 工具仅处理当前发现的在线 peer，不扫描网段或管理房间。
+HTTP 与 WebRTC 设备工具仅处理当前已经发现的在线设备，不主动扫描网段或管理 WebRTC 房间。
 
 ## 文件定位与跨源操作
 

@@ -1,13 +1,18 @@
 package com.folderspan.ui.state.file
 
+import strings.AppStrings
+
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.data.file.ShareHistoryInput
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.network.Network
 import com.folderspan.data.main.network.NetworkAccess
 import com.folderspan.data.main.network.buildProtocolId
+import com.folderspan.data.main.share.SYSTEM_SHARE_DESK_ID
 import com.folderspan.data.main.share.Share
 import com.folderspan.extensions.*
 import com.folderspan.ignore.ResolvedIgnoreMatcher
@@ -85,6 +90,39 @@ internal suspend fun recordTransferDestinationIfNeeded(
     if (result.isFailure || !result.getOrDefault(false)) return
     if (!supportsRecentTracking(destination)) return
     record(destination)
+}
+
+internal fun buildIncomingShareHistoryInput(
+    source: FileSimpleInfo,
+    destination: FileSimpleInfo,
+    sourceShare: Share?,
+    result: Result<Boolean>,
+): ShareHistoryInput? {
+    if (
+        source.protocol != FileProtocol.Share ||
+        source.protocolId == SYSTEM_SHARE_DESK_ID ||
+        destination.protocol != FileProtocol.Local ||
+        result.exceptionOrNull() is CancellationException
+    ) {
+        return null
+    }
+    val success = result.getOrNull() == true
+    return ShareHistoryInput(
+        fileName = source.name,
+        filePath = source.path,
+        fileSize = source.size,
+        isDirectory = source.isDirectory,
+        sourceDeviceId = source.protocolId,
+        sourceDeviceName = sourceShare?.name ?: source.protocolId.ifBlank { AppStrings.ui_unknown_device },
+        sourceDeviceType = sourceShare?.type ?: DeviceType.JS,
+        targetDeviceId = "",
+        targetDeviceName = AppStrings.ui_me,
+        targetDeviceType = DeviceType.JS,
+        isOutgoing = false,
+        status = if (success) FileShareStatus.COMPLETED else FileShareStatus.ERROR,
+        errorMessage = if (success) "" else result.exceptionOrNull().toTaskFailureMessage(AppStrings.ui_copy_failed),
+        savePath = destination.path,
+    )
 }
 
 internal data class WebRtcBrowserMultiZipRoot(

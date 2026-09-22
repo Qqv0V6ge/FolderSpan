@@ -155,6 +155,7 @@ compose.desktop {
             release {
                 proguard {
                     isEnabled.set(desktopProguardEnabled)
+                    configurationFiles.from(project.file("proguard-rules.pro"))
                 }
             }
         }
@@ -190,6 +191,8 @@ registerTarGzTask("packageTarGz", "packageAppImage", "main")
 registerTarGzTask("packageReleaseTarGz", "packageReleaseAppImage", "main-release")
 
 tasks.withType<AbstractJLinkTask>().configureEach {
+    // Share constant strings; ZIP compression makes the outer installer/archive larger.
+    freeArgs.add("--compress=1")
     doFirst {
         val javaHomePath = javaHome.get()
         check(File(javaHomePath, "jmods").isDirectory) {

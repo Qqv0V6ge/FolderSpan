@@ -93,6 +93,13 @@ internal fun isRestrictedAliasFilesystemPath(path: String, separator: String): B
     }
 }
 
+/**
+ * Android SAF / 系统分享使用 `content://` URI，不是本地文件系统路径。
+ * 词法安全边界和 `File.canonicalPath` 都不能解释这类 locator。
+ */
+internal fun isAndroidContentUriPath(path: String): Boolean =
+    path.trim().startsWith("content://", ignoreCase = true)
+
 private val RESTRICTED_UNIX_FILESYSTEM_ROOTS = listOf("/proc", "/sys", "/dev")
 
 /**

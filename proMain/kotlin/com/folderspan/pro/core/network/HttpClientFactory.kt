@@ -2,6 +2,7 @@ package com.folderspan.pro.core.network
 
 import com.folderspan.AppBuildConfig
 import com.folderspan.localization.DefaultAppLanguagePlatform
+import com.folderspan.service.http.client.applyConfiguredHttpProxy
 import io.ktor.client.*
 import io.ktor.client.engine.*
 import io.ktor.client.plugins.*
@@ -11,7 +12,6 @@ import io.ktor.client.request.header
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.util.*
 import kotlinx.serialization.json.Json
 
 internal const val PRO_API_DEVICE_TYPE_HEADER = "X-Device-Type"
@@ -44,13 +44,7 @@ internal fun <T : HttpClientEngineConfig> HttpClientConfig<T>.installCommonConfi
     useProxy: Boolean = true,
 ) {
     if (useProxy) {
-        runtimeHttpProxyConfig()
-            ?.takeIf { isExplicitHttpProxySupported() }
-            ?.let { proxyConfig ->
-                engine {
-                    proxy = ProxyBuilder.http(proxyConfig.url)
-                }
-            }
+        applyConfiguredHttpProxy(runtimeHttpProxyConfig()?.url.orEmpty())
     }
     install(ContentNegotiation) {
         json(defaultJson)
@@ -74,9 +68,6 @@ internal fun <T : HttpClientEngineConfig> HttpClientConfig<T>.installCommonConfi
         header(PRO_API_DEVICE_NAME_HEADER, deviceIdentity.name)
     }
 }
-
-private fun isExplicitHttpProxySupported(): Boolean =
-    !PlatformUtils.IS_JS && !PlatformUtils.IS_WASM_JS
 
 private fun List<String>.toAcceptLanguageHeaderValue(): String? =
     asSequence()

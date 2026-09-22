@@ -6,6 +6,8 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -271,8 +273,9 @@ internal class DeviceSessionConnection(
     }
 
     private suspend fun sendDataFrame(streamId: Int, payload: ByteArray) {
+        currentCoroutineContext().ensureActive()
         ensureStreamOpen(streamId)
-        val acquired = withTimeoutOrNull(creditWaitTimeoutMillis) {
+        val acquired = sendCredit.tryConsume(streamId, payload.size) || withTimeoutOrNull(creditWaitTimeoutMillis) {
             sendCredit.awaitAndConsume(streamId, payload.size) { ensureStreamOpen(streamId) }
             true
         } ?: false

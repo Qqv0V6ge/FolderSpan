@@ -316,7 +316,17 @@ class LinkShareRouteDispatcher(
                 advertisedHostProvider.get(),
             )
         ) {
-            return LinkShareHttpResponse.text(403, AppStrings.error_auth_request_origin_invalid)
+            return if (request.isApiRequest()) {
+                LinkShareHttpResponse.text(403, AppStrings.error_auth_request_origin_invalid)
+            } else {
+                val pageAssets = getPageAssets()
+                htmlResponse(403, listOf(LinkShareHttpHeader("Cache-Control", "no-store"))) {
+                    HtmlTemplates.requestRejectedPage(
+                        message = AppStrings.error_auth_request_origin_invalid,
+                        assets = pageAssets,
+                    )(this)
+                }
+            }
         }
         val clientRequest = exchange.getOrNull(LINK_SHARE_DEVICE_KEY)
             ?: return LinkShareHttpResponse.text(403, AppStrings.ui_device_information_invalid)

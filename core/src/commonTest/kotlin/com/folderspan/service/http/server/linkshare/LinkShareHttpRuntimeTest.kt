@@ -128,6 +128,7 @@ class LinkShareHttpRuntimeTest {
 
         assertEquals("DENY", normal.first { it.name == "X-Frame-Options" }.value)
         assertEquals("SAMEORIGIN", mitm.first { it.name == "X-Frame-Options" }.value)
+        assertEquals("same-origin", normal.first { it.name == "Referrer-Policy" }.value)
         val normalCsp = normal.first { it.name == "Content-Security-Policy" }.value
         val mitmCsp = mitm.first { it.name == "Content-Security-Policy" }.value
         assertFalse(normalCsp.contains("script-src 'self' 'unsafe-inline'"))

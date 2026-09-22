@@ -10,12 +10,12 @@ import android.os.Build
 import android.view.DragAndDropPermissions
 import android.view.DragEvent
 import com.folderspan.clipboard.ClipboardTextOpenBus
+import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.ui.navigation.AppRoute
 import com.folderspan.ui.navigation.matchesScreen
 import com.folderspan.ui.screen.file.share.FileShareScreen
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.ui.state.file.FileState
-import com.folderspan.ui.state.file.ShareListDropRegistry
 import com.folderspan.ui.state.file.ShareListDropResourceRegistry
 import com.folderspan.ui.state.file.normalizeShareListDropFiles
 import com.folderspan.ui.state.main.MainState
@@ -53,6 +53,7 @@ class ShareIntentHandler(
             Intent.ACTION_SEND ->
                 grantedShareUri(intent, intent.getParcelableUriExtra(Intent.EXTRA_STREAM)) != null
             Intent.ACTION_SEND_MULTIPLE -> hasSendMultipleData(intent)
+            Intent.ACTION_VIEW -> hasGrantedContentViewUri(intent)
             else -> false
         }
     }
@@ -105,25 +106,17 @@ class ShareIntentHandler(
                     return ClipboardTextOpenBus.publish(extractSharedClipText(event.clipData).orEmpty())
                 }
                 val permission = requestDropPermissions(event) ?: return false
-                if (ShareListDropRegistry.hasReceiver()) {
-                    ShareHandler.handleDroppedFilesForShare(activity, fileState, uris) { result ->
-                        when {
-                            result.deliveredToShareList -> {
-                                ShareListDropResourceRegistry.register(result.referencedPaths) {
-                                    ShareHandler.releaseDroppedRegistry(result.registryPaths)
-                                    runCatching { permission.release() }
-                                }
-                            }
-                            result.retainPermission -> heldDropPermissions += permission
-                            else -> runCatching { permission.release() }
-                        }
+                ShareHandler.handleDroppedFilesForShare(activity, fileState, uris) { result ->
+                    if (!result.deliveredToShareList && result.files.isNotEmpty()) {
+                        deliverFilesToShareScreen(result.files)
                     }
-                    true
-                } else {
-                    heldDropPermissions += permission
-                    ShareHandler.handleDroppedFiles(activity, fileState, uris)
-                    true
+                    if (result.retainPermission) {
+                        heldDropPermissions += permission
+                    } else {
+                        runCatching { permission.release() }
+                    }
                 }
+                true
             }
 
             else -> false
@@ -157,13 +150,12 @@ class ShareIntentHandler(
     }
 
     /**
-     * 响应 ACTION_VIEW：展示外部传入文件的元数据。
+     * 响应 ACTION_VIEW：与系统分享相同，把文件送进分享列表。
      */
     private fun handleView(intent: Intent, onComplete: () -> Unit): Boolean {
         if (!hasGrantedContentViewUri(intent)) return false
         val uri = intent.data ?: return false
-        openHomeScreen()
-        ShareHandler.handleOpenFile(activity, fileState, uri, onComplete)
+        handleSharedFiles(listOf(uri), onComplete)
         return true
     }
 
@@ -192,14 +184,18 @@ class ShareIntentHandler(
     }
 
     private fun handleSharedFiles(uris: List<Uri>, onComplete: () -> Unit) {
-        ShareHandler.handleSharedFilesForShare(activity, uris) { files ->
-            fileShareState.updateIncomingFiles(normalizeShareListDropFiles(files))
-            if (fileShareState.incomingFiles.isNotEmpty() &&
-                !mainState.currentRoute.matchesScreen(FileShareScreen)
-            ) {
-                mainState.requestOpenScreen(FileShareScreen)
-            }
+        ShareHandler.handleSharedFilesForShare(activity, fileState, uris) { files ->
+            deliverFilesToShareScreen(files)
             onComplete()
+        }
+    }
+
+    private fun deliverFilesToShareScreen(files: List<FileSimpleInfo>) {
+        fileShareState.updateIncomingFiles(normalizeShareListDropFiles(files))
+        if (fileShareState.incomingFiles.isNotEmpty() &&
+            !mainState.currentRoute.matchesScreen(FileShareScreen)
+        ) {
+            mainState.requestOpenScreen(FileShareScreen)
         }
     }
 

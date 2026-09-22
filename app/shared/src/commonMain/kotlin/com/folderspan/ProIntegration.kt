@@ -12,6 +12,7 @@ import com.folderspan.pro.core.datastore.AuthSessionStore
 import com.folderspan.pro.core.datastore.SessionManager
 import com.folderspan.pro.core.datastore.SettingsAuthSessionStore
 import com.folderspan.pro.core.network.installProWebRtcOfficialGatewayProvider
+import com.folderspan.pro.core.network.installProWebRtcOfficialRoomsClient
 import com.folderspan.pro.di.*
 import com.folderspan.pro.domain.model.AccountNotificationPayloadKeys
 import com.folderspan.pro.domain.model.AppUpdateChannel
@@ -111,6 +112,7 @@ internal fun ProRuntimeEffects(dependencies: ProRuntimeDependencies, settings: S
 
     LaunchedEffect(Unit) {
         installProWebRtcOfficialGatewayProvider()
+        installProWebRtcOfficialRoomsClient()
         initializeProAuthSession(settings)
         registerProDeviceSettingChangeSync(settings, scope)
         registerProSnapshotChangeSync(settings, scope)

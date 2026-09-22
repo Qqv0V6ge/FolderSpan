@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpack
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -37,6 +38,10 @@ kotlin {
             implementation(libs.napier)
         }
     }
+}
+
+tasks.withType<KotlinWebpack>().matching { it.name.endsWith("ProductionWebpack") }.configureEach {
+    sourceMaps = false
 }
 
 val linkShareStaticResourcesDir = rootProject.file("core/src/commonMain/composeResources/files/share-file/static")

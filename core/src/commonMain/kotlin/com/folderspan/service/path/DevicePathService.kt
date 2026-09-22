@@ -13,12 +13,14 @@ import com.folderspan.service.data.ListRequest
 import com.folderspan.service.data.PathExistsRequest
 import com.folderspan.ui.state.device.DeviceCertificateState
 import com.folderspan.ui.state.device.DeviceSharePathScope
+import com.folderspan.ui.state.device.shareListedFileName
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SensitiveFileAccessPolicy
 import com.folderspan.utils.SettingsUtils
+import com.folderspan.utils.isAndroidContentUriPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import strings.AppStrings
@@ -158,16 +160,22 @@ class DevicePathService internal constructor(
                     val entry = withContext(Dispatchers.Default) {
                         FileUtils.getFile(FileAccessPermission.Allowed, physicalPath)
                     }.getOrThrow()
-                    if (entry.isSymbolicLink || PathUtils.isSymbolicLink(FileAccessPermission.Allowed, physicalPath)) {
+                    if (
+                        !isAndroidContentUriPath(physicalPath) &&
+                        (entry.isSymbolicLink || PathUtils.isSymbolicLink(FileAccessPermission.Allowed, physicalPath))
+                    ) {
                         throw AuthorityException(AppStrings.error_path_access_denied)
                     }
-                    entry.withCopy(name = root.name)
+                    // 虚拟根名负责路由；展示/保存文件名用本机元数据，避免 content:// 最后一段变成文件名。
+                    root.name to entry.withCopy(name = shareListedFileName(entry.name, root.name))
                 }
                 buildProtocolPathEntries(
                     localProtocol = FileProtocol.Share,
                     localDeviceId = localDeviceIdProvider(),
-                    fileSimpleInfos = roots,
-                ) { entry -> entry.name }
+                    fileSimpleInfos = roots.map { item -> item.second },
+                ) { entry ->
+                    roots.first { item -> item.second === entry }.first
+                }
             }
         }
 

@@ -109,6 +109,26 @@ class WebRtcDeviceSessionByteChannelTest {
     }
 
     @Test
+    fun bufferedAmountIsSampledAtWatermarkAcrossWritesInsteadOfPerFragment() = runSuspendTest {
+        val dataChannel = FakeDataChannel()
+        val channel = WebRtcDeviceSessionByteChannel(
+            dataChannel, CoroutineScope(currentCoroutineContext()),
+        )
+        try {
+            // A draining native channel stays at zero, but each send still consumes
+            // the conservative budget, including sends from separate write calls.
+            repeat(4) { channel.write(ByteArray(1024 * 1024), 0, 1024 * 1024) }
+            assertEquals(256, dataChannel.sent.size)
+            assertEquals(1, dataChannel.bufferedAmountReads)
+
+            channel.write(byteArrayOf(1), 0, 1)
+            assertEquals(2, dataChannel.bufferedAmountReads)
+        } finally {
+            channel.close()
+        }
+    }
+
+    @Test
     fun bufferedLimitStillAppliesAcrossBatchesAndConcurrentWriters() = runSuspendTest {
         val scope = CoroutineScope(currentCoroutineContext())
         val dataChannel = FakeDataChannel().apply { accountSentBytes = true }
@@ -292,6 +312,7 @@ class WebRtcDeviceSessionByteChannelTest {
 
         var stateValue = WebRtcDataChannelState.Open
         var bufferedAmountValue = 0L
+        var bufferedAmountReads = 0
         var accountSentBytes = false
         var allowSend = true
         var wasClosed = false
@@ -301,7 +322,10 @@ class WebRtcDeviceSessionByteChannelTest {
         override val state: WebRtcDataChannelState
             get() = stateValue
         override val bufferedAmount: Long
-            get() = bufferedAmountValue
+            get() {
+                bufferedAmountReads++
+                return bufferedAmountValue
+            }
         override val onOpen: Flow<Unit> = openEvents.asSharedFlow()
         override val onClose: Flow<Unit> = closeEvents.asSharedFlow()
         override val onMessage: Flow<ByteArray> = messages.asSharedFlow()

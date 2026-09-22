@@ -19,6 +19,7 @@ import com.folderspan.data.main.Local
 import com.folderspan.extensions.randomString
 import com.folderspan.service.http.FileShareAccessKeyConfig
 import com.folderspan.service.http.isValidFileShareAccessKeyValue
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.DeviceRoleSelectionDialog
 import com.folderspan.ui.components.dialog.PathSelectorDialog
 import com.folderspan.ui.components.dialog.TextFieldDialog
@@ -35,6 +36,7 @@ import com.folderspan.utils.PathUtils
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import strings.AppStrings
+import com.folderspan.localization.localizedName
 
 private const val GENERATED_FILE_SHARE_ACCESS_KEY_LENGTH = 32
 
@@ -63,7 +65,7 @@ class FileShareSettingsScreen : AppScreenRoute {
         val displayDownloadDirectory = remoteOpenDownloadDirectory.ifBlank { PathUtils.getCachePath() }
         val autoAuthorizeRoleName = roleState.roles
             .firstOrNull { item -> item.id == fileShareAutoAuthorizeRoleId }
-            ?.name
+            ?.localizedName
             ?: AppStrings.ui_tourists
 
         val showEditPortDialog = remember { mutableStateOf(false) }
@@ -101,7 +103,7 @@ class FileShareSettingsScreen : AppScreenRoute {
                                 checked = fileShareEnabled,
                                 onCheckedChange = { enabled ->
                                     scope.launch {
-                                        val result = snackbarHostState.showSnackbar(
+                                        val result = snackbarHostState.showLatestSnackbar(
                                             message = if (enabled) AppStrings.ui_after_enabling_file_sharing_you_need_restart_application_take
                                                       else AppStrings.ui_after_turning_off_file_sharing_you_need_restart_application,
                                             actionLabel = AppStrings.ui_ok,
@@ -335,7 +337,7 @@ class FileShareSettingsScreen : AppScreenRoute {
                 if (port != null && port in 1024..65535) {
                     scope.launch {
                         settingsState.setFileSharePort(port)
-                        val result = snackbarHostState.showSnackbar(
+                        val result = snackbarHostState.showLatestSnackbar(
                             message = AppStrings.ui_port_has_been_updated_do_you_want_close_application,
                             actionLabel = AppStrings.ui_close,
                             withDismissAction = true,

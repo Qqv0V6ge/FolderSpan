@@ -26,7 +26,7 @@ import com.folderspan.service.webrtc.models.toRoomDisplayLabel
 import com.folderspan.ui.screen.webrtc.WebRtcRoomDevicesScreen
 import com.folderspan.ui.screen.webrtc.WebRtcRoomEditScreen
 import com.folderspan.ui.screen.webrtc.WebRtcRoomManageScreen
-import com.folderspan.ui.screen.webrtc.WebRtcRoomSourceBadge
+import com.folderspan.ui.screen.webrtc.webRtcRoomDrawerSubtitle
 import com.folderspan.ui.state.main.DeviceState
 import com.folderspan.ui.state.main.DrawerState
 import com.folderspan.ui.state.main.MainState
@@ -194,7 +194,6 @@ private fun AppDrawerActiveWebRtcRoomItem(uiState: AppDrawerWebRtcUiState) {
             WebRtcDrawerLabel(
                 title = uiState.roomName,
                 subtitle = uiState.roomSummary,
-                source = uiState.activeRoom?.source
             )
         },
         selected = false,
@@ -230,8 +229,10 @@ private fun AppDrawerPinnedWebRtcRoomItem(
         label = {
             WebRtcDrawerLabel(
                 title = room.name,
-                subtitle = room.wssUrl,
-                source = room.source
+                subtitle = webRtcRoomDrawerSubtitle(
+                    source = room.source,
+                    wssUrl = room.wssUrl,
+                ),
             )
         },
         badge = { Badge { Text(AppStrings.ui_not_connected) } },
@@ -245,24 +246,21 @@ private fun AppDrawerPinnedWebRtcRoomItem(
 private fun WebRtcDrawerLabel(
     title: String,
     subtitle: String,
-    source: com.folderspan.data.main.webrtc.WebRtcRoomSource? = null
 ) {
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            source?.let { WebRtcRoomSourceBadge(it) }
-        }
         Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
+            text = title,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
+        if (subtitle.isNotBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

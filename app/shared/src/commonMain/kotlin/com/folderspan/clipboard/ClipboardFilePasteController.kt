@@ -39,7 +39,7 @@ internal suspend fun executeClipboardFilePaste(
         reader()
     } catch (error: Throwable) {
         if (error is CancellationException) throw error
-        LogKit.e(AppStrings.ui_clipboard_file_reading_failed_type_arg0.format(arg0 = (error::class.simpleName.orEmpty()).toString()))
+        LogKit.e(AppStrings.ui_clipboard_file_reading_failed_type_arg0.format(arg0 = error::class.simpleName.orEmpty()))
         return ExternalFileImportResult(failure = ExternalFileImportFailure.ReadFailed)
     }
     return importBatch(target, batch)

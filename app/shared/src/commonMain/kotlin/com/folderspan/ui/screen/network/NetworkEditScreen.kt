@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.main.network.*
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.buttons.TestConnectionButton
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
@@ -377,7 +378,7 @@ class NetworkEditScreen(
                         reason?.let { AppStrings.ui_connection_failed_arg0.format(arg0 = it) }
                             ?: AppStrings.ui_connection_failed
                     }
-                    snackbarHostState.showSnackbar(message)
+                    snackbarHostState.showLatestSnackbar(message)
                 } catch (t: Throwable) {
                     val reason = t.message?.ifBlank { null }
                     val message = when {
@@ -388,7 +389,7 @@ class NetworkEditScreen(
                         else -> reason?.let { AppStrings.ui_connection_failed_arg0.format(arg0 = it) }
                             ?: AppStrings.ui_connection_failed
                     }
-                    snackbarHostState.showSnackbar(message)
+                    snackbarHostState.showLatestSnackbar(message)
                 } finally {
                     testNetwork.disconnect()
                     isTesting = false

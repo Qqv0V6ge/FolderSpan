@@ -138,7 +138,7 @@ internal class LinkShareRawHttpServer(
                     }
                 }
             } catch (_: CancellationException) {
-                throw CancellationException(AppStrings.ui_ios_linksharerawhttpserver_arg0_has_stopped.format(arg0 = (scheme).toString()))
+                throw CancellationException(AppStrings.ui_ios_linksharerawhttpserver_arg0_has_stopped.format(arg0 = scheme))
             } catch (error: Throwable) {
                 if (isActive) {
                     LogKit.e(AppStrings.ui_ios_linksharerawhttpserver_arg0_accept_exception_arg1.format(arg0 = scheme, arg1 = (error.message).toString()), error)

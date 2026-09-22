@@ -197,12 +197,6 @@ class McpToolRegistry(
         tool("folderspan_tasks_delete", "Delete a terminal task.", McpTokenScope.TasksControl, idSchema(), destructive = true) { args ->
             jsonObject("deleted", facade.task.delete(args.requiredLong("id")))
         },
-        tool("folderspan_device_scan", "Start an asynchronous HTTP device scan.", McpTokenScope.DevicesScan, scanSchema()) { args ->
-            json(facade.device.startScan(args.string("subnet")))
-        },
-        tool("folderspan_device_scan_status", "Get device scan progress and results.", McpTokenScope.DevicesScan, stringIdSchema(), readOnly = true) { args ->
-            json(facade.device.scanStatus(args.requiredString("id")))
-        },
         tool("folderspan_devices_list", "List currently online HTTP devices by status.", McpTokenScope.DevicesRead, emptySchema(), readOnly = true) {
             json(facade.device.list(DeviceTransportType.Session))
         },
@@ -448,10 +442,6 @@ private fun idBooleanSchema(name: String): JsonObject = objectSchema(
 private fun idsSchema(): JsonObject = objectSchema(
     mapOf("ids" to arraySchema(integerSchema(minimum = 1), minItems = 1, maxItems = 200)),
     setOf("ids"),
-)
-
-private fun scanSchema(): JsonObject = objectSchema(
-    mapOf("subnet" to stringSchema(minLength = 3, maxLength = 32)),
 )
 
 private fun locatorObjectSchema(): JsonObject = objectSchema(

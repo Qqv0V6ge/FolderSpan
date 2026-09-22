@@ -110,6 +110,7 @@ class WebDavNetworkClientTest {
         assertEquals(1, entries.size)
         assertEquals("file.txt", entries.first().name)
         assertEquals("/file.txt", entries.first().path)
+        assertFalse(entries.first().isSymbolicLinkKnown)
 
         val request = captured
         assertNotNull(request)

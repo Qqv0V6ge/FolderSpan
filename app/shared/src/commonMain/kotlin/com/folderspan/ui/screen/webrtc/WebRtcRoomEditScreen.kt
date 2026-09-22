@@ -24,6 +24,7 @@ import com.folderspan.service.webrtc.WebRtcRoomConnectionTestResult
 import com.folderspan.service.webrtc.WebRtcRoomConnectionTester
 import com.folderspan.service.webrtc.signaling.generateRoomId
 import com.folderspan.service.webrtc.signaling.isValidRoomId
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.buttons.TestConnectionButton
 import com.folderspan.ui.components.fields.PasswordOutlinedTextField
 import com.folderspan.ui.components.grid.GridList
@@ -50,7 +51,7 @@ class WebRtcRoomEditScreen(
         val scope = rememberCoroutineScope()
         val connectionTester = remember { WebRtcRoomConnectionTester() }
         val snackbarHostState = remember { SnackbarHostState() }
-        val roomKey = room?.id ?: -1L
+        val roomKey = room?.catalogKey ?: "new"
         val canUseOfficialGateway = isProAuthenticated()
         val initialSource = room?.source ?: WebRtcRoomSource.Other
 
@@ -71,6 +72,12 @@ class WebRtcRoomEditScreen(
         var turnPassword by rememberSaveable(roomKey) { mutableStateOf(room?.turnPassword ?: "") }
         var isIceTurnExpanded by rememberSaveable(roomKey) { mutableStateOf(false) }
         var isTestingWebSocket by remember { mutableStateOf(false) }
+        var officialDetailReady by rememberSaveable(roomKey) {
+            mutableStateOf(room?.source != WebRtcRoomSource.Official)
+        }
+        var officialDetailLoading by remember(roomKey) {
+            mutableStateOf(room?.source == WebRtcRoomSource.Official)
+        }
         val requestedSource = remember(sourceName) { sourceName.toWebRtcRoomSource() }
         val source = remember(requestedSource, canUseOfficialGateway) {
             resolveWebRtcRoomSource(
@@ -78,8 +85,8 @@ class WebRtcRoomEditScreen(
                 canUseOfficialGateway = canUseOfficialGateway
             )
         }
-        val sourceOptions = remember(canUseOfficialGateway) {
-            webRtcRoomSourceOptions(canUseOfficialGateway = canUseOfficialGateway)
+        val sourceOptions = remember(canUseOfficialGateway, isEdit, initialSource) {
+            if (isEdit) listOf(initialSource) else webRtcRoomSourceOptions(canUseOfficialGateway = canUseOfficialGateway)
         }
         val officialWssUrl = if (canUseOfficialGateway) WebRtcOfficialGateway.websocketUrl() else ""
 
@@ -87,9 +94,28 @@ class WebRtcRoomEditScreen(
             if (source.name != sourceName) {
                 sourceName = source.name
             }
-            if (source == WebRtcRoomSource.Official && officialRoomId.isBlank()) {
-                officialRoomId = generateRoomId()
+        }
+
+        LaunchedEffect(roomKey) {
+            val current = room ?: return@LaunchedEffect
+            if (current.source != WebRtcRoomSource.Official) return@LaunchedEffect
+            val live = roomState.getOfficialRoom(current.roomId)
+            officialDetailLoading = false
+            if (live == null) {
+                officialDetailReady = false
+                snackbarHostState.showLatestSnackbar(
+                    AppStrings.ui_failed_load_webrtc_room_arg0.format(
+                        arg0 = AppStrings.ui_operation_failed_please_try_again_later,
+                    )
+                )
+                return@LaunchedEffect
             }
+            name = live.name
+            stunUrl = live.stunUrl
+            turnUrl = live.turnUrl
+            turnUsername = live.turnUsername
+            turnPassword = live.turnPassword
+            officialDetailReady = true
         }
 
         val connectionFields = webRtcRoomDisplayedConnectionFields(
@@ -120,12 +146,19 @@ class WebRtcRoomEditScreen(
             ).normalized()
         }
 
-        val nameError = normalizedInput.name.isBlank()
-        val wssUrlError = normalizedInput.wssUrl.isBlank()
-        val roomIdBlank = normalizedInput.roomId.isBlank()
-        val roomIdError = !roomIdBlank && !isValidRoomId(normalizedInput.roomId)
-        val canSave = normalizedInput.canSave()
-        val canTest = !wssUrlError
+        val nameTooLong = source == WebRtcRoomSource.Official &&
+            normalizedInput.name.length > OfficialRoomNameMaxLength
+        val nameError = normalizedInput.name.isBlank() || nameTooLong
+        val wssUrlError = source == WebRtcRoomSource.Other && normalizedInput.wssUrl.isBlank()
+        val roomIdBlank = source == WebRtcRoomSource.Other && normalizedInput.roomId.isBlank()
+        val roomIdError = source == WebRtcRoomSource.Other && !roomIdBlank && !isValidRoomId(normalizedInput.roomId)
+        val canSave = normalizedInput.canSave() &&
+            (source != WebRtcRoomSource.Official || officialDetailReady)
+        val canTest = if (source == WebRtcRoomSource.Official) {
+            officialWssUrl.isNotBlank()
+        } else {
+            !wssUrlError
+        }
 
         val handleSaveClick: () -> Unit = save@{
             if (!canSave) return@save
@@ -133,10 +166,12 @@ class WebRtcRoomEditScreen(
                 val saved = if (room == null) {
                     roomState.addRoom(normalizedInput) != null
                 } else {
-                    roomState.updateRoom(room.id, normalizedInput)
+                    roomState.updateRoom(room, normalizedInput)
                 }
                 if (saved) {
                     navigator.pop()
+                } else {
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_operation_failed_please_try_again_later)
                 }
             }
         }
@@ -162,7 +197,7 @@ class WebRtcRoomEditScreen(
                 } finally {
                     isTestingWebSocket = false
                 }
-                snackbarHostState.showSnackbar(message)
+                snackbarHostState.showLatestSnackbar(message)
             }
         }
 
@@ -201,6 +236,7 @@ class WebRtcRoomEditScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                isLoading = officialDetailLoading,
                 verticalSpacing = 16.dp,
                 horizontalSpacing = 16.dp,
                 floatingActionButtonPadding = GridListFabPadding
@@ -209,6 +245,7 @@ class WebRtcRoomEditScreen(
                     name = name,
                     onNameChange = { name = it },
                     nameError = nameError,
+                    nameTooLong = nameTooLong,
                     source = source,
                     sourceOptions = sourceOptions,
                     onSourceChange = { selectedSource ->
@@ -258,6 +295,7 @@ private fun LazyGridScope.WebRtcRoomForm(
     name: String,
     onNameChange: (String) -> Unit,
     nameError: Boolean,
+    nameTooLong: Boolean,
     source: WebRtcRoomSource,
     sourceOptions: List<WebRtcRoomSource>,
     onSourceChange: (WebRtcRoomSource) -> Unit,
@@ -280,7 +318,7 @@ private fun LazyGridScope.WebRtcRoomForm(
     isIceTurnExpanded: Boolean,
     onToggleIceTurnExpanded: () -> Unit
 ) {
-    if (sourceOptions.size > 1) {
+    if (webRtcRoomShowsSourceSelector(sourceOptions)) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             WebRtcRoomSourceSelector(
                 source = source,
@@ -297,7 +335,25 @@ private fun LazyGridScope.WebRtcRoomForm(
             label = AppStrings.ui_room_name,
             value = name,
             onValueChange = onNameChange,
-            isError = nameError
+            isError = nameError,
+            supportingText = if (nameError) {
+                {
+                    when {
+                        name.isBlank() -> Text(
+                            AppStrings.ui_name_cannot_empty,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        nameTooLong -> Text(
+                            AppStrings.ui_name_cannot_exceed_arg0_characters.format(
+                                arg0 = OfficialRoomNameMaxLength.toString()
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            } else {
+                null
+            }
         )
     }
     if (webRtcRoomShowsConnectionFields(source)) {
@@ -373,13 +429,15 @@ private fun LazyGridScope.WebRtcRoomForm(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WebRtcRoomSourceSelector(
+internal fun WebRtcRoomSourceSelector(
     source: WebRtcRoomSource,
     sourceOptions: List<WebRtcRoomSource>,
-    onSourceChange: (WebRtcRoomSource) -> Unit
+    onSourceChange: (WebRtcRoomSource) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
         sourceOptions.forEachIndexed { index, item ->
             SegmentedButton(
                 selected = source == item,
@@ -407,6 +465,9 @@ internal fun webRtcRoomSourceOptions(canUseOfficialGateway: Boolean): List<WebRt
     if (!canUseOfficialGateway) return listOf(WebRtcRoomSource.Other)
     return WebRtcRoomSource.entries.toList()
 }
+
+internal fun webRtcRoomShowsSourceSelector(sourceOptions: List<WebRtcRoomSource>): Boolean =
+    sourceOptions.size > 1
 
 internal fun resolveWebRtcRoomSource(
     source: WebRtcRoomSource,

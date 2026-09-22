@@ -46,7 +46,10 @@ internal fun ProSnackbarEffect(
 
 internal suspend fun SnackbarHostState.showProSnackbar(
     prompt: ProSnackbarPrompt,
-): SnackbarResult = showSnackbar(prompt)
+): SnackbarResult {
+    currentSnackbarData?.dismiss()
+    return showSnackbar(prompt)
+}
 
 internal suspend fun SnackbarHostState.showProSnackbar(
     message: String?,

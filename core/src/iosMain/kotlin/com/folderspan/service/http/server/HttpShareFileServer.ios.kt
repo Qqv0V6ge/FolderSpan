@@ -49,7 +49,7 @@ actual class HttpShareFileServer private actual constructor(fileShareState: File
         if (conflictingFileSharePort) {
             val error = IllegalStateException(AppStrings.ui_file_sharing_service_and_simple_sharing_service_cannot_use_the_same_port_arg0.format(arg0 = (port).toString()))
             val message = error.toServerStartFailureMessage(port)
-            LogKit.e(AppStrings.ui_failed_start_httpsharefileserver_ios_raw_arg0.format(arg0 = (message).toString()), error)
+            LogKit.e(AppStrings.ui_failed_start_httpsharefileserver_ios_raw_arg0.format(arg0 = message), error)
             fileShareState.updateHttpServerRunning(false)
             notifyServerStartFailure(ServerStartNotificationService.SimpleSharing, port, error)
             return

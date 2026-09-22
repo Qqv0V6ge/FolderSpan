@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.data.file.FileShareHistory
 import com.folderspan.data.file.ShareHistoryDirection
 import com.folderspan.data.file.ShareHistoryStore
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.fileshare.FileShareHistoryDetailDialog
 import com.folderspan.ui.components.fileshare.FileShareHistoryListItem
 import com.folderspan.ui.components.grid.GridList
@@ -81,9 +82,10 @@ class FileShareHistoryScreen : AppScreenRoute {
                     actions = {
                         IconButton(onClick = {
                             scope.launch(Dispatchers.Default) {
-                                when (snackbarHostState.showSnackbar(
+                                when (snackbarHostState.showLatestSnackbar(
                                     message = AppStrings.ui_you_sure_you_want_clear_all_history,
-                                    actionLabel = AppStrings.ui_clear
+                                    actionLabel = AppStrings.ui_clear,
+                                    duration = SnackbarDuration.Short,
                                 )) {
                                     SnackbarResult.Dismissed -> {}
                                     SnackbarResult.ActionPerformed -> {
@@ -171,9 +173,10 @@ class FileShareHistoryScreen : AppScreenRoute {
                             history = history,
                             onDelete = {
                                 scope.launch(Dispatchers.Default) {
-                                    when (snackbarHostState.showSnackbar(
+                                    when (snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.ui_you_sure_delete_this_record,
-                                        actionLabel = AppStrings.ui_delete
+                                        actionLabel = AppStrings.ui_delete,
+                                        duration = SnackbarDuration.Short,
                                     )) {
                                     SnackbarResult.Dismissed -> {}
                                     SnackbarResult.ActionPerformed -> {

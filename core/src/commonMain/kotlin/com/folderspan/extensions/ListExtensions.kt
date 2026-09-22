@@ -151,28 +151,9 @@ fun List<FileSimpleInfo>.filter(
                 .then(NaturalOrderComparator())
         )
 
-        // 创建时间升序：文件夹优先，然后按创建时间升序
-        FileFilterSort.CreatedDateAsc -> files.sortedWith(
-            compareByDescending<FileSimpleInfo> { item ->  item.isDirectory }
-                .thenBy { item ->  item.createdDate }
-        )
-
-        // 创建时间降序：文件夹优先，然后按创建时间降序
-        FileFilterSort.CreatedDateDesc -> files.sortedWith(
-            compareByDescending<FileSimpleInfo> { item ->  item.isDirectory }
-                .thenByDescending { item ->  item.createdDate }
-        )
-
-        // 更新时间升序：文件夹优先，然后按更新时间升序
-        FileFilterSort.UpdatedDateAsc -> files.sortedWith(
-            compareByDescending<FileSimpleInfo> { item ->  item.isDirectory }
-                .thenBy { item ->  item.updatedDate }
-        )
-
-        // 更新时间降序：文件夹优先，然后按更新时间降序
-        FileFilterSort.UpdatedDateDesc -> files.sortedWith(
-            compareByDescending<FileSimpleInfo> { item ->  item.isDirectory }
-                .thenByDescending { item ->  item.updatedDate }
-        )
+        FileFilterSort.CreatedDateAsc -> files.sortedBy { item -> item.createdDate }
+        FileFilterSort.CreatedDateDesc -> files.sortedByDescending { item -> item.createdDate }
+        FileFilterSort.UpdatedDateAsc -> files.sortedBy { item -> item.updatedDate }
+        FileFilterSort.UpdatedDateDesc -> files.sortedByDescending { item -> item.updatedDate }
     }
 }

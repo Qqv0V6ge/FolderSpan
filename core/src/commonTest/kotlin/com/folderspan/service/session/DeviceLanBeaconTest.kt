@@ -1,6 +1,7 @@
 package com.folderspan.service.session
 
 import com.folderspan.data.main.device.DeviceType
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.http.server.defaultDeviceShareApprovalPort
 import com.folderspan.utils.ProtoBufCodec
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -14,6 +15,24 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceLanBeaconTest {
+    @Test
+    fun invalidSignatureIsVisibleButMalformedOrExpiredBeaconIsIgnored() {
+        val beacon = DeviceLanBeacon(
+            deviceId = "peer", name = "Phone", type = DeviceType.IOS,
+            sessionPort = 12040, approvalPort = 12042,
+            fingerprintSha256 = "A".repeat(64), issuedAtEpochSeconds = 100,
+            publicKeyPem = "invalid key", signature = "invalid signature",
+        )
+        assertEquals(DeviceDiscoveryStatus.Unverified, DeviceLanBeacons.discoveryStatus(beacon, 100))
+        assertFalse(DeviceLanBeacons.verify(beacon, 100))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon, 131))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon.copy(protocol = "http/1.1"), 100))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon.copy(deviceId = ""), 100))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon.copy(sessionPort = 0), 100))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon.copy(approvalPort = 12040), 100))
+        assertNull(DeviceLanBeacons.discoveryStatus(beacon.copy(issuedAtEpochSeconds = Long.MIN_VALUE), 100))
+    }
+
     @Test
     fun nativePlatformsUseContinuousBeaconDiscovery() {
         listOf(DeviceType.Android, DeviceType.IOS, DeviceType.JVM).forEach { platformType ->

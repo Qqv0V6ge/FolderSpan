@@ -4,6 +4,7 @@ import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.ui.state.device.DeviceSharePathGrant
+import com.folderspan.ui.state.device.DeviceSharePathScope
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -101,6 +102,43 @@ class DeviceShareConnectionGrantTest {
         assertEquals(null, scope.resolveVirtualContentPath("/"))
         assertEquals(null, scope.resolveVirtualContentPath("/private/photos"))
         assertEquals(null, scope.resolveVirtualContentPath("/photos/../report.txt"))
+    }
+
+    @Test
+    fun contentUriGrantsKeepSchemeAndResolveAsVirtualFiles() {
+        val uri = "content://media/external/file/42"
+        val scope = DeviceSharePathScope(
+            listOf(DeviceSharePathGrant(uri, isDirectory = false)),
+        )
+
+        assertEquals(listOf(uri), scope.grants.map { grant -> grant.path })
+        assertEquals(listOf("/42"), scope.virtualRoots.map { root -> root.path })
+        assertEquals(uri, scope.resolveVirtualContentPath("/42"))
+        assertEquals(null, scope.resolveVirtualContentPath("/42/child"))
+        assertTrue(scope.allowsContentPath(uri))
+    }
+
+    @Test
+    fun contentUriVirtualNameUsesDisplayNameOrDecodedDocumentFileName() {
+        val encodedUri =
+            "content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fphoto.jpg"
+        val encodedScope = DeviceSharePathScope(
+            listOf(DeviceSharePathGrant(encodedUri, isDirectory = false)),
+        )
+        val namedScope = DeviceSharePathScope(
+            listOf(
+                DeviceSharePathGrant(
+                    path = encodedUri,
+                    isDirectory = false,
+                    displayName = "holiday.png",
+                )
+            ),
+        )
+
+        assertEquals("photo.jpg", encodedScope.virtualRoots.single().name)
+        assertEquals(encodedUri, encodedScope.resolveVirtualContentPath("/photo.jpg"))
+        assertEquals("holiday.png", namedScope.virtualRoots.single().name)
+        assertEquals(encodedUri, namedScope.resolveVirtualContentPath("/holiday.png"))
     }
 
     private fun testDevice(): SocketDevice {

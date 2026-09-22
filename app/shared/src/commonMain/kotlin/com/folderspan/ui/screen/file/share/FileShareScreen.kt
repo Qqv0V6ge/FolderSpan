@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -41,6 +42,7 @@ import com.folderspan.service.http.server.getAllIPAddresses
 import com.folderspan.service.session.usesTriggeredDeviceDiscovery
 import com.folderspan.share.SystemShareItem
 import com.folderspan.share.shareSystemItems
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.buttons.IpsButton
 import com.folderspan.ui.components.dialog.FileShareDeviceLogDialog
 import com.folderspan.ui.components.dialog.FileShareMergeDialog
@@ -67,7 +69,9 @@ import com.folderspan.ui.state.settings.SettingsState
 import com.folderspan.utils.DeviceRequestLogUtils
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SettingsUtils
+import com.folderspan.utils.WindowSizeClass
 import com.folderspan.utils.calculateGridColumnCount
+import com.folderspan.utils.calculateWindowSizeClass
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.currentOrThrow
@@ -121,6 +125,7 @@ object FileShareScreen : AppScreenRoute {
         var previousShareFiles by remember { mutableStateOf<List<FileSimpleInfo>?>(null) }
 
         val snackbarHostState = remember { SnackbarHostState() }
+        val sheetSnackbarHostState = remember { SnackbarHostState() }
 
         fun synchronizeCurrentShareFiles() {
             val fileSnapshot = fileShareState.files.toList()
@@ -155,7 +160,7 @@ object FileShareScreen : AppScreenRoute {
                 )
             previousShareFiles = currentShareFiles
             if (hasUnsynchronizedDevices) {
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_share_list_updated_auto_update_disabled_devices_keep_previous_files,
                     duration = SnackbarDuration.Long
                 )
@@ -253,6 +258,34 @@ object FileShareScreen : AppScreenRoute {
             }
         }
 
+        fun toggleFileSelection(file: FileSimpleInfo) {
+            if (!checkedFiles.remove(file)) {
+                checkedFiles.add(file)
+            }
+            refreshSelectionState()
+        }
+
+        fun requestFileRemoval(filesToRemove: List<FileSimpleInfo>) {
+            val removalSnapshot = filesToRemove.distinct().filter { file -> file in files }
+            if (removalSnapshot.isEmpty()) return
+
+            scope.launch {
+                val result = sheetSnackbarHostState.showLatestSnackbar(
+                    message = AppStrings.ui_delete_selected_arg0_items.format(
+                        arg0 = removalSnapshot.size.toString()
+                    ),
+                    actionLabel = AppStrings.ui_remove,
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    files.removeAll(removalSnapshot.toSet())
+                    checkedFiles.removeAll(removalSnapshot.toSet())
+                    refreshSelectionState()
+                }
+            }
+        }
+
         LaunchedEffect(Unit) {
             isHideFile = SettingsUtils.easyFileShare.getHideFile()
             fileShareState.updateAllowUpload(SettingsUtils.easyFileShare.getAllowUpload())
@@ -296,49 +329,53 @@ object FileShareScreen : AppScreenRoute {
             }
         }
 
+        fun stopServiceAndExit() {
+            scope.launch {
+                val closingSnackbar = launch {
+                    snackbarHostState.showLatestSnackbar(
+                        message = AppStrings.ui_service_shutting_down,
+                        duration = SnackbarDuration.Indefinite
+                    )
+                }
+                try {
+                    yield()
+                    withContext(Dispatchers.Default) {
+                        httpShareFileServer.stop()
+                    }
+                    fileShareState.clearLinkShareRuntimeAuthorizations()
+                    navigator.pop()
+                } finally {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    closingSnackbar.cancelAndJoin()
+                }
+            }
+        }
+
         AppScaffold(
             topBar = {
                 TopAppBar(
                     title = { Text(AppStrings.ui_share) },
                     navigationIcon = {
                         IconButton({
-                            if (httpShareFileServer.isRunning()) {
-                                if (SettingsUtils.easyFileShare.getAutoStopOnExit()) {
-                                    scope.launch {
-                                        val closingSnackbar = launch {
-                                            snackbarHostState.showSnackbar(
-                                                message = AppStrings.ui_service_shutting_down,
-                                                duration = SnackbarDuration.Indefinite
-                                            )
-                                        }
-                                        try {
-                                            yield()
-                                            withContext(Dispatchers.Default) {
-                                                httpShareFileServer.stop()
-                                            }
-                                            fileShareState.clearLinkShareRuntimeAuthorizations()
-                                            navigator.pop()
-                                        } finally {
-                                            snackbarHostState.currentSnackbarData?.dismiss()
-                                            closingSnackbar.cancelAndJoin()
-                                        }
-                                    }
-                                } else {
-                                    scope.launch {
-                                        when (snackbarHostState.showSnackbar(
-                                            message = AppStrings.ui_link_based_file_sharing_service_still_running_do_you,
-                                            actionLabel = AppStrings.ui_confirm,
-                                        )) {
-                                            SnackbarResult.Dismissed -> {}
-                                            SnackbarResult.ActionPerformed -> {
-                                                navigator.pop()
-                                            }
-                                        }
-                                    }
-                                }
+                            if (!httpShareFileServer.isRunning()) {
+                                navigator.pop()
                                 return@IconButton
                             }
-                            navigator.pop()
+                            if (SettingsUtils.easyFileShare.getAutoStopOnExit()) {
+                                stopServiceAndExit()
+                                return@IconButton
+                            }
+                            scope.launch {
+                                when (snackbarHostState.showLatestSnackbar(
+                                    message = AppStrings.ui_you_sure_you_want_turn_off_file_sharing_service,
+                                    actionLabel = AppStrings.ui_confirm,
+                                    withDismissAction = true,
+                                    duration = SnackbarDuration.Indefinite,
+                                )) {
+                                    SnackbarResult.ActionPerformed -> stopServiceAndExit()
+                                    SnackbarResult.Dismissed -> navigator.pop()
+                                }
+                            }
                         }) {
                             Icon(Icons.AutoMirrored.Default.ArrowBack, null)
                         }
@@ -353,6 +390,8 @@ object FileShareScreen : AppScreenRoute {
                                 curLinkDevice = null
                                 curDevice = null
                                 fileShareType = FileShareType.NONE
+                                checkedFiles.clear()
+                                refreshSelectionState()
                             }) {
                                 Icon(if (!showBottomSheet) Icons.Default.Description else Icons.Default.Close, null)
                             }
@@ -361,36 +400,23 @@ object FileShareScreen : AppScreenRoute {
                 )
             },
             floatingActionButton = {
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    FloatingActionButton(
-                        onClick = { launchFileSelector() },
-                        content = { Icon(Icons.Default.Add, contentDescription = null) },
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            curLinkDevice = null
-                            curDevice = null
-                            fileShareType = FileShareType.SYSTEM
-                            showBottomSheet = true
-                        },
-                        icon = { Icon(Icons.Default.Share, contentDescription = null) },
-                        text = { Text(AppStrings.ui_open_method) }
-                    )
-                }
+                FloatingActionButton(
+                    onClick = { launchFileSelector() },
+                    content = { Icon(Icons.Default.Add, contentDescription = null) },
+                )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { paddingValues ->
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(paddingValues)) {
-                val columnCount = calculateGridColumnCount(maxWidth, maxHeight)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columnCount),
-                    contentPadding = PaddingValues(bottom = GridListFabPadding)
-                ) {
+            BoxWithConstraints(Modifier.fillMaxSize().padding(paddingValues)) {
+                val isCompact = calculateWindowSizeClass(maxWidth, maxHeight) == WindowSizeClass.Compact
+                val listContentPadding = PaddingValues(bottom = GridListFabPadding)
+                val deviceStatusList = when (category) {
+                    WAITING -> fileShareState.pendingLinkShareDevices
+                    RUNNING -> fileShareState.authorizedLinkShareDevices.keys
+                    REJECTED -> fileShareState.rejectedLinkShareDevices
+                }.toList().distinctBy { device -> device.id }
+
+                fun LazyGridScope.fileShareLinkShareItems(columnCount: Int) {
                     item(span = { GridItemSpan(columnCount) }) {
                         Column {
                             AppDrawerHeader(
@@ -412,7 +438,7 @@ object FileShareScreen : AppScreenRoute {
                                     onClickOpenQRCode = { item -> openQrCodeDialog = item },
                                     onShowMessage = { message ->
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(message)
+                                            snackbarHostState.showLatestSnackbar(message)
                                         }
                                     }
                                 )
@@ -445,11 +471,6 @@ object FileShareScreen : AppScreenRoute {
                         }
                     }
 
-                    val deviceStatusList = when (category) {
-                        WAITING -> fileShareState.pendingLinkShareDevices
-                        RUNNING -> fileShareState.authorizedLinkShareDevices.keys
-                        REJECTED -> fileShareState.rejectedLinkShareDevices
-                    }.toList().distinctBy { device -> device.id }
                     items(
                         items = deviceStatusList,
                         key = { device -> device.id }
@@ -517,15 +538,26 @@ object FileShareScreen : AppScreenRoute {
                             }
                         )
                     }
+                }
 
+                fun LazyGridScope.fileShareOtherDeviceItems(columnCount: Int, showSectionDivider: Boolean) {
                     item(span = { GridItemSpan(columnCount) }) {
                         Column {
-                            if (deviceStatusList.isEmpty()) {
+                            if (showSectionDivider) {
+                                if (deviceStatusList.isEmpty()) {
+                                    Spacer(Modifier.height(16.dp))
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                                 Spacer(Modifier.height(16.dp))
                             }
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            Spacer(Modifier.height(16.dp))
-                            AppDrawerHeader(title = AppStrings.ui_share_other_devices, actions = {
+                            AppDrawerHeader(
+                                title = AppStrings.ui_share_other_devices,
+                                modifier = if (showSectionDivider) null else Modifier.padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = 12.dp,
+                                ),
+                            ) {
                                 Row {
                                     Icon(
                                         Icons.Default.Add,
@@ -598,7 +630,7 @@ object FileShareScreen : AppScreenRoute {
                                         }
                                     )
                                 }
-                            })
+                            }
                         }
                     }
                     items(
@@ -623,7 +655,7 @@ object FileShareScreen : AppScreenRoute {
                                     val selectedFiles = fileShareState.files.toList()
                                     if (selectedFiles.isEmpty()) {
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(AppStrings.ui_please_select_file_you_want_share_first)
+                                            snackbarHostState.showLatestSnackbar(AppStrings.ui_please_select_file_you_want_share_first)
                                         }
                                         return@ShareToDeviceListItem
                                     }
@@ -635,7 +667,7 @@ object FileShareScreen : AppScreenRoute {
                                     ) {
                                         deviceState.share(device)
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(
+                                            snackbarHostState.showLatestSnackbar(
                                                 AppStrings.ui_sent_arg0_items.format(arg0 = (selectedFiles.size).toString())
                                             )
                                         }
@@ -660,6 +692,39 @@ object FileShareScreen : AppScreenRoute {
                                 showBottomSheet = true
                             }
                         )
+                    }
+                }
+
+                if (isCompact) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(1),
+                        contentPadding = listContentPadding,
+                    ) {
+                        fileShareLinkShareItems(columnCount = 1)
+                        fileShareOtherDeviceItems(columnCount = 1, showSectionDivider = true)
+                    }
+                } else {
+                    val linkSharePaneWidth = 360.dp
+                    val deviceColumnCount = calculateGridColumnCount(maxWidth - linkSharePaneWidth, maxHeight)
+                    Row(Modifier.fillMaxSize()) {
+                        LazyVerticalGrid(
+                            modifier = Modifier.width(linkSharePaneWidth).fillMaxHeight(),
+                            columns = GridCells.Fixed(1),
+                            contentPadding = listContentPadding,
+                        ) {
+                            fileShareLinkShareItems(columnCount = 1)
+                        }
+                        VerticalDivider()
+                        LazyVerticalGrid(
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            columns = GridCells.Fixed(deviceColumnCount),
+                            contentPadding = listContentPadding,
+                        ) {
+                            fileShareOtherDeviceItems(
+                                columnCount = deviceColumnCount,
+                                showSectionDivider = false,
+                            )
+                        }
                     }
                 }
             }
@@ -722,6 +787,7 @@ object FileShareScreen : AppScreenRoute {
                         showFileSelector = false
                         isAllowUpload = false
                         fileSelectorSelection.clear()
+                        sheetSnackbarHostState.currentSnackbarData?.dismiss()
                     },
                     sheetState = sheetState
                 ) {
@@ -736,6 +802,17 @@ object FileShareScreen : AppScreenRoute {
                             }
 
                             Spacer(Modifier.weight(1f))
+
+                            if (checkedFiles.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { requestFileRemoval(checkedFiles.toList()) }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = AppStrings.ui_remove_shared_files
+                                    )
+                                }
+                            }
 
                             if (isFileShareReady) {
                                 val canShareSystem = fileShareType != FileShareType.SYSTEM || checkedFiles.isNotEmpty()
@@ -782,13 +859,13 @@ object FileShareScreen : AppScreenRoute {
                                                 val items = resolveSystemShareItems()
                                                 if (items.isEmpty()) {
                                                     scope.launch {
-                                                        snackbarHostState.showSnackbar(AppStrings.ui_no_files_share)
+                                                        snackbarHostState.showLatestSnackbar(AppStrings.ui_no_files_share)
                                                     }
                                                     return@Button
                                                 }
                                                 if (!shareSystemItems(items)) {
                                                     scope.launch {
-                                                        snackbarHostState.showSnackbar(AppStrings.ui_current_platform_does_not_support_system_sharing)
+                                                        snackbarHostState.showLatestSnackbar(AppStrings.ui_current_platform_does_not_support_system_sharing)
                                                     }
                                                     return@Button
                                                 }
@@ -815,7 +892,7 @@ object FileShareScreen : AppScreenRoute {
                             }
                         }
 
-                        if (isFileShareReady) {
+                        if (files.isNotEmpty()) {
                             val selectionButtons: @Composable () -> Unit = {
                                 SingleChoiceSegmentedButtonRow {
                                     listOf(AppStrings.ui_select_all, AppStrings.ui_counter_election).forEachIndexed { index, label ->
@@ -846,7 +923,7 @@ object FileShareScreen : AppScreenRoute {
                             }
 
                             val optionChips: @Composable (Modifier) -> Unit = { modifier ->
-                                if (fileShareType != FileShareType.SYSTEM) {
+                                if (isFileShareReady && fileShareType != FileShareType.SYSTEM) {
                                     Row(
                                         modifier = modifier,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -907,7 +984,12 @@ object FileShareScreen : AppScreenRoute {
 
                     }
 
-                    LazyColumn {
+                    SnackbarHost(
+                        hostState = sheetSnackbarHostState,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    )
+
+                    LazyColumn(Modifier.fillMaxWidth()) {
                         items(
                             items = files,
                             key = { file -> "${file.protocol}:${file.protocolId}:${file.path}" }
@@ -918,6 +1000,7 @@ object FileShareScreen : AppScreenRoute {
                             val createdDateText = remember(file.createdDate) {
                                 file.createdDate.timestampToSyncDate()
                             }
+                            val isSelected = checkedFiles.contains(file)
                             ListItem(
                                 headlineContent = { Text(file.name) },
                                 supportingContent = {
@@ -933,42 +1016,25 @@ object FileShareScreen : AppScreenRoute {
                                     }
                                 },
                                 leadingContent = {
-                                    Box(
-                                        modifier = Modifier.padding(16.dp),
-                                        contentAlignment = Alignment.Center
+                                    IconToggleButton(
+                                        checked = isSelected,
+                                        onCheckedChange = { toggleFileSelection(file) }
                                     ) {
-                                        if (!isFileShareReady) {
-                                            FileIcon(file)
-                                            return@Box
-                                        }
-                                        if (!checkedFiles.contains(file)) {
-                                            FileIcon(file)
+                                        if (isSelected) {
+                                            Icon(Icons.Default.CheckBox, contentDescription = null)
                                         } else {
-                                            Checkbox(checkedFiles.contains(file), onCheckedChange = null)
+                                            FileIcon(file)
                                         }
                                     }
                                 },
                                 trailingContent = {
                                     IconButton(
-                                        onClick = {
-                                            fileShareState.files.remove(file)
-                                            fileShareState.checkedFiles.remove(file)
-                                            refreshSelectionState()
-                                        }
+                                        onClick = { requestFileRemoval(listOf(file)) }
                                     ) {
                                         Icon(Icons.Default.Delete, contentDescription = AppStrings.ui_remove_shared_files)
                                     }
                                 },
-                                modifier = Modifier.clickable {
-                                    if (!isFileShareReady) return@clickable
-
-                                    if (checkedFiles.contains(file)) {
-                                        fileShareState.checkedFiles.remove(file)
-                                    } else {
-                                        fileShareState.checkedFiles.add(file)
-                                    }
-                                    refreshSelectionState()
-                                }
+                                modifier = Modifier.clickable { toggleFileSelection(file) }
                             )
                         }
                     }

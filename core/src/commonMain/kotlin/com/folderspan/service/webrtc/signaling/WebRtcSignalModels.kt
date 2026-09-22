@@ -13,7 +13,8 @@ data class SignalingDevice(
     val host: String? = null,
     val port: Int? = null,
     val type: String? = null,
-    val connectType: String? = null
+    val connectType: String? = null,
+    val userUuid: String? = null,
 )
 
 @Serializable
@@ -55,5 +56,8 @@ fun SocketDevice.toSignalingDevice(overriddenId: String? = null): SignalingDevic
 }
 
 fun SignalingDevice.asTargetDevice(): SignalingDevice {
-    return SignalingDevice(id = id)
+    return SignalingDevice(
+        id = id,
+        userUuid = userUuid?.trim()?.takeIf(String::isNotBlank),
+    )
 }

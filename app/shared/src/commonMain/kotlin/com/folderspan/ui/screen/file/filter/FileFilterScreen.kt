@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.data.file.GetFileFilterType
 import com.folderspan.data.file.displayName
 import com.folderspan.extensions.getExtensions
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
 import com.folderspan.ui.components.dialog.TextFieldDialog
@@ -96,7 +97,7 @@ class FileFilterScreen : AppScreenRoute {
                                     .clip(RoundedCornerShape(25.dp))
                                     .clickable {
                                         scope.launch(Dispatchers.Default) {
-                                            when (snackbarHostState.showSnackbar(
+                                            when (snackbarHostState.showLatestSnackbar(
                                                 message = fileFilter.displayName(),
                                                 actionLabel = AppStrings.ui_delete,
                                                 withDismissAction = true,

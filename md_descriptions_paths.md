@@ -3,12 +3,12 @@
 本文件用于汇总仓库中的专项 Markdown 文件及其路径；同步范围排除根目录其他通用文档和 `server/`，`openspec/` 仅登记主规范、活跃变更与已归档变更；描述按“目录名 + 文档内容”生成。
 
 - docs / 跨模块文档分类、主题索引与维护约定：docs/README.md
-- docs/delivery / FolderSpan Android、Desktop（含双架构 Linux 与 Windows ARM64 便携包）、iOS 与 Web Release 打包命令、签名准备及产物位置：docs/delivery/release-packaging.md
+- docs/delivery / FolderSpan Android、Desktop（含双架构 Linux 与 Windows ARM64 便携包）、iOS 与 Web Release 打包命令、体积优化与字体回退、Web 编译内存、签名准备及产物位置：docs/delivery/release-packaging.md
 - docs/delivery / FolderSpan develop 预览与正式 Release 工作流、Android 临时签名 Secrets、多平台产物、版本发布及故障排查：docs/delivery/ci-cd-pipeline.md
 - docs/networking / 网络协议新增/维护需求清单（含 S3 Ktor 实现、iOS/Web 与断点续传）：docs/networking/network-protocol-requirements.md
 - docs/networking / iOS 原生网络依赖（FTP/SFTP/SMB）：docs/networking/ios-native-libs.md
 - docs/networking / Device HTTP 路由客户端 requestId、batchId 请求取消说明（Remote Share 使用 Session，不在此范围）：docs/networking/http-client-request-cancel.md
-- docs/networking / MCP Streamable HTTP 服务（含 Token Scope、本机默认监听与可选局域网、HTTP/HTTPS 端点、工具清单、四数据源跨源操作、4 MiB 范围读取、512 KiB 直接写入/追加、目录创建、乐观并发条件、敏感度标记与安全说明）：docs/networking/mcp-http-server.md
+- docs/networking / MCP Streamable HTTP 服务（含 Token Scope、本机默认监听与可选局域网、HTTP/HTTPS 端点、仅列出和连接已发现设备的工具、四数据源跨源操作、4 MiB 范围读取、512 KiB 直接写入/追加、目录创建、乐观并发条件、敏感度标记与安全说明）：docs/networking/mcp-http-server.md
 - docs/networking / 同账号设备局域网自动连接（含本机默认关闭开关、五分钟可信快照、严格身份字段、显式授权模式、发现/连接签名证明、防重放与临时授权撤销）：docs/networking/account-device-lan-auto-connect.md
 - docs/networking / WebRTC 作为统一 Device Session 字节载体的建连审批、一次性授权、可靠有序通道、背压上限、关闭链路、平台装配及验证说明：docs/networking/device-session-over-webrtc.md
 - docs/networking / 唯一 FSAR2 小文件流格式、codec 能力协商、Session/WebRTC/链接分享映射、设备分享 Session 边界与跨平台回滚说明：docs/networking/fsar-stream-transfer.md
@@ -43,3 +43,6 @@
 - openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-rpc / webrtc-device-rpc 增量规范：openspec/changes/reuse-device-session-over-webrtc/specs/webrtc-device-rpc/spec.md
 - openspec/changes/reuse-device-session-over-webrtc / 实现任务及全平台验证收尾状态：openspec/changes/reuse-device-session-over-webrtc/tasks.md
 - openspec/changes/reuse-device-session-over-webrtc / 真实传输回归矩阵、全平台证据、权限边界及新旧性能对比与取舍：openspec/changes/reuse-device-session-over-webrtc/verification.md
+- openspec/specs/lan-device-beacon / 局域网签名广播、未验证设备展示、手动证书指纹信任确认与连接限制规范：openspec/specs/lan-device-beacon/spec.md
+- openspec/specs/mcp-automation-tools / MCP 书签、收藏、最近记录、任务、已发现设备连接、网络、同步与跨数据源文件自动化工具规范：openspec/specs/mcp-automation-tools/spec.md
+- openspec/specs/mcp-http-server / MCP Streamable HTTP 传输、会话、Bearer Token 权限、TLS、Host/Origin 校验与限流规范：openspec/specs/mcp-http-server/spec.md

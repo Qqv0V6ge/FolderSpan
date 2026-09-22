@@ -130,6 +130,7 @@ internal fun LazyGridScope.NetworkSftpForm(
             value = knownHosts,
             onValueChange = onKnownHostsChange,
             label = { Text(AppStrings.ui_known_hosts_optional) },
+            supportingText = { Text(AppStrings.ui_sftp_known_hosts_help) },
             minLines = 3,
             modifier = Modifier.fillMaxWidth()
         )

@@ -3,34 +3,28 @@ package com.folderspan.service.mcp
 import com.folderspan.data.StatusEnum
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.main.device.DeviceType
-import com.folderspan.service.mcp.automation.ActiveIpv4SubnetProvider
-import com.folderspan.service.mcp.automation.DeviceScanOperationStore
-import com.folderspan.service.mcp.automation.DeviceScanStatus
-import com.folderspan.service.mcp.automation.Ipv4InterfaceSubnet
+import com.folderspan.service.data.ConnectType
+import com.folderspan.service.data.DeviceTransportType
+import com.folderspan.service.data.SocketDevice
+import com.folderspan.service.mcp.auth.McpTokenScope
 import com.folderspan.service.mcp.automation.McpAutomationException
-import com.folderspan.service.mcp.automation.McpDeviceProbe
 import com.folderspan.service.mcp.automation.McpOpaqueCursor
 import com.folderspan.service.mcp.automation.McpTaskFacade
 import com.folderspan.service.mcp.automation.groupOnlineDevices
 import com.folderspan.service.mcp.http.McpAllowedHostProvider
 import com.folderspan.service.mcp.http.McpHttpSecurityPolicy
 import com.folderspan.service.mcp.http.McpHttpSessionStore
-import com.folderspan.service.mcp.tools.McpJsonSchemaValidator
 import com.folderspan.service.mcp.http.buildMcpAdvertisedEndpoints
 import com.folderspan.service.mcp.http.isLoopbackHost
 import com.folderspan.service.mcp.http.mcpAdvertisedHosts
-import com.folderspan.service.data.ConnectType
-import com.folderspan.service.data.DeviceTransportType
-import com.folderspan.service.data.SocketDevice
+import com.folderspan.service.mcp.tools.McpJsonSchemaValidator
+import com.folderspan.service.mcp.tools.McpToolRegistry
 import com.folderspan.ui.state.main.Task
 import com.folderspan.ui.state.main.TaskState
 import com.folderspan.ui.state.main.TaskType
 import com.folderspan.ui.state.main.TestTaskFailureResultStore
 import com.folderspan.ui.state.main.TestTaskRuntimePersistenceStore
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -42,7 +36,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class McpSecurityAndAutomationTest {
     @Test
     fun advertisedEndpointsAreDeduplicatedHttpsFirstAndIpv6Safe() {
@@ -107,34 +100,12 @@ class McpSecurityAndAutomationTest {
     }
 
     @Test
-    fun deviceScanUsesAllActiveSubnetsByDefaultAndHonorsCidrLimit() = runTest {
-        val probed = mutableListOf<String>()
-        val store = DeviceScanOperationStore(
-            scope = this,
-            subnetProvider = ActiveIpv4SubnetProvider {
-                listOf(
-                    Ipv4InterfaceSubnet("10.0.0.1", 30),
-                    Ipv4InterfaceSubnet("192.168.8.1", 30),
-                )
-            },
-            probe = McpDeviceProbe { address, _ ->
-                probed += address
-                address == "10.0.0.2"
-            },
-            dispatcher = StandardTestDispatcher(testScheduler),
-            nowMillis = { 1L },
-        )
+    fun removedDeviceScanCapabilityIsNotAdvertised() {
+        val toolNames = McpToolRegistry().list(McpTokenScope.entries.toSet()).map { tool -> tool.name }
 
-        val started = store.start(subnet = null, port = 12040)
-        advanceUntilIdle()
-        val completed = store.get(started.id)!!
-
-        assertEquals(DeviceScanStatus.Success, completed.status)
-        assertEquals(listOf("10.0.0.2"), completed.discoveredAddresses)
-        assertEquals(setOf("10.0.0.2", "192.168.8.2"), probed.toSet())
-        assertFailsWith<IllegalArgumentException> { store.start("10.0.0.0/19", 12040) }
-        assertFailsWith<IllegalArgumentException> { store.start("10.0.0.0/20", 12040) }
-        assertEquals(1, store.start("10.0.0.0/30", 12040).totalHosts)
+        assertFalse("folderspan_device_scan" in toolNames)
+        assertFalse("folderspan_device_scan_status" in toolNames)
+        assertNull(McpTokenScope.fromValue("devices.scan"))
     }
 
     @Test

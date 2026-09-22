@@ -18,6 +18,7 @@ import com.folderspan.data.StatusEnum
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.device.Device
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.scaffold.AppScaffold
 import com.folderspan.ui.state.file.FileState
@@ -255,7 +256,7 @@ class TransferTestScreen : AppScreenRoute {
                             error.message?.ifBlank { null } ?: AppStrings.ui_test_task_submission_failed
                         }
                         isSubmitting = false
-                        snackbarHostState.showSnackbar(message)
+                        snackbarHostState.showLatestSnackbar(message)
                     }
                 }
             )

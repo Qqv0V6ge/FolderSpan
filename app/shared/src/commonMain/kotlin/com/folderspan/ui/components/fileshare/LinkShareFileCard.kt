@@ -271,7 +271,7 @@ fun FileShareLinkCard(
     modifier: Modifier = Modifier.padding(horizontal = 16.dp),
 ) {
     var showAddress by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(true) }
     var showPasswordAccessClearDialog by remember { mutableStateOf(false) }
     val passwordAccessEnabled = uiState.password.isNotEmpty()
 
@@ -279,14 +279,14 @@ fun FileShareLinkCard(
         Column {
             Row {
                 Box(
-                    Modifier.size(128.dp).clickable(onClick = onOpenQrCode),
+                    Modifier.size(96.dp).clickable(onClick = onOpenQrCode),
                     contentAlignment = Alignment.Center,
                 ) {
                     val imageRequest = uiState.imageRequest
                     if (imageRequest == null) {
                         CircularProgressIndicator()
                     } else {
-                        Image(rememberImagePainter(imageRequest), null, Modifier.size(128.dp))
+                        Image(rememberImagePainter(imageRequest), null, Modifier.fillMaxSize())
                     }
                 }
                 Column(Modifier.weight(1f).padding(16.dp)) {

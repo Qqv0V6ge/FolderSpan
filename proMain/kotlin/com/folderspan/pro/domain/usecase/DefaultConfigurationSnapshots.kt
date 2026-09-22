@@ -271,7 +271,9 @@ class WebRtcRoomsConfigurationSnapshotProvider(
     override suspend fun read(): JsonElement = withContext(Dispatchers.Default) {
         json.encodeToJsonElement(
             WebRtcRoomConfigurationSnapshot(
-                rooms = database.webRtcRoomQueries.selectAll().executeAsListAwait().map { item ->
+                rooms = database.webRtcRoomQueries.selectAll().executeAsListAwait()
+                    .filter { item -> item.source != com.folderspan.data.main.webrtc.WebRtcRoomSource.Official.name }
+                    .map { item ->
                     WebRtcRoomSnapshotItem(
                         name = item.name,
                         wssUrl = item.wssUrl,
@@ -298,7 +300,9 @@ class WebRtcRoomsConfigurationSnapshotProvider(
                 database.webRtcRoomQueries.selectAll().executeAsList().forEach { item ->
                     database.webRtcRoomQueries.deleteById(item.id)
                 }
-                snapshot.rooms.forEachIndexed { index, item ->
+                snapshot.rooms
+                    .filter { item -> item.source != com.folderspan.data.main.webrtc.WebRtcRoomSource.Official }
+                    .forEachIndexed { index, item ->
                     database.webRtcRoomQueries.insert(
                         name = item.name,
                         wssUrl = item.wssUrl,

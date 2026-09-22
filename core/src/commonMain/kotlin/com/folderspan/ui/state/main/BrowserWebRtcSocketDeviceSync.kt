@@ -1,6 +1,7 @@
 package com.folderspan.ui.state.main
 
 import com.folderspan.service.data.ConnectType
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
 
@@ -28,6 +29,11 @@ internal fun upsertDiscoveredSocketDevice(
         socketDevices.add(storedDevice)
     } else {
         val existing = socketDevices[index]
+        if (storedDevice.discoveryStatus == DeviceDiscoveryStatus.Unverified &&
+            (existing.discoveryStatus == DeviceDiscoveryStatus.Verified ||
+                existing.discoveryStatus == DeviceDiscoveryStatus.Trusted ||
+                existing.hasActiveConnection() || existing.connectType == ConnectType.Loading)
+        ) return existing
         val keepConnectionState =
             !browserWebRtcTransport &&
                 existing.transportType == DeviceTransportType.Session &&
@@ -46,6 +52,7 @@ internal fun upsertDiscoveredSocketDevice(
             port = if (keepConnectionState) existing.port else storedDevice.port,
             httpsPort = if (keepConnectionState) existing.httpsPort else storedDevice.httpsPort,
             tlsFingerprintSha256 = if (keepConnectionState) existing.tlsFingerprintSha256 else storedDevice.tlsFingerprintSha256,
+            discoveryStatus = if (keepConnectionState) existing.discoveryStatus else storedDevice.discoveryStatus,
             httpClient = if (keepConnectionState) existing.httpClient else null,
             sessionClient = if (keepConnectionState) existing.sessionClient else null,
         )

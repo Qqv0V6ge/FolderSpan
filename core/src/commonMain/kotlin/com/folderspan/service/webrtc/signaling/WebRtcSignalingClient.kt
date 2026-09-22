@@ -1,8 +1,9 @@
 package com.folderspan.service.webrtc.signaling
 
-import com.folderspan.service.http.client.createNoProxyHttpClient
+import com.folderspan.service.http.client.applyConfiguredHttpProxy
 import com.folderspan.service.webrtc.WebRtcRoomConnectionProbeClient
 import com.folderspan.utils.LogKit
+import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.websocket.*
@@ -23,7 +24,10 @@ class WebRtcSignalingClient(
     private val headers: Map<String, String> = emptyMap()
 ) : WebRtcRoomConnectionProbeClient {
     private val json = Json { ignoreUnknownKeys = true }
-    private val client = createNoProxyHttpClient { install(WebSockets) }
+    private val client = HttpClient {
+        applyConfiguredHttpProxy()
+        install(WebSockets)
+    }
     private val outgoing = Channel<String>(Channel.BUFFERED)
     private val outgoingReceiver: ReceiveChannel<String> = outgoing
     private val _messages = MutableSharedFlow<SignalingMessage>(extraBufferCapacity = 64)
@@ -119,6 +123,11 @@ class WebRtcSignalingClient(
             "candidate(mid=${it.sdpMid}, index=${it.sdpMLineIndex}, len=${it.candidate.length})"
         } ?: "candidate=-"
         val peersCount = message.peers?.size ?: 0
-        return "type=${message.type} room=$room from=$fromId to=$toId sdpLen=$sdpLen peers=$peersCount $candidate"
+        val error = buildList {
+            message.code?.takeIf(String::isNotBlank)?.let { add("code=$it") }
+            message.errorMessage?.takeIf(String::isNotBlank)?.let { add("message=$it") }
+        }.joinToString(" ")
+        val errorPart = if (error.isBlank()) "" else " $error"
+        return "type=${message.type} room=$room from=$fromId to=$toId sdpLen=$sdpLen peers=$peersCount $candidate$errorPart"
     }
 }

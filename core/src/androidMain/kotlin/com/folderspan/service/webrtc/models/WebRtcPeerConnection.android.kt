@@ -54,6 +54,7 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
             override fun onRenegotiationNeeded() = Unit
 
             override fun onIceCandidate(candidate: IceCandidate) {
+                configureWebRtcUdpSocketBuffers(candidate.sdp)
                 if (!closed.get() && !candidates.trySend(WebRtcIceCandidate(candidate.sdpMid.orEmpty(), candidate.sdpMLineIndex, candidate.sdp)).isSuccess) close()
             }
 
@@ -180,6 +181,12 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     }
 
     private companion object {
-        val factory by lazy { WebRtc.createPeerConnectionFactoryBuilder().createPeerConnectionFactory() }
+        val factory by lazy {
+            WebRtc.createPeerConnectionFactoryBuilder(
+                // ICE applies this to its own sockets, including sockets created after an ICE restart.
+                initializationOptionsBuilder = WebRtc.createInitializationOptionsBuilder()
+                    .setFieldTrials("WebRTC-SetSocketReceiveBuffer/Enabled-4096/"),
+            ).createPeerConnectionFactory()
+        }
     }
 }

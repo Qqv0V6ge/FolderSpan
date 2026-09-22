@@ -242,9 +242,6 @@ fun FileShareHistoryDetailDialog(
             TextButton(onClick = onDismiss) {
                 Text(AppStrings.ui_close)
             }
-            Button(onClick = onDismiss) {
-                Text(AppStrings.ui_jump)
-            }
         }
     )
 }

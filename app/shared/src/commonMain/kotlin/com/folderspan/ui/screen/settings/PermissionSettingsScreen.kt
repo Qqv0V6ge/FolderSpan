@@ -15,6 +15,7 @@ import com.folderspan.permission.PermissionIds
 import com.folderspan.permission.PermissionStatus
 import com.folderspan.permission.PlatformPermission
 import com.folderspan.permission.PlatformPermissionProvider
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.scaffold.AppScaffold
 import com.folderspan.ui.effects.OnAppResumeEffect
@@ -83,7 +84,7 @@ class PermissionSettingsScreen : AppScreenRoute {
                                 statusMap[permission.id] = result
                                 permissionRequestMessage(permission, result)?.let { message ->
                                     scope.launch {
-                                        snackbarHostState.showSnackbar(message)
+                                        snackbarHostState.showLatestSnackbar(message)
                                     }
                                 }
                             }

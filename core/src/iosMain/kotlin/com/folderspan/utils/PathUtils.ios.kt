@@ -149,15 +149,15 @@ actual object PathUtils {
         val trimmed = path.trim()
         if (trimmed.isEmpty() || trimmed == OPEN_IN_PLACE_ROOT) return null
         return IosSecurityScopeStore.withSecurityScopeIfNeeded(trimmed) {
-            val nsPath = trimmed as NSString
+            val nsPath = NSString.create(string = trimmed)
             if (!fileManager.fileExistsAtPath(trimmed)) {
                 if (!allowNonExistentLeaf) return@withSecurityScopeIfNeeded null
                 val parent = nsPath.stringByDeletingLastPathComponent
                 if (parent.isEmpty() || !fileManager.fileExistsAtPath(parent)) {
                     return@withSecurityScopeIfNeeded null
                 }
-                val realParent = (parent as NSString).stringByResolvingSymlinksInPath
-                (realParent as NSString).stringByAppendingPathComponent(nsPath.lastPathComponent)
+                val realParent = NSString.create(string = parent).stringByResolvingSymlinksInPath
+                NSString.create(string = realParent).stringByAppendingPathComponent(nsPath.lastPathComponent)
             } else {
                 nsPath.stringByResolvingSymlinksInPath
             }

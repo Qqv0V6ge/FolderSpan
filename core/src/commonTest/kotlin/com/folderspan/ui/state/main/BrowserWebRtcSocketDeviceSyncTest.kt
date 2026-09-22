@@ -2,6 +2,7 @@ package com.folderspan.ui.state.main
 
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.data.ConnectType
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.session.DeviceSessionClientManager
@@ -10,6 +11,26 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BrowserWebRtcSocketDeviceSyncTest {
+    @Test
+    fun unverifiedBeaconIsVisibleButCannotReplaceVerifiedOrPendingIdentity() {
+        val incoming = SocketDevice(
+            id = "peer", name = "Unverified", pathSeparator = "/", host = "10.0.0.122",
+            type = DeviceType.IOS, discoveryStatus = DeviceDiscoveryStatus.Unverified,
+        )
+        val devices = mutableListOf<SocketDevice>()
+        upsertDiscoveredSocketDevice(devices, incoming, false)
+        assertEquals(incoming, devices.single())
+        listOf(
+            incoming.withCopy(name = "Verified", discoveryStatus = DeviceDiscoveryStatus.Verified),
+            incoming.withCopy(name = "Trusted", discoveryStatus = DeviceDiscoveryStatus.Trusted),
+            incoming.withCopy(name = "Pending", connectType = ConnectType.Loading),
+        ).forEach { existing ->
+            devices[0] = existing
+            upsertDiscoveredSocketDevice(devices, incoming.withCopy(host = "10.0.0.99"), false)
+            assertEquals(existing, devices.single())
+        }
+    }
+
     @Test
     fun browserDiscoveredHttpDeviceIsStoredAsWebRtcOnly() {
         val devices = mutableListOf<SocketDevice>()

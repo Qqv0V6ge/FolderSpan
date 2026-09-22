@@ -39,7 +39,7 @@ The server SHALL accept MCP protocol versions `2025-06-18` and `2025-11-25`, SHA
 - **THEN** the server returns the applicable JSON-RPC error without invoking business logic
 
 ### Requirement: Bearer Token authentication and scopes
-Every MCP request SHALL require `Authorization: Bearer <token>`. Tokens SHALL use a lookup identifier plus a 256-bit random secret, SHALL persist only a SHA-256 hash of the secret, and SHALL be compared in constant time. Each Token SHALL have a name, enabled state, created time, last-used time, and a selectable set of scopes. The supported scopes SHALL be `bookmarks.read`, `bookmarks.write`, `favorites.read`, `favorites.write`, `recents.read`, `recents.write`, `tasks.read`, `tasks.control`, `devices.read`, `devices.scan`, `devices.connect`, `networks.read`, `networks.connect`, `sync.read`, `sync.run`, `files.read`, `files.write`, and `files.share`.
+Every MCP request SHALL require `Authorization: Bearer <token>`. Tokens SHALL use a lookup identifier plus a 256-bit random secret, SHALL persist only a SHA-256 hash of the secret, and SHALL be compared in constant time. Each Token SHALL have a name, enabled state, created time, last-used time, and a selectable set of scopes. The supported scopes SHALL be `bookmarks.read`, `bookmarks.write`, `favorites.read`, `favorites.write`, `recents.read`, `recents.write`, `tasks.read`, `tasks.control`, `devices.read`, `devices.connect`, `networks.read`, `networks.connect`, `sync.read`, `sync.run`, `files.read`, `files.write`, and `files.share`.
 
 #### Scenario: Missing or invalid Token
 - **WHEN** a request omits the Bearer Token, supplies an unknown Token, or supplies a disabled Token

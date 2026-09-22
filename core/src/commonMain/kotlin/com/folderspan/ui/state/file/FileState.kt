@@ -5,6 +5,7 @@ import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
+import com.folderspan.data.file.ShareHistoryStore
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
@@ -53,6 +54,7 @@ class FileState : KoinComponent {
     val fileBookmarkState: FileBookmarkState by inject()
     val fileFavoriteState: FileFavoriteState by inject()
     private val fileRecentState: FileRecentState by inject()
+    private val shareHistoryStore: ShareHistoryStore by inject()
     val deviceState: DeviceState by inject()
     private val networkState: NetworkState by inject()
     private val mainState: MainState by inject()
@@ -551,7 +553,20 @@ class FileState : KoinComponent {
         task: Task,
         src: FileSimpleInfo,
         dest: FileSimpleInfo,
-    ): Result<Boolean> = runtimeTaskExecutor.executeCopyTask(task, src, dest)
+    ): Result<Boolean> {
+        val result = runtimeTaskExecutor.executeCopyTask(task, src, dest)
+        buildIncomingShareHistoryInput(
+            source = src,
+            destination = dest,
+            sourceShare = deviceState.shares.firstOrNull { share -> share.id == src.protocolId },
+            result = result,
+        )?.let { input ->
+            withContext(Dispatchers.Default) {
+                shareHistoryStore.add(input)
+            }
+        }
+        return result
+    }
 
     internal suspend fun executeMoveTask(
         task: Task,

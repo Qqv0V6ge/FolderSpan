@@ -37,8 +37,9 @@ class ClipboardUrlDownloadTaskDataTest : ChineseLocalizationTest() {
         val finishDownload = CompletableDeferred<Unit>()
         val tasks = TaskState(
             runtimeStore = object : TaskRuntimePersistenceStore by TempTaskRuntimePersistenceStore() {
-                // 只观察本测试创建的任务，不恢复其他测试保留的任务快照。
                 override fun loadTaskSnapshots(): List<Task> = emptyList()
+                override fun saveTaskSnapshot(task: Task) = Unit
+                override fun deleteTaskSnapshot(taskKey: Long) = Unit
             },
         )
         val coordinator = ClipboardUrlDownloadCoordinator(

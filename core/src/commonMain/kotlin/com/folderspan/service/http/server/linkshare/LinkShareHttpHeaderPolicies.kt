@@ -48,7 +48,7 @@ object LinkShareHttpHeaderPolicies {
             ),
             LinkShareHttpHeader("X-Content-Type-Options", "nosniff"),
             LinkShareHttpHeader("X-Frame-Options", if (isStreamSaverMitm) "SAMEORIGIN" else "DENY"),
-            LinkShareHttpHeader("Referrer-Policy", "no-referrer"),
+            LinkShareHttpHeader("Referrer-Policy", "same-origin"),
             LinkShareHttpHeader(
                 "Permissions-Policy",
                 "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()",

@@ -1086,6 +1086,15 @@ class MultiPeerWebRtcController(
     }
 
     private suspend fun sendSignaling(message: SignalingMessage) {
+        if (
+            message.type in directedSignalingTypes &&
+            currentConfig?.headers?.isNotEmpty() == true &&
+            message.to?.userUuid.isNullOrBlank()
+        ) {
+            LogKit.w("Official WebRTC signaling skipped: type=${message.type} to=${message.to?.id} missing userUuid")
+            _lastError.value = AppStrings.ui_cannot_connect_webrtc_device_rejoin_room
+            return
+        }
         runCatching {
             val client = signalingClient ?: error(AppStrings.webrtc_signaling_not_connected)
             client.send(message)
@@ -1188,6 +1197,7 @@ class MultiPeerWebRtcController(
             port = incoming.port ?: current.port,
             type = incoming.type?.takeIf(String::isNotBlank) ?: current.type,
             connectType = incoming.connectType?.takeIf(String::isNotBlank) ?: current.connectType,
+            userUuid = incoming.userUuid?.trim()?.takeIf(String::isNotBlank) ?: current.userUuid,
         )
     }
 
@@ -1206,4 +1216,15 @@ class MultiPeerWebRtcController(
     }
 
     private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+    private companion object {
+        val directedSignalingTypes = setOf(
+            "connect-request",
+            "connect-approved",
+            "connect-rejected",
+            "offer",
+            "answer",
+            "ice",
+        )
+    }
 }

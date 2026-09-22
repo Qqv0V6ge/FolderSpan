@@ -158,6 +158,7 @@ import com.folderspan.editor.EditorStatisticsScope
 import com.folderspan.editor.editorFileInformation
 import com.folderspan.editor.FileEditorDocument
 import com.folderspan.editor.FileEditorDocumentState
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.components.dialog.EditorDialog
 import com.folderspan.ui.components.dialog.EditorDialogAction
@@ -861,7 +862,7 @@ private fun FileEditorDocumentScreen(
             savePreview = null
             document.save(forceOverwriteConfirmed)
                 .onSuccess {
-                    snackbarHostState.showSnackbar(AppStrings.ui_file_saved)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_file_saved)
                     saveSuccessAction?.invoke()
                     saveSuccessAction = null
                 }
@@ -878,7 +879,7 @@ private fun FileEditorDocumentScreen(
             if (preview != null) {
                 savePreview = preview
             } else if (!state.dirty) {
-                snackbarHostState.showSnackbar(AppStrings.ui_there_currently_no_pending_changes_save)
+                snackbarHostState.showLatestSnackbar(AppStrings.ui_there_currently_no_pending_changes_save)
             } else {
                 localError = result.exceptionOrNull()?.message ?: AppStrings.ui_unable_generate_save_preview
             }
@@ -949,7 +950,7 @@ private fun FileEditorDocumentScreen(
                                     localError = null
                                     document.goToPage(pageIndex)
                                         .onSuccess {
-                                            snackbarHostState.showSnackbar(AppStrings.ui_jumped_page_arg0.format(arg0 = (pageIndex + 1L).toString()))
+                                            snackbarHostState.showLatestSnackbar(AppStrings.ui_jumped_page_arg0.format(arg0 = (pageIndex + 1L).toString()))
                                         }
                                         .also(::reportFailure)
                                 }
@@ -959,7 +960,7 @@ private fun FileEditorDocumentScreen(
                                     localError = null
                                     document.goToLine(lineNumber)
                                         .onSuccess {
-                                            snackbarHostState.showSnackbar(AppStrings.ui_jumped_line_arg0.format(arg0 = (lineNumber).toString()))
+                                            snackbarHostState.showLatestSnackbar(AppStrings.ui_jumped_line_arg0.format(arg0 = (lineNumber).toString()))
                                         }
                                         .also(::reportFailure)
                                 }
@@ -969,7 +970,7 @@ private fun FileEditorDocumentScreen(
                                     localError = null
                                     document.goToByteOffset(offset)
                                         .onSuccess {
-                                            snackbarHostState.showSnackbar(AppStrings.ui_jumped_byte_offset_arg0.format(arg0 = (offset).toString()))
+                                            snackbarHostState.showLatestSnackbar(AppStrings.ui_jumped_byte_offset_arg0.format(arg0 = (offset).toString()))
                                         }
                                         .also(::reportFailure)
                                 }
@@ -979,7 +980,7 @@ private fun FileEditorDocumentScreen(
                                     localError = null
                                     document.goToPercentage(percentage)
                                         .onSuccess {
-                                            snackbarHostState.showSnackbar(AppStrings.ui_jumped_arg0.format(arg0 = (percentage).toString()))
+                                            snackbarHostState.showLatestSnackbar(AppStrings.ui_jumped_arg0.format(arg0 = (percentage).toString()))
                                         }
                                         .also(::reportFailure)
                                 }
@@ -1034,7 +1035,7 @@ private fun FileEditorDocumentScreen(
                     scope.launch {
                         localError = null
                         document.clearSearchHistory()
-                            .onSuccess { snackbarHostState.showSnackbar(AppStrings.ui_recent_searches_cleared) }
+                            .onSuccess { snackbarHostState.showLatestSnackbar(AppStrings.ui_recent_searches_cleared) }
                             .also(::reportFailure)
                     }
                 },
@@ -1049,7 +1050,7 @@ private fun FileEditorDocumentScreen(
                         localError = null
                         document.replaceCurrent(request, result)
                             .onSuccess { summary ->
-                                snackbarHostState.showSnackbar(AppStrings.ui_arg0_items_replaced.format(arg0 = (summary.replacedCount).toString()))
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_items_replaced.format(arg0 = (summary.replacedCount).toString()))
                             }
                             .onFailure { localError = it.message ?: AppStrings.ui_replacement_failed }
                     }
@@ -1062,7 +1063,7 @@ private fun FileEditorDocumentScreen(
                                 val skipped = summary.skippedOverlappingCount.takeIf { it > 0 }
                                     ?.let { AppStrings.ui_skipping_arg0_overlapping_items.format(arg0 = (it).toString()) }
                                     .orEmpty()
-                                snackbarHostState.showSnackbar(
+                                snackbarHostState.showLatestSnackbar(
                                     AppStrings.ui_arg0_item_arg1_replaced.format(arg0 = (summary.replacedCount).toString(), arg1 = skipped)
                                 )
                             }

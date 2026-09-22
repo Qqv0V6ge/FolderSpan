@@ -76,7 +76,7 @@ private fun handleIosDocumentOpenSources(
                 IosSecurityScopeStore.register(source.url)
                 source.path to FileUtils.getFile(FileAccessPermission.Allowed, source.path)
                     .onFailure { error ->
-                        LogKit.e(AppStrings.ui_ios_external_file_reading_failed_type_arg0.format(arg0 = (error::class.simpleName.orEmpty()).toString()))
+                        LogKit.e(AppStrings.ui_ios_external_file_reading_failed_type_arg0.format(arg0 = error::class.simpleName.orEmpty()))
                     }
                     .getOrNull()
                     ?.withCopy(

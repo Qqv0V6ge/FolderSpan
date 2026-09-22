@@ -8,11 +8,10 @@ CREATE TABLE DeviceRole (
 CREATE UNIQUE INDEX DeviceRole_id_uindex
     ON DeviceRole (id);
 
--- Insert a new role
--- Insert predefined roles
+-- 内置文案保存稳定标识，由 DevicePresetStrings 按当前语言显示。
 INSERT INTO DeviceRole (id, name, comment, sortOrder) VALUES
-    (1, '超级管理员', '设置后设备将有所有权限，不建议使用到陌生设备', 999),
-    (2, '游客', '该角色可以设置任意的设备', 1);
+    (1, '@device_role_admin_name', '@device_role_admin_comment', 999),
+    (2, '@device_role_guest_name', '@device_role_guest_comment', 1);
 
 lastInsertRowId:
 SELECT last_insert_rowid();

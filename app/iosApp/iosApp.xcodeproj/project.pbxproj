@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A20000000000000000000001 /* ExternalTextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003; };
-		A20000000000000000000002 /* ExternalTextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003; };
-		A1000000000000000000000B /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1000000000000000000000B /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A20000000000000000000001 /* Shared/ExternalTextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* Shared/ExternalTextProvider.swift */; };
+		A20000000000000000000002 /* Shared/ExternalTextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* Shared/ExternalTextProvider.swift */; };
 		D5913594B93B3335B2699EB8 /* Pods_iosApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 220D4018A5B47037E7C2AA99 /* Pods_iosApp.framework */; };
 /* End PBXBuildFile section */
 
@@ -24,41 +24,39 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		A1000000000000000000000C /* Embed App Extensions */ = {
+		A1000000000000000000000C /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				A1000000000000000000000B /* ShareExtension.appex in Embed App Extensions */,
+				A1000000000000000000000B /* ShareExtension.appex in Embed Foundation Extensions */,
 			);
-			name = "Embed App Extensions";
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A20000000000000000000003 /* ExternalTextProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/ExternalTextProvider.swift; sourceTree = SOURCE_ROOT; };
 		08861047BCC92BFE869F50C9 /* FolderSpan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FolderSpan.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		220D4018A5B47037E7C2AA99 /* Pods_iosApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iosApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000003 /* Shared/ExternalTextProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/ExternalTextProvider.swift; sourceTree = SOURCE_ROOT; };
 		C0AFCF229B05EF23D29120CC /* Pods-iosApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.debug.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.debug.xcconfig"; sourceTree = "<group>"; };
 		CE0AF838DCD7F468735BD1EA /* Pods-iosApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.release.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		13591EAAA0238E1E07F66072 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		13591EAAA0238E1E07F66072 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				FolderSpan.entitlements,
 				Info.plist,
 			);
 			target = 75ADD0E1F7E7FC233229F983 /* iosApp */;
 		};
-		A10000000000000000000003 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		A10000000000000000000003 /* Exceptions for "ShareExtension" folder in "ShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				FolderSpanShare.entitlements,
 				Info.plist,
 			);
 			target = A10000000000000000000007 /* ShareExtension */;
@@ -68,23 +66,13 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A0855094FB12A87F6B8C6B99 /* Configuration */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Configuration;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000002 /* ShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A10000000000000000000003 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
+				A10000000000000000000003 /* Exceptions for "ShareExtension" folder in "ShareExtension" target */,
 			);
 			path = ShareExtension;
 			sourceTree = "<group>";
@@ -92,11 +80,7 @@
 		A37A75EC439FEB26F7DDE57A /* iosApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				13591EAAA0238E1E07F66072 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
+				13591EAAA0238E1E07F66072 /* Exceptions for "iosApp" folder in "iosApp" target */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -128,7 +112,6 @@
 				C0AFCF229B05EF23D29120CC /* Pods-iosApp.debug.xcconfig */,
 				CE0AF838DCD7F468735BD1EA /* Pods-iosApp.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -147,7 +130,7 @@
 				A0855094FB12A87F6B8C6B99 /* Configuration */,
 				A37A75EC439FEB26F7DDE57A /* iosApp */,
 				A10000000000000000000002 /* ShareExtension */,
-				A20000000000000000000003 /* ExternalTextProvider.swift */,
+				A20000000000000000000003 /* Shared/ExternalTextProvider.swift */,
 				49B1C8E4624264BE7AD43E2F /* Products */,
 				412AE692AE2C9501E8FF53C6 /* Pods */,
 				C9F37871B51B608F856EE6BF /* Frameworks */,
@@ -174,7 +157,7 @@
 				B46369FF0BBE13C795E7EEC0 /* Sources */,
 				B9BEABDD1415DF068E2BC9B6 /* Frameworks */,
 				CEC32647756E5C55CE93803D /* Resources */,
-				A1000000000000000000000C /* Embed App Extensions */,
+				A1000000000000000000000C /* Embed Foundation Extensions */,
 				7D95D2FEF0744BB94C2D6A9D /* Embed WebRTC Framework */,
 				9222CF297F31489E0B605ED1 /* [CP] Embed Pods Frameworks */,
 			);
@@ -205,7 +188,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A10000000000000000000002 /* ShareExtension */,
-				A20000000000000000000003 /* ExternalTextProvider.swift */,
+				A20000000000000000000003 /* Shared/ExternalTextProvider.swift */,
 			);
 			name = ShareExtension;
 			productName = ShareExtension;
@@ -220,7 +203,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					75ADD0E1F7E7FC233229F983 = {
 						CreatedOnToolsVersion = 16.2;
@@ -236,6 +219,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = 6350E2C0475992FD6D780431;
 			minimizedProjectReferenceProxies = 1;
@@ -295,7 +279,11 @@
 			buildActionMask = 2147483647;
 			files = (
 			);
+			inputPaths = (
+			);
 			name = "Embed WebRTC Framework";
+			outputPaths = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\n\nif [ -z \"${FRAMEWORKS_FOLDER_PATH+x}\" ]; then\n  exit 0\nfi\n\nPODS_ROOT_DIR=\"${PODS_ROOT:-${SRCROOT}/Pods}\"\nXCFRAMEWORK_ROOT=\"${PODS_ROOT_DIR}/WebRTC-SDK/WebRTC.xcframework\"\n\ncase \"${PLATFORM_NAME:-}\" in\n  iphonesimulator)\n    SLICE=\"ios-arm64_x86_64-simulator\"\n    ;;\n  iphoneos)\n    SLICE=\"ios-arm64\"\n    ;;\n  *)\n    echo \"Skipping WebRTC embed for platform ${PLATFORM_NAME:-unknown}\"\n    exit 0\n    ;;\n esac\n\nSRC_FRAMEWORK=\"${XCFRAMEWORK_ROOT}/${SLICE}/WebRTC.framework\"\nDEST_DIR=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n\nif [ ! -d \"${SRC_FRAMEWORK}\" ]; then\n  echo \"warning: WebRTC.framework not found at ${SRC_FRAMEWORK}\"\n  exit 0\nfi\n\nmkdir -p \"${DEST_DIR}\"\nrsync --delete -av \"${SRC_FRAMEWORK}\" \"${DEST_DIR}/\"\n\nif [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ] && [ \"${CODE_SIGNING_REQUIRED:-}\" != \"NO\" ] && [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ]; then\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" ${OTHER_CODE_SIGN_FLAGS:-} --preserve-metadata=identifier,entitlements \"${DEST_DIR}/WebRTC.framework\"\nfi\n";
@@ -309,9 +297,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-iosApp/Pods-iosApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-iosApp/Pods-iosApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -344,7 +336,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A20000000000000000000001 /* ExternalTextProvider.swift in Sources */,
+				A20000000000000000000001 /* Shared/ExternalTextProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -352,7 +344,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A20000000000000000000002 /* ExternalTextProvider.swift in Sources */,
+				A20000000000000000000002 /* Shared/ExternalTextProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,7 +363,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CE0AF838DCD7F468735BD1EA /* Pods-iosApp.release.xcconfig */;
 			buildSettings = {
-				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = iosApp/FolderSpan.entitlements;
@@ -389,7 +380,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -430,7 +421,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/FolderSpanShare.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -438,7 +428,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -458,7 +448,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/FolderSpanShare.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -466,7 +455,7 @@
 				DEVELOPMENT_TEAM = "${TEAM_ID}";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -489,6 +478,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -535,6 +525,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -544,7 +535,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = C0AFCF229B05EF23D29120CC /* Pods-iosApp.debug.xcconfig */;
 			buildSettings = {
-				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = iosApp/FolderSpan.entitlements;
@@ -562,7 +552,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -606,6 +596,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -659,6 +650,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};

@@ -31,6 +31,7 @@ import com.folderspan.data.main.DiskMenuPermission
 import com.folderspan.extensions.fileOperationKey
 import com.folderspan.extensions.getFilterByExtension
 import com.folderspan.extensions.parsePath
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.appbar.AppBarPathContainer
 import com.folderspan.ui.components.dialog.*
 import com.folderspan.ui.components.file.FileIcon
@@ -107,7 +108,7 @@ object HomeScreen : AppScreenRoute {
         )
         LaunchedEffect(snackbarHostState) {
             ClipboardFilePasteFeedbackBus.events.collect { result ->
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showLatestSnackbar(
                     message = clipboardFilePasteFeedbackMessage(result),
                     withDismissAction = true,
                     duration = SnackbarDuration.Short,
@@ -162,7 +163,7 @@ object HomeScreen : AppScreenRoute {
                                         fileState.updateFileAndFolder()
                                     }
                                     .onFailure { throwable ->
-                                        snackbarHostState.showSnackbar(
+                                        snackbarHostState.showLatestSnackbar(
                                             message = throwable.message ?: AppStrings.ui_creation_failed,
                                             withDismissAction = true,
                                             duration = SnackbarDuration.Short
@@ -176,7 +177,7 @@ object HomeScreen : AppScreenRoute {
                                         fileState.updateFileAndFolder()
                                     }
                                     .onFailure { throwable ->
-                                        snackbarHostState.showSnackbar(
+                                        snackbarHostState.showLatestSnackbar(
                                             message = throwable.message ?: AppStrings.ui_creation_failed,
                                             withDismissAction = true,
                                             duration = SnackbarDuration.Short
@@ -513,7 +514,7 @@ object HomeScreen : AppScreenRoute {
                         }
 
                         scope.launch(Dispatchers.Default) {
-                            when (snackbarHostState.showSnackbar(
+                            when (snackbarHostState.showLatestSnackbar(
                                 message = AppStrings.ui_you_sure_you_want_delete_selected_files_folders,
                                 actionLabel = AppStrings.ui_delete,
                                 withDismissAction = true,

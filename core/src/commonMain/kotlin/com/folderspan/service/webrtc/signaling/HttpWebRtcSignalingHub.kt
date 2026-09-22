@@ -351,7 +351,8 @@ class HttpWebRtcSignalingHub {
             pathSeparator = pathSeparator?.trim(),
             host = host?.trim(),
             type = type?.trim(),
-            connectType = connectType?.trim()
+            connectType = connectType?.trim(),
+            userUuid = userUuid?.trim(),
         )
     }
 
@@ -361,7 +362,8 @@ class HttpWebRtcSignalingHub {
             pathSeparator.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH &&
             host.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH &&
             type.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH &&
-            connectType.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH
+            connectType.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH &&
+            userUuid.orEmpty().length <= MAX_DEVICE_FIELD_LENGTH
     }
 
     private fun SignalingMessage.isWithinLimits(): Boolean {

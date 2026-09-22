@@ -84,6 +84,34 @@ class DevicePathServiceTest {
     }
 
     @Test
+    fun deviceShareScopeAllowsAndroidContentUriGrantsWithoutCanonicalFilesystemPath() = runBlocking {
+        val database = createInMemoryDatabase()
+        val certificateState = DeviceCertificateState(database)
+        val token = "share-content-uri-token"
+        val uri = "content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fphoto.jpg"
+        certificateState.setTokenPermission(token, 1L)
+        certificateState.setDeviceSharePathScope(
+            token,
+            DeviceSharePathScope(
+                listOf(DeviceSharePathGrant(uri, isDirectory = false)),
+            ),
+        )
+
+        val denied = certificateState.checkPermission(
+            FileAccessPermission.Allowed,
+            token = token,
+            path = uri,
+            permission = "read",
+        )
+
+        assertFalse(denied)
+        assertEquals(
+            uri,
+            certificateState.deviceShareRootPaths(token)?.single(),
+        )
+    }
+
+    @Test
     fun deviceShareScopeRejectsListingThroughIntermediateSymbolicLink() = runBlocking {
         val database = createInMemoryDatabase()
         val certificateState = DeviceCertificateState(database)

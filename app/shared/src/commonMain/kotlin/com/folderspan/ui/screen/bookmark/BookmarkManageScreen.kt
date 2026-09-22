@@ -18,8 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
+import com.folderspan.ui.components.confirmSnackbarAction
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.bookmark.BookmarkListItem
-import com.folderspan.ui.components.dialog.BookmarkBatchDeleteDialog
 import com.folderspan.ui.components.dialog.BookmarkEditorDialog
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.grid.GridListFabPadding
@@ -57,7 +58,6 @@ class BookmarkManageScreen : AppScreenRoute {
         var searchDraft by rememberSaveable { mutableStateOf("") }
         var selectedType by rememberSaveable { mutableStateOf<DrawerBookmarkType?>(null) }
         var showFilters by rememberSaveable { mutableStateOf(false) }
-        var showBatchDeleteDialog by remember { mutableStateOf(false) }
         var isSelectionMode by remember { mutableStateOf(false) }
         val selectedIds = remember { mutableStateListOf<Long>() }
 
@@ -222,7 +222,7 @@ class BookmarkManageScreen : AppScreenRoute {
                                         }
                                         .onFailure {
                                             withContext(Dispatchers.Main) {
-                                                snackbarHostState.showSnackbar(
+                                                snackbarHostState.showLatestSnackbar(
                                                     message = AppStrings.ui_failed_save_sort,
                                                 )
                                             }
@@ -242,7 +242,41 @@ class BookmarkManageScreen : AppScreenRoute {
 
                     isSelectionMode && selectedIds.isNotEmpty() -> {
                         ExtendedFloatingActionButton(
-                            onClick = { showBatchDeleteDialog = true },
+                            onClick = {
+                                val idsToDelete = selectedIds.toList()
+                                scope.launch(Dispatchers.Default) {
+                                    snackbarHostState.confirmSnackbarAction(
+                                        message = AppStrings.ui_you_sure_you_want_delete_selected_arg0_bookmarks.format(
+                                            arg0 = idsToDelete.size.toString(),
+                                        ),
+                                        actionLabel = AppStrings.ui_delete,
+                                    ) {
+                                        var failure: Throwable? = null
+                                        idsToDelete.forEach { id ->
+                                            val deleteResult = bookmarkState.delete(id)
+                                            if (deleteResult.isFailure && failure == null) {
+                                                failure = deleteResult.exceptionOrNull()
+                                            }
+                                        }
+                                        bookmarkState.load()
+                                        withContext(Dispatchers.Main) {
+                                            if (failure == null) {
+                                                selectedIds.clear()
+                                                isSelectionMode = false
+                                                snackbarHostState.showLatestSnackbar(
+                                                    AppStrings.ui_arg0_bookmarks_deleted.format(
+                                                        arg0 = idsToDelete.size.toString(),
+                                                    ),
+                                                )
+                                            } else {
+                                                snackbarHostState.showLatestSnackbar(
+                                                    failure.message ?: AppStrings.ui_delete_failed,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
                             icon = {
@@ -328,7 +362,7 @@ class BookmarkManageScreen : AppScreenRoute {
                                     }
                                     IconButton(onClick = {
                                         scope.launch(Dispatchers.Default) {
-                                            val result = snackbarHostState.showSnackbar(
+                                            val result = snackbarHostState.showLatestSnackbar(
                                                 message = AppStrings.dialog_delete_bookmark.format(
                                                     bookmarkName = bookmark.name,
                                                 ),
@@ -340,7 +374,7 @@ class BookmarkManageScreen : AppScreenRoute {
                                                 bookmarkState.delete(bookmark.id)
                                                     .onFailure { error ->
                                                         scope.launch(Dispatchers.Default) {
-                                                            snackbarHostState.showSnackbar(
+                                                            snackbarHostState.showLatestSnackbar(
                                                                 message = error.message ?: AppStrings.ui_delete_failed
                                                             )
                                                         }
@@ -432,7 +466,7 @@ class BookmarkManageScreen : AppScreenRoute {
                         bookmarkState.add(name, type, path)
                             .onFailure { error ->
                                 scope.launch {
-                                    snackbarHostState.showSnackbar(
+                                    snackbarHostState.showLatestSnackbar(
                                         message = error.message ?: AppStrings.ui_failed_add,
                                     )
                                 }
@@ -462,7 +496,7 @@ class BookmarkManageScreen : AppScreenRoute {
                         bookmarkState.update(bookmark.id, name, type, path, bookmark.icon)
                             .onFailure { error ->
                                 scope.launch {
-                                    snackbarHostState.showSnackbar(
+                                    snackbarHostState.showLatestSnackbar(
                                         message = error.message ?: AppStrings.ui_update_failed,
                                     )
                                 }
@@ -475,38 +509,6 @@ class BookmarkManageScreen : AppScreenRoute {
                     }
                     editing = null
                 }
-            )
-        }
-
-        if (showBatchDeleteDialog) {
-            BookmarkBatchDeleteDialog(
-                selectedCount = selectedIds.size,
-                onConfirm = {
-                    showBatchDeleteDialog = false
-                    val idsToDelete = selectedIds.toList()
-                    scope.launch(Dispatchers.Default) {
-                        var failure: Throwable? = null
-                        idsToDelete.forEach { id ->
-                            val result = bookmarkState.delete(id)
-                            if (result.isFailure && failure == null) {
-                                failure = result.exceptionOrNull()
-                            }
-                        }
-                        bookmarkState.load()
-                        if (failure == null) {
-                            withContext(Dispatchers.Main) {
-                                selectedIds.clear()
-                                isSelectionMode = false
-                                snackbarHostState.showSnackbar(AppStrings.ui_arg0_bookmarks_deleted.format(arg0 = (idsToDelete.size).toString()))
-                            }
-                        } else {
-                            withContext(Dispatchers.Main) {
-                                snackbarHostState.showSnackbar(failure.message ?: AppStrings.ui_delete_failed)
-                            }
-                        }
-                    }
-                },
-                onDismiss = { showBatchDeleteDialog = false }
             )
         }
 

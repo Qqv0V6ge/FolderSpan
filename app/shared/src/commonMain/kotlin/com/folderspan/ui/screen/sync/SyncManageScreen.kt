@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.folderspan.db.FolderSpanDatabase
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.filter.FilterOptionChip
 import com.folderspan.ui.components.filter.FilterSectionCard
 import com.folderspan.ui.components.filter.FilterSheetFrame
@@ -280,7 +281,7 @@ object SyncManageScreen : AppScreenRoute {
                                     syncState.runNow(task.id)
                                 }
                                 scope.launch {
-                                    snackbarHostState.showSnackbar(AppStrings.ui_arg0_tasks_started.format(arg0 = (targets.size).toString()))
+                                    snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_tasks_started.format(arg0 = (targets.size).toString()))
                                 }
                             },
                             onBatchToggleEnabled = {
@@ -290,7 +291,7 @@ object SyncManageScreen : AppScreenRoute {
                                     syncState.updateEnabled(task.id, nextEnabled)
                                 }
                                 scope.launch {
-                                    snackbarHostState.showSnackbar(
+                                    snackbarHostState.showLatestSnackbar(
                                         if (nextEnabled) {
                                             AppStrings.ui_scheduled_execution_arg0_tasks_has_been_enabled.format(arg0 = (selectedScheduledTasks.size).toString())
                                         } else {
@@ -303,10 +304,11 @@ object SyncManageScreen : AppScreenRoute {
                                 val targets = selectedTasks.toList()
                                 if (targets.isEmpty()) return@SyncBatchActionsFab
                                 scope.launch {
-                                    val snackbarResult = snackbarHostState.showSnackbar(
+                                    val snackbarResult = snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.ui_you_sure_you_want_delete_arg0_tasks.format(arg0 = (targets.size).toString()),
                                         actionLabel = AppStrings.ui_delete,
                                         withDismissAction = true,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (snackbarResult == SnackbarResult.ActionPerformed) {
                                         targets.forEach { task ->
@@ -314,7 +316,7 @@ object SyncManageScreen : AppScreenRoute {
                                         }
                                         selectionMode = false
                                         selectedTaskIds = emptySet()
-                                        snackbarHostState.showSnackbar(AppStrings.ui_arg0_tasks_deleted.format(arg0 = (targets.size).toString()))
+                                        snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_tasks_deleted.format(arg0 = (targets.size).toString()))
                                     }
                                 }
                             }
@@ -366,14 +368,14 @@ object SyncManageScreen : AppScreenRoute {
                         onRun = {
                             syncState.runNow(task.id)
                             scope.launch {
-                                snackbarHostState.showSnackbar(AppStrings.ui_execution_has_started_arg0.format(arg0 = task.name.ifBlank { AppStrings.ui_unnamed_sync }))
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_execution_has_started_arg0.format(arg0 = task.name.ifBlank { AppStrings.ui_unnamed_sync }))
                             }
                         },
                         onToggle = {
                             val nextEnabled = !task.enabled
                             syncState.updateEnabled(task.id, nextEnabled)
                             scope.launch {
-                                snackbarHostState.showSnackbar(
+                                snackbarHostState.showLatestSnackbar(
                                     if (nextEnabled) AppStrings.ui_scheduled_execution_enabled else AppStrings.ui_scheduled_execution_closed
                                 )
                             }
@@ -382,19 +384,20 @@ object SyncManageScreen : AppScreenRoute {
                         onDuplicate = {
                             syncState.duplicateTask(task.id)
                             scope.launch {
-                                snackbarHostState.showSnackbar(AppStrings.ui_task_copied)
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_task_copied)
                             }
                         },
                         onDelete = {
                             scope.launch {
-                                val snackbarResult = snackbarHostState.showSnackbar(
+                                val snackbarResult = snackbarHostState.showLatestSnackbar(
                                     message = AppStrings.ui_confirm_deletion_task_arg0.format(arg0 = task.name.ifBlank { AppStrings.ui_unnamed_sync }),
                                     actionLabel = AppStrings.ui_delete,
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (snackbarResult == SnackbarResult.ActionPerformed) {
                                     syncState.deleteTask(task.id)
-                                    snackbarHostState.showSnackbar(
+                                    snackbarHostState.showLatestSnackbar(
                                         AppStrings.ui_deleted_task_arg0.format(arg0 = task.name.ifBlank { AppStrings.ui_unnamed_sync })
                                     )
                                 }

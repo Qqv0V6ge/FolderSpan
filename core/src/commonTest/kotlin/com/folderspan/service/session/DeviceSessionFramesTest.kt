@@ -13,23 +13,28 @@ import com.folderspan.test.runSuspendTest
 import com.folderspan.ui.state.device.DeviceSharePathGrant
 import com.folderspan.ui.state.device.DeviceSharePathScope
 import com.folderspan.utils.ProtoBufCodec
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.protobuf.ProtoNumber
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.protobuf.ProtoNumber
 
 class DeviceSessionFramesTest {
     @Test
@@ -153,6 +158,29 @@ class DeviceSessionCreditTest {
         assertEquals(4, critical.frameQueueCapacity())
         assertEquals(DEVICE_SESSION_MAX_FRAME_QUEUE_CAPACITY, wide.frameQueueCapacity())
         assertEquals(DEVICE_SESSION_MAX_FRAME_QUEUE_CAPACITY, wide.streamFrameQueueCapacity())
+    }
+
+    @Test
+    fun smallHeapKeepsAFullStreamWindowUntilAvailableMemoryIsTight() {
+        fun plan(availableMiB: Long, lowMemory: Boolean = false) = DeviceSessionWindowPlan.fromMemory(
+            HttpTransferRuntimeMemoryStatus(
+                availableHeapBytes = availableMiB * 1024L * 1024L,
+                maxHeapBytes = 256L * 1024L * 1024L,
+                lowMemory = lowMemory,
+            ),
+        )
+
+        for (availableMiB in listOf(16L, 64L, 128L)) {
+            val healthy = plan(availableMiB)
+            assertEquals(1024 * 1024, healthy.streamWindowBytes)
+            assertEquals(4 * 1024 * 1024, healthy.sessionWindowBytes)
+            assertEquals(4, healthy.maxFileStreams)
+            assertEquals(16, healthy.streamFrameQueueCapacity())
+        }
+        assertEquals(256 * 1024, plan(15).streamWindowBytes)
+        assertEquals(1024 * 1024, plan(15).sessionWindowBytes)
+        assertEquals(256 * 1024, plan(7).sessionWindowBytes)
+        assertEquals(256 * 1024, plan(128, lowMemory = true).sessionWindowBytes)
     }
 
     @Test
@@ -293,6 +321,31 @@ class DeviceSessionCreditTest {
 }
 
 class DeviceSessionConnectionTest {
+    @Test
+    fun cancelledWriterDoesNotConsumeAvailableCredit() = runSuspendTest {
+        coroutineScope {
+            val outgoing = Channel<DeviceSessionFrame>(Channel.UNLIMITED)
+            val credit = DeviceSessionCredit(DeviceSessionWindowPlan(8, 8, 1))
+            val connection = DeviceSessionConnection(
+                outgoing, Channel(Channel.UNLIMITED), credit, isClient = true,
+            )
+            try {
+                val stream = connection.openStream()
+                outgoing.receive()
+                var failure: Throwable? = null
+                launch {
+                    currentCoroutineContext().cancel()
+                    failure = runCatching { connection.sendData(stream, byteArrayOf(1)) }.exceptionOrNull()
+                }.join()
+                assertIs<CancellationException>(failure)
+                assertEquals(0, credit.inFlightBytes())
+                assertTrue(outgoing.tryReceive().isFailure)
+            } finally {
+                connection.close()
+            }
+        }
+    }
+
     @Test
     fun missingWindowUpdateFailsInsteadOfBlockingForever() = runSuspendTest {
         val plan = DeviceSessionWindowPlan(
@@ -745,9 +798,13 @@ class DeviceSessionTransportBatchTest {
             )
             transport.connection.sendTrailer(streamId)
 
-            while (channel.writes.isEmpty()) yield()
+            withTimeout(1_000) {
+                while (channel.writes.isEmpty() || channel.readContextName == null) yield()
+            }
             transportJob.cancelAndJoin()
 
+            assertEquals("session-io", channel.readContextName)
+            assertEquals("session-io", channel.writeContextName)
             assertEquals(1, channel.writes.size)
             assertEquals(1, channel.flushes)
             val frames = DeviceSessionFrames.decodeAll(channel.writes.single())
@@ -770,12 +827,19 @@ class DeviceSessionTransportBatchTest {
 }
 
 private class RecordingDeviceSessionByteChannel : DeviceSessionByteChannel {
+    override val ioContext = CoroutineName("session-io")
+    var readContextName: String? = null
+    var writeContextName: String? = null
     val writes = mutableListOf<ByteArray>()
     var flushes = 0
 
-    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = awaitCancellation()
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        readContextName = currentCoroutineContext()[CoroutineName]?.name.orEmpty()
+        awaitCancellation()
+    }
 
     override suspend fun write(buffer: ByteArray, offset: Int, length: Int) {
+        writeContextName = currentCoroutineContext()[CoroutineName]?.name.orEmpty()
         writes += buffer.copyOfRange(offset, offset + length)
     }
 

@@ -23,7 +23,9 @@ import com.folderspan.service.mcp.http.McpHttpServiceLifecycle
 import com.folderspan.service.mcp.http.McpHttpServiceInterface
 import com.folderspan.service.session.usesTriggeredDeviceDiscovery
 import com.folderspan.ui.components.crash.CrashBoundary
+import com.folderspan.ui.components.dialog.DeviceIdentityTrustDialogHost
 import com.folderspan.ui.components.dialog.HttpDeviceConnectionFailureDialog
+import com.folderspan.ui.components.dialog.SftpHostKeyDialogHost
 import com.folderspan.ui.components.image.ImagePreviewHost
 import com.folderspan.ui.effects.OnAppResumeEffect
 import com.folderspan.ui.effects.McpServerLifecycleEffect
@@ -244,6 +246,8 @@ fun App(
 
                                 else -> {
                                     MainScreen(windowSizeClass, homeNavigatorContent)
+                                    SftpHostKeyDialogHost()
+                                    DeviceIdentityTrustDialogHost()
                                 }
                             }
                                 overlayContent()

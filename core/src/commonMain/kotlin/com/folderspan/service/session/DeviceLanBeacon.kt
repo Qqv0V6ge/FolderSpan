@@ -1,6 +1,7 @@
 package com.folderspan.service.session
 
 import com.folderspan.data.main.device.DeviceType
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.http.tls.DeviceTlsIdentity
@@ -68,15 +69,33 @@ internal object DeviceLanBeacons {
     }.getOrNull()
 
     fun verify(beacon: DeviceLanBeacon, nowEpochSeconds: Long = Clock.System.now().epochSeconds): Boolean {
+        if (!isCurrentBeacon(beacon, nowEpochSeconds)) return false
+        if (beacon.publicKeyPem.isBlank() || beacon.signature.isBlank()) return false
+        return runCatching {
+            DeviceTlsIdentity.verifySha256WithRsa(
+                publicKeyPem = beacon.publicKeyPem,
+                payload = beacon.copy(signature = "").canonicalPayload(),
+                signature = beacon.signature,
+            )
+        }.getOrDefault(false)
+    }
+
+    fun discoveryStatus(
+        beacon: DeviceLanBeacon,
+        nowEpochSeconds: Long = Clock.System.now().epochSeconds,
+    ): DeviceDiscoveryStatus? {
+        if (!isCurrentBeacon(beacon, nowEpochSeconds)) return null
+        return if (verify(beacon, nowEpochSeconds)) DeviceDiscoveryStatus.Verified else DeviceDiscoveryStatus.Unverified
+    }
+
+    private fun isCurrentBeacon(beacon: DeviceLanBeacon, nowEpochSeconds: Long): Boolean {
         if (beacon.protocol != DEVICE_SESSION_ALPN) return false
-        if (beacon.deviceId.isBlank() || beacon.fingerprintSha256.isBlank() || beacon.publicKeyPem.isBlank()) return false
+        if (beacon.deviceId.isBlank()) return false
+        val fingerprint = normalizeTlsFingerprintSha256(beacon.fingerprintSha256)
+        if (fingerprint.length != 64 || fingerprint.any { it !in '0'..'9' && it !in 'A'..'F' }) return false
         if (!validDistinctPorts(beacon.sessionPort, beacon.approvalPort)) return false
-        if (kotlin.math.abs(nowEpochSeconds - beacon.issuedAtEpochSeconds) > DEVICE_LAN_BEACON_MAX_AGE_SECONDS) return false
-        return DeviceTlsIdentity.verifySha256WithRsa(
-            publicKeyPem = beacon.publicKeyPem,
-            payload = beacon.copy(signature = "").canonicalPayload(),
-            signature = beacon.signature,
-        )
+        return beacon.issuedAtEpochSeconds in
+            (nowEpochSeconds - DEVICE_LAN_BEACON_MAX_AGE_SECONDS)..(nowEpochSeconds + DEVICE_LAN_BEACON_MAX_AGE_SECONDS)
     }
 
     fun toSocketDevice(beacon: DeviceLanBeacon, host: String): SocketDevice {

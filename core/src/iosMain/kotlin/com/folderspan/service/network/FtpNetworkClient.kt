@@ -26,6 +26,7 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
@@ -36,6 +37,8 @@ import platform.CoreFoundation.*
 import platform.Foundation.*
 import platform.curl.CURLE_OK
 import platform.curl.CURLINFO_RESPONSE_CODE
+import platform.curl.CURLOPT_FORBID_REUSE
+import platform.curl.CURLOPT_CONNECTTIMEOUT
 import platform.curl.CURLOPT_CUSTOMREQUEST
 import platform.curl.CURLOPT_FTPPORT
 import platform.curl.CURLOPT_INFILESIZE_LARGE
@@ -51,6 +54,7 @@ import platform.curl.CURLOPT_USE_SSL
 import platform.curl.CURLOPT_WRITEDATA
 import platform.curl.CURLOPT_WRITEFUNCTION
 import platform.curl.CURL_GLOBAL_DEFAULT
+import platform.curl.curl_easy_reset
 import platform.curl.curl_easy_cleanup
 import platform.curl.curl_easy_getinfo
 import platform.curl.curl_easy_init
@@ -111,7 +115,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                         curl_easy_setopt(curl, CURLOPT_WRITEDATA, ref.asCPointer())
                         val res = curl_easy_perform(curl)
                         if (res != CURLE_OK) {
-                            Result.failure(Exception(AppStrings.ui_ftp_download_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                            Result.failure(Exception(AppStrings.ui_ftp_download_failed_arg0.format(arg0 = curlError(res))))
                         } else {
                             Result.success(true)
                         }
@@ -152,7 +156,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                         curl_easy_setopt(curl, CURLOPT_READDATA, ref.asCPointer())
                         val res = curl_easy_perform(curl)
                         if (res != CURLE_OK) {
-                            Result.failure(Exception(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                            Result.failure(Exception(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = curlError(res))))
                         } else {
                             Result.success(true)
                         }
@@ -189,7 +193,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                             context.failure ?: Exception(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = "read"))
                         )
                         res != CURLE_OK -> Result.failure(
-                            Exception(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = (curlError(res)).toString()))
+                            Exception(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = curlError(res)))
                         )
                         else -> Result.success(true)
                     }
@@ -243,7 +247,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
             curl_easy_setopt(curl, CURLOPT_READFUNCTION, staticCFunction(::curlEmptyReadCallback))
             val res = curl_easy_perform(curl)
             if (res != CURLE_OK) {
-                Result.failure(Exception(AppStrings.ui_ftp_creates_file_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                Result.failure(Exception(AppStrings.ui_ftp_creates_file_failed_arg0.format(arg0 = curlError(res))))
             } else {
                 Result.success(true)
             }
@@ -378,7 +382,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                 }
                 val res = curl_easy_perform(curl)
                 if (res != CURLE_OK) {
-                    Result.failure(Exception(AppStrings.ui_ftp_list_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                    Result.failure(Exception(AppStrings.ui_ftp_list_failed_arg0.format(arg0 = curlError(res))))
                 } else {
                     Result.success(buffer.asString())
                 }
@@ -406,6 +410,8 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                 buildUrl(""),
                 warnOnFailure = warnOnFailure
             ) { curl ->
+                // 手工 CWD 会改变目录，避免后续请求复用与 libcurl 路径缓存不一致的连接。
+                curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 1L)
                 if (urlPathMode.shouldSendUtf8Option()) {
                     quoteList = curl_slist_append(quoteList, "*OPTS UTF8 ON")
                 }
@@ -427,7 +433,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                 }
                 val res = curl_easy_perform(curl)
                 if (res != CURLE_OK) {
-                    Result.failure(Exception(AppStrings.ui_ftp_list_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                    Result.failure(Exception(AppStrings.ui_ftp_list_failed_arg0.format(arg0 = curlError(res))))
                 } else {
                     Result.success(buffer.asString())
                 }
@@ -491,7 +497,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                         )
                     )
                 } else if (res != CURLE_OK) {
-                    Result.failure(Exception(AppStrings.ui_ftp_command_failed_arg0.format(arg0 = (curlError(res)).toString())))
+                    Result.failure(Exception(AppStrings.ui_ftp_command_failed_arg0.format(arg0 = curlError(res))))
                 } else {
                     Result.success(true)
                 }
@@ -510,40 +516,50 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
         block: (COpaquePointer) -> Result<T>
     ): Result<T> = withContext(Dispatchers.Default) {
         LogKit.i("FTP $label: $url")
-        val globalInit = curl_global_init(CURL_GLOBAL_DEFAULT.toLong())
-        if (globalInit != CURLE_OK) {
-            LogKit.w(AppStrings.ui_ftp_initialization_failed_arg0.format(arg0 = label))
-            return@withContext Result.failure(Exception(AppStrings.ui_initialization_of_ftp_client_failed))
-        }
-        val curl = curl_easy_init() ?: run {
-            curl_global_cleanup()
-            LogKit.w(AppStrings.ui_ftp_initialization_failed_arg0.format(arg0 = label))
-            return@withContext Result.failure(Exception(AppStrings.ui_initialization_of_ftp_client_failed))
-        }
         try {
-            configureCommon(curl, url)
-            val result = runCatching { block(curl) }.getOrElse { error ->
-                LogKit.w(AppStrings.ui_ftp_arg0_exception_arg1.format(arg0 = label, arg1 = (error.message).toString()), error)
-                Result.failure(error)
-            }
-            if (result.isSuccess) {
-                LogKit.i(AppStrings.ui_ftp_arg0_success_arg1.format(arg0 = label, arg1 = network.host))
-            } else {
-                val message = AppStrings.ui_ftp_arg0_failed_arg1.format(arg0 = label, arg1 = (result.exceptionOrNull()?.message).toString())
-                if (warnOnFailure) {
-                    LogKit.w(message)
+            val key = networkSessionKey(network, 21)
+            val result = sessions.use(key, {
+                FtpCurlRuntime.acquire()
+                curl_easy_init() ?: run {
+                    FtpCurlRuntime.release()
+                    error(AppStrings.ui_initialization_of_ftp_client_failed)
+                }
+            }) { curl ->
+                try {
+                    configureCommon(curl, url)
+                    block(curl).getOrThrow()
+                } finally {
+                    // 清除本次操作的回调、数据指针和命令选项，保留 libcurl 的连接缓存。
+                    curl_easy_reset(curl)
                 }
             }
-            result
-        } finally {
-            curl_easy_cleanup(curl)
-            curl_global_cleanup()
+            LogKit.i(AppStrings.ui_ftp_arg0_success_arg1.format(arg0 = label, arg1 = network.host))
+            Result.success(result)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (warnOnFailure) {
+                LogKit.w(AppStrings.ui_ftp_arg0_failed_arg1.format(arg0 = label, arg1 = error.message.toString()), error)
+            }
+            Result.failure(error)
         }
+    }
+
+    companion object {
+        private const val ONE_DAY_MILLIS = 24L * 60L * 60L * 1000L
+
+        private val sessions = NetworkSessionCache<COpaquePointer>(
+            // libcurl 自行检查、淘汰和重建失效连接；同一 easy handle 不并发使用。
+            isOpen = { true },
+            close = { curl_easy_cleanup(it); FtpCurlRuntime.release() },
+            exclusive = true,
+        )
     }
 
     private fun configureCommon(curl: COpaquePointer, url: String) {
         val ftpExtras = network.extras.ftp
         curl_easy_setopt(curl, CURLOPT_URL, url)
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L)
         val username = network.username.ifBlank { "anonymous" }
         curl_easy_setopt(curl, CURLOPT_USERNAME, username)
         curl_easy_setopt(curl, CURLOPT_PASSWORD, network.password)
@@ -740,7 +756,9 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                     if (idx <= 0) null else it.substring(0, idx).lowercase() to it.substring(idx + 1)
                 }.toMap()
             val type = facts["type"]?.lowercase().orEmpty()
-            val isDir = type == "dir" || type == "cdir" || type == "pdir"
+            if (type == "cdir" || type == "pdir") continue
+            val isDir = type == "dir"
+            val isLink = type.substringBefore(':') in setOf("os.unix=slink", "os.unix=symlink")
             val size = if (isDir) -1L else (facts["size"]?.toLongOrNull() ?: 0L)
             val modified = facts["modify"]?.let { parseMlsdTime(it) } ?: 0L
             entries.add(
@@ -751,7 +769,9 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                     size = size,
                     createdDate = modified,
                     updatedDate = modified,
-                    isHidden = name.startsWith(".")
+                    isHidden = name.startsWith("."),
+                    isSymbolicLink = isLink,
+                    isSymbolicLinkKnown = isDir || type == "file" || isLink,
                 )
             )
         }
@@ -785,7 +805,9 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                                 size = size,
                                 createdDate = modified,
                                 updatedDate = modified,
-                                isHidden = name.startsWith(".")
+                                isHidden = name.startsWith("."),
+                                isSymbolicLink = kind == 'l',
+                                isSymbolicLinkKnown = true,
                             )
                         )
                         continue
@@ -813,7 +835,8 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
                                 size = size ?: 0L,
                                 createdDate = modified,
                                 updatedDate = modified,
-                                isHidden = name.startsWith(".")
+                                isHidden = name.startsWith("."),
+                                isSymbolicLinkKnown = true,
                             )
                         )
                         continue
@@ -911,10 +934,6 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient {
             "dec" -> 12
             else -> null
         }
-    }
-
-    private companion object {
-        const val ONE_DAY_MILLIS = 24L * 60L * 60L * 1000L
     }
 
     private fun parseMlsdTime(value: String): Long {
@@ -1114,4 +1133,31 @@ private fun curlReadMemoryCallback(
         context.onProgress(context.doneBytes, totalBytes)
     }
     return copied.toULong()
+}
+
+
+private object FtpCurlRuntime {
+    private val lock = NSLock()
+    private var users = 0
+
+    fun acquire() {
+        lock.lock()
+        try {
+            if (users == 0) check(curl_global_init(CURL_GLOBAL_DEFAULT.toLong()) == CURLE_OK) {
+                AppStrings.ui_initialization_of_ftp_client_failed
+            }
+            users++
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    fun release() {
+        lock.lock()
+        try {
+            if (--users == 0) curl_global_cleanup()
+        } finally {
+            lock.unlock()
+        }
+    }
 }

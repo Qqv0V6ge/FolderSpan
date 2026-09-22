@@ -134,6 +134,7 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         config.iceServers.addAll(iceServers.map { it.toNativeIceServer() })
         peerConnection = factory.createPeerConnection(config, object : PeerConnectionObserver {
             override fun onIceCandidate(candidate: RTCIceCandidate) {
+                configureWebRtcUdpSocketBuffers(candidate.sdp)
                 iceCandidates.tryEmit(
                     WebRtcIceCandidate(
                         sdpMid = candidate.sdpMid,

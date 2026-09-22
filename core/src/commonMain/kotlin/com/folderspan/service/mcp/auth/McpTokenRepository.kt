@@ -23,7 +23,6 @@ enum class McpTokenScope(val value: String) {
     TasksRead("tasks.read"),
     TasksControl("tasks.control"),
     DevicesRead("devices.read"),
-    DevicesScan("devices.scan"),
     DevicesConnect("devices.connect"),
     NetworksRead("networks.read"),
     NetworksConnect("networks.connect"),

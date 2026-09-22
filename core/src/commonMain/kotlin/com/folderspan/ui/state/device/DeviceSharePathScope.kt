@@ -2,10 +2,12 @@ package com.folderspan.ui.state.device
 
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.utils.PathUtils
+import com.folderspan.utils.isAndroidContentUriPath
 
 data class DeviceSharePathGrant(
     val path: String,
     val isDirectory: Boolean,
+    val displayName: String = "",
 )
 
 data class DeviceShareVirtualRoot(
@@ -73,7 +75,7 @@ class DeviceSharePathScope(
     private fun buildVirtualRoots(grants: List<DeviceSharePathGrant>): List<DeviceShareVirtualRoot> {
         val usedNames = mutableSetOf<String>()
         return grants.map { grant ->
-            val baseName = shareRootName(grant.path)
+            val baseName = shareRootName(grant)
             var candidate = baseName
             var suffix = 2
             while (!usedNames.add(virtualNameKey(candidate))) {
@@ -84,9 +86,8 @@ class DeviceSharePathScope(
         }
     }
 
-    private fun shareRootName(path: String): String {
-        val normalized = path.trimEnd('/', '\\')
-        return normalized.substringAfterLast('/').substringAfterLast('\\').ifBlank { "root" }
+    private fun shareRootName(grant: DeviceSharePathGrant): String {
+        return shareFileNameFromGrant(grant)
     }
 
     private fun parseVirtualPath(path: String): List<String>? {
@@ -128,6 +129,8 @@ class DeviceSharePathScope(
 internal fun normalizeDeviceSharePath(path: String, pathSeparator: String = PathUtils.getPathSeparator()): String {
     val trimmed = path.trim()
     if (trimmed.isEmpty()) return ""
+    // content:// 的空段（scheme 后的 `//`）不能按文件系统路径折叠，否则会变成 content:/ 并被安全策略判为 invalid_path。
+    if (isAndroidContentUriPath(trimmed)) return trimmed
     val windows = pathSeparator == "\\"
     val separator = if (windows) '\\' else '/'
     val unified = if (windows) trimmed.replace('/', '\\') else trimmed.replace('\\', '/')
@@ -157,4 +160,65 @@ internal fun normalizeDeviceSharePath(path: String, pathSeparator: String = Path
         absolute -> prefix
         else -> ""
     }
+}
+
+internal fun shareFileNameFromGrant(grant: DeviceSharePathGrant): String {
+    return sanitizeShareFileName(grant.displayName)
+        ?: fileNameFromShareLocator(grant.path)
+        ?: "root"
+}
+
+internal fun shareListedFileName(metadataName: String, virtualRootName: String): String {
+    return sanitizeShareFileName(metadataName) ?: virtualRootName
+}
+
+private fun fileNameFromShareLocator(path: String): String? {
+    if (isAndroidContentUriPath(path)) {
+        val lastSegment = path.substringAfterLast('/').substringAfterLast('\\')
+        val decoded = decodeShareUriComponent(lastSegment)
+        val nested = decoded
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .substringAfterLast(':')
+        return sanitizeShareFileName(nested) ?: sanitizeShareFileName(decoded)
+    }
+    return sanitizeShareFileName(path)
+}
+
+private fun sanitizeShareFileName(value: String): String? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty() || trimmed == "." || trimmed == "..") return null
+    if (isAndroidContentUriPath(trimmed)) return null
+    val last = trimmed.substringAfterLast('/').substringAfterLast('\\').trim()
+    if (last.isEmpty() || last == "." || last == "..") return null
+    if (isAndroidContentUriPath(last)) return null
+    return last
+}
+
+private fun decodeShareUriComponent(value: String): String {
+    if ('%' !in value) return value
+    val bytes = ArrayList<Byte>(value.length)
+    var index = 0
+    while (index < value.length) {
+        val char = value[index]
+        if (char == '%' && index + 2 < value.length) {
+            val high = hexValue(value[index + 1])
+            val low = hexValue(value[index + 2])
+            if (high >= 0 && low >= 0) {
+                bytes.add(((high shl 4) + low).toByte())
+                index += 3
+                continue
+            }
+        }
+        value[index].toString().encodeToByteArray().forEach { item -> bytes.add(item) }
+        index += 1
+    }
+    return bytes.toByteArray().decodeToString()
+}
+
+private fun hexValue(char: Char): Int = when (char) {
+    in '0'..'9' -> char.code - '0'.code
+    in 'a'..'f' -> char.code - 'a'.code + 10
+    in 'A'..'F' -> char.code - 'A'.code + 10
+    else -> -1
 }

@@ -78,6 +78,11 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
+// Keep shared-module previews available while excluding their tooling from release APKs/AABs.
+configurations.matching { it.name == "releaseRuntimeClasspath" }.configureEach {
+    exclude(group = "org.jetbrains.compose.ui", module = "ui-tooling")
+}
+
 android {
     namespace = "com.folderspan"
     compileSdk = libs.versions.android.compileSdk.get().toInt()

@@ -15,10 +15,18 @@
 | macOS | `./gradlew :app:desktopApp:packageReleaseDistributionForCurrentOS` | `app/desktopApp/build/compose/binaries/main-release/{dmg,pkg}/` |
 | iOS Archive | 见“iOS”章节 | `app/iosApp/build/release/FolderSpan.xcarchive` |
 | iOS IPA | 见“iOS”章节 | `app/iosApp/build/release/export/*.ipa` |
-| Web JS | `./gradlew :app:webApp:jsBrowserDistribution` | `app/webApp/build/dist/js/productionExecutable/` |
-| Web Wasm | `./gradlew :app:webApp:wasmJsBrowserDistribution` | `app/webApp/build/dist/wasmJs/productionExecutable/` |
+| Web JS | `./gradlew :app:webApp:jsBrowserDistribution -PfolderspanBuildType=release` | `app/webApp/build/dist/js/productionExecutable/` |
+| Web Wasm | `./gradlew :app:webApp:wasmJsBrowserDistribution -PfolderspanBuildType=release` | `app/webApp/build/dist/wasmJs/productionExecutable/` |
 
 `server/` 当前只是模块骨架，没有可发布的服务端产物，因此不在本文的打包范围内。
+
+## 安装包体积
+
+- 发布使用上表中的 Release / production 任务，避免分发 Debug / development 产物。
+- Android 已启用 R8 代码裁剪和资源压缩；直接分发 APK 时优先选择设备对应的 ABI 包，universal APK 包含所有架构，体积更大。Release 的运行时依赖排除 Compose 预览工具，保留 Debug 与共享模块的 IDE 预览能力。
+- Desktop 使用 jlink 压缩随包分发的 Java Runtime，保留现有 JDK 模块。
+- Web production 构建不生成 webpack source map；development 构建保留调试映射。
+- 所有平台均不再打包完整的 Noto Sans SC 字体。原生平台沿用系统字体；Web 使用 [Compose Multiplatform 1.12.0 的自动字体回退](https://blog.jetbrains.com/kotlin/2026/08/compose-multiplatform-1-12-0/)，按需下载 Noto 字体子集。首次显示未缓存字符时需要联网，下载完成前可能短暂出现缺字占位。
 
 ## 发布前准备
 
@@ -274,10 +282,14 @@ app/iosApp/build/release/export/*.ipa
 
 ## Web
 
+单独运行下列 distribution 任务时，显式指定 `folderspanBuildType=release`，使共享模块使用正式服务配置。JS 压缩阶段若报 `ERR_WORKER_OUT_OF_MEMORY`，可在内存充足的构建机上设置 `NODE_OPTIONS=--max-old-space-size=8192` 后重试。
+
+Kotlin/JS 可执行文件生成阶段使用独立的 Kotlin 编译器进程，项目在 `gradle.properties` 中将 `kotlin.daemon.jvmargs` 设置为 `-Xmx4096M`。该阶段的 `OutOfMemoryError: GC overhead limit exceeded` 应检查 Kotlin 编译器堆配置，`NODE_OPTIONS` 仅影响后续 Node.js 构建进程。配置方式见 [Kotlin 编译与缓存文档](https://kotlinlang.org/docs/gradle-compilation-and-caches.html#kotlin-daemon-jvmargs-property)。
+
 ### JS
 
 ```bash
-./gradlew :app:webApp:jsBrowserDistribution
+./gradlew :app:webApp:jsBrowserDistribution -PfolderspanBuildType=release
 ```
 
 可部署目录：
@@ -289,7 +301,7 @@ app/webApp/build/dist/js/productionExecutable/
 ### Wasm
 
 ```bash
-./gradlew :app:webApp:wasmJsBrowserDistribution
+./gradlew :app:webApp:wasmJsBrowserDistribution -PfolderspanBuildType=release
 ```
 
 可部署目录：

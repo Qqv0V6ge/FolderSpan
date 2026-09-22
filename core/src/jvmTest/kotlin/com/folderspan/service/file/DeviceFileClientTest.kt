@@ -70,6 +70,25 @@ class DeviceFileClientTest {
     }
 
     @Test
+    fun failedDestinationStopsTheBufferedSource() = runSuspendTest {
+        val target = Files.createTempFile("folderspan-session-download-failure", ".bin")
+        try {
+            val block = ByteArray(64 * 1024)
+            val chunks = List(64) { block }
+            val client = StreamingDownloadClient(chunks)
+            val size = chunks.size * block.size.toLong()
+            val result = client.downloadRangeToFile(
+                "/remote/source.bin", 0, size, target.toString(), size,
+            ) { _, _ -> error("destination failed") }
+
+            assertTrue(result.isFailure)
+            assertTrue(client.sentChunks < chunks.size)
+        } finally {
+            Files.deleteIfExists(target)
+        }
+    }
+
+    @Test
     fun downloadRangeToFileRejectsStreamThatEndsBeforeRequestedRange() = runSuspendTest {
         val target = Files.createTempFile("folderspan-session-download-short", ".bin")
         try {
@@ -163,6 +182,9 @@ private class RecordingRangeWriteClient : DeviceFileClient {
 private class StreamingDownloadClient(
     private val chunks: List<ByteArray>,
 ) : DeviceFileClient {
+    var sentChunks = 0
+        private set
+
     override suspend fun readStream(
         path: String,
         startOffset: Long,
@@ -171,6 +193,7 @@ private class StreamingDownloadClient(
     ): Result<Boolean> = runCatching {
         chunks.forEach { chunk ->
             onChunk(chunk)
+            sentChunks++
         }
         true
     }

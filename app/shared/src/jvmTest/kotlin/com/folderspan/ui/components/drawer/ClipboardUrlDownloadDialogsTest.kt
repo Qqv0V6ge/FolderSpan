@@ -24,7 +24,10 @@ import com.folderspan.service.http.clipboard.ClipboardUrlDownloadTaskConfig
 import com.folderspan.service.http.clipboard.ClipboardUrlDownloader
 import com.folderspan.ui.state.file.ClipboardUrlDownloadCoordinator
 import com.folderspan.ui.state.file.ClipboardUrlDownloadResultPresenter
+import com.folderspan.ui.state.main.Task
+import com.folderspan.ui.state.main.TaskRuntimePersistenceStore
 import com.folderspan.ui.state.main.TaskState
+import com.folderspan.ui.state.main.TempTaskRuntimePersistenceStore
 import kotlinx.coroutines.Dispatchers
 import strings.AppStrings
 import kotlin.test.Test
@@ -189,7 +192,13 @@ private fun createCoordinator(
     capabilities: ClipboardUrlDownloadPlatformCapabilities,
 ): ClipboardUrlDownloadCoordinator = ClipboardUrlDownloadCoordinator(
     engine = downloader,
-    taskState = TaskState(),
+    taskState = TaskState(
+        runtimeStore = object : TaskRuntimePersistenceStore by TempTaskRuntimePersistenceStore() {
+            override fun loadTaskSnapshots(): List<Task> = emptyList()
+            override fun saveTaskSnapshot(task: Task) = Unit
+            override fun deleteTaskSnapshot(taskKey: Long) = Unit
+        },
+    ),
     resultPresenter = ClipboardUrlDownloadResultPresenter { false },
     uiDispatcher = Dispatchers.Unconfined,
     capabilities = capabilities,

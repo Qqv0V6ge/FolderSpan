@@ -27,6 +27,8 @@ import com.folderspan.data.main.network.Network
 import com.folderspan.data.main.network.NetworkEntry
 import com.folderspan.data.main.network.NetworkProtocol
 import com.folderspan.data.main.network.NetworkShare
+import com.folderspan.ui.components.confirmSnackbarAction
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.*
 import com.folderspan.ui.components.filter.FilterOptionChip
 import com.folderspan.ui.components.filter.FilterSectionCard
@@ -87,9 +89,7 @@ class NetworkManageScreen : AppScreenRoute {
         var sortOption by rememberSaveable { mutableStateOf(NetworkSortOption.Name) }
         var sortAscending by rememberSaveable { mutableStateOf(true) }
         var pendingConnect by remember { mutableStateOf<NetworkEntry?>(null) }
-        var pendingDelete by remember { mutableStateOf<NetworkEntry?>(null) }
         var pendingBatchConnect by rememberSaveable { mutableStateOf(false) }
-        var pendingBatchDelete by rememberSaveable { mutableStateOf(false) }
         var pendingBatchPin by rememberSaveable { mutableStateOf(false) }
         val normalizedQuery = remember(filterQuery) { filterQuery.trim() }
         val activeFilterCount = remember(normalizedQuery, protocolFilter, filterByName, filterByHost) {
@@ -307,7 +307,32 @@ class NetworkManageScreen : AppScreenRoute {
                         colorScheme = colorScheme,
                         onBatchConnect = { pendingBatchConnect = true },
                         onBatchPin = { pendingBatchPin = true },
-                        onBatchDelete = { pendingBatchDelete = true }
+                        onBatchDelete = {
+                            val entriesToDelete = selectedEntries.toList()
+                            scope.launch {
+                                snackbarHostState.confirmSnackbarAction(
+                                    message = AppStrings.dialog_delete_selected_network_devices.format(
+                                        count = entriesToDelete.size.toString(),
+                                    ),
+                                    actionLabel = AppStrings.ui_delete,
+                                ) {
+                                    entriesToDelete.forEach { entry ->
+                                        networkState.removeEntry(entry)
+                                    }
+                                    val currentDesk = fileState.deskType.value
+                                    if (currentDesk is Network && entriesToDelete.any { it.network == currentDesk }) {
+                                        fileState.updateDesk(FileProtocol.Local, Local())
+                                    }
+                                    selectedEntryIds = emptySet()
+                                    selectionMode = false
+                                    snackbarHostState.showLatestSnackbar(
+                                        AppStrings.ui_arg0_items_deleted.format(
+                                            arg0 = entriesToDelete.size.toString(),
+                                        ),
+                                    )
+                                }
+                            }
+                        }
                     )
                     showAddAction -> AddEntryFab(onClick = { navigator.push(NetworkAddEntryScreen()) })
                 }
@@ -341,17 +366,36 @@ class NetworkManageScreen : AppScreenRoute {
                             scope.launch {
                                 val copied = duplicateNetwork(entry.network)
                                 networkState.addNetwork(copied, entry.isPersisted)
-                                snackbarHostState.showSnackbar(AppStrings.ui_arg0_copied.format(arg0 = copied.name))
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_copied.format(arg0 = copied.name))
                             }
                         },
-                        onDelete = { pendingDelete = entry },
+                        onDelete = {
+                            scope.launch {
+                                snackbarHostState.confirmSnackbarAction(
+                                    message = AppStrings.dialog_delete_device.format(
+                                        deviceName = entry.network.name,
+                                    ),
+                                    actionLabel = AppStrings.ui_delete,
+                                ) {
+                                    networkState.removeEntry(entry)
+                                    val currentDesk = fileState.deskType.value
+                                    if (currentDesk is Network && currentDesk == entry.network) {
+                                        fileState.updateDesk(FileProtocol.Local, Local())
+                                    }
+                                    snackbarHostState.showLatestSnackbar(
+                                        AppStrings.ui_arg0_deleted.format(arg0 = entry.network.name),
+                                    )
+                                }
+                            }
+                        },
                         onClick = {
                             val isConnected = entry.id in connectedIds
                             if (isConnected) {
                                 scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
+                                    val result = snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.ui_connected_arg0.format(arg0 = entry.network.name),
-                                        actionLabel = AppStrings.ui_close
+                                        actionLabel = AppStrings.ui_close,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (result == SnackbarResult.ActionPerformed) {
                                         disconnectEntry(entry)
@@ -367,7 +411,7 @@ class NetworkManageScreen : AppScreenRoute {
                             if (!entry.isPersisted) {
                                 scope.launch {
                                     networkState.updatePersisted(entry, true)
-                                    snackbarHostState.showSnackbar(AppStrings.ui_saved_arg0.format(arg0 = entry.network.name))
+                                    snackbarHostState.showLatestSnackbar(AppStrings.ui_saved_arg0.format(arg0 = entry.network.name))
                                 }
                             }
                         }
@@ -383,24 +427,6 @@ class NetworkManageScreen : AppScreenRoute {
                 onConfirm = {
                     pendingConnect = null
                     networkState.connectEntry(entry)
-                }
-            )
-        }
-
-        pendingDelete?.let { entry ->
-            NetworkDeleteDialog(
-                name = entry.network.name,
-                onDismissRequest = { pendingDelete = null },
-                onConfirm = {
-                    pendingDelete = null
-                    scope.launch {
-                        networkState.removeEntry(entry)
-                        val currentDesk = fileState.deskType.value
-                        if (currentDesk is Network && currentDesk == entry.network) {
-                            fileState.updateDesk(FileProtocol.Local, Local())
-                        }
-                        snackbarHostState.showSnackbar(AppStrings.ui_arg0_deleted.format(arg0 = entry.network.name))
-                    }
                 }
             )
         }
@@ -421,31 +447,6 @@ class NetworkManageScreen : AppScreenRoute {
             )
         }
 
-        if (pendingBatchDelete) {
-            NetworkBatchDeleteDialog(
-                count = selectedEntries.size,
-                onDismissRequest = { pendingBatchDelete = false },
-                onConfirm = {
-                    pendingBatchDelete = false
-                    scope.launch {
-                        selectedEntries.forEach { entry ->
-                            networkState.removeEntry(entry)
-                        }
-                        val currentDesk = fileState.deskType.value
-                        if (currentDesk is Network) {
-                            val isCurrentRemoved = selectedEntries.any { entry -> entry.network == currentDesk }
-                            if (isCurrentRemoved) {
-                                fileState.updateDesk(FileProtocol.Local, Local())
-                            }
-                        }
-                        selectedEntryIds = emptySet()
-                        selectionMode = false
-                        snackbarHostState.showSnackbar(AppStrings.ui_arg0_items_deleted.format(arg0 = (selectedEntries.size).toString()))
-                    }
-                }
-            )
-        }
-
         if (pendingBatchPin) {
             NetworkBatchPinDialog(
                 count = selectedEntries.size,
@@ -462,7 +463,7 @@ class NetworkManageScreen : AppScreenRoute {
                         }
                         selectedEntryIds = emptySet()
                         selectionMode = false
-                        snackbarHostState.showSnackbar(AppStrings.ui_pinned_arg0_items.format(arg0 = (selectedEntries.size).toString()))
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_pinned_arg0_items.format(arg0 = (selectedEntries.size).toString()))
                     }
                 }
             )

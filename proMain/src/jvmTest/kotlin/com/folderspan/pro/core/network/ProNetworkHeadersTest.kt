@@ -376,11 +376,16 @@ class ProNetworkHeadersTest : ChineseLocalizationTest() {
     }
 
     @Test
-    fun gatewayBaseUrlComesFromBuildConfigAndUsesHttps() {
-        val url = Url(AppBuildConfig.GATEWAY_BASE_URL)
+    fun gatewayBaseUrlComesFromBuildConfigAndMatchesBuildType() {
+        val baseUrl = GatewayConfig().baseUrl
+        val url = Url(baseUrl)
         val host = url.host
 
-        assertEquals(URLProtocol.HTTPS, url.protocol)
+        assertEquals(AppBuildConfig.GATEWAY_BASE_URL, baseUrl)
+        assertEquals(
+            if (AppBuildConfig.BUILD_TYPE == "debug") URLProtocol.HTTP else URLProtocol.HTTPS,
+            url.protocol,
+        )
         assertNotNull(host)
         if (host.firstOrNull()?.isDigit() == true) {
             assertTrue(host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}""")))
@@ -400,10 +405,10 @@ class ProNetworkHeadersTest : ChineseLocalizationTest() {
     }
 
     @Test
-    fun officialWebRtcWebSocketHeadersUseBearerDeviceIdAndRequestSignature() {
+    fun officialWebRtcWebSocketHeadersUseGatewayHostBearerDeviceKeyAndRequestSignature() {
         val headers = officialWebRtcWebSocketHeaders(
             token = "access-token",
-            deviceId = "device-a",
+            deviceKey = "device-a",
             requestSigningConfig = RequestSigningConfig(
                 timestampProvider = { "1764144000" },
                 nonceProvider = { "nonce-001" },
@@ -419,8 +424,14 @@ class ProNetworkHeadersTest : ChineseLocalizationTest() {
             secret = "access-token",
         ).signature
 
+        assertEquals(PRO_API_HOST_HEADER_VALUE, headers[HttpHeaders.Host])
         assertEquals("Bearer access-token", headers[HttpHeaders.Authorization])
-        assertEquals("device-a", headers["X-Device-ID"])
+        assertEquals(
+            "${Url(AppBuildConfig.GATEWAY_BASE_URL).protocol.name}://$PRO_API_HOST_HEADER_VALUE",
+            headers[HttpHeaders.Origin],
+        )
+        assertEquals("device-a", headers["X-Device-Key"])
+        assertNull(headers["X-Device-ID"])
         assertEquals("desktop-app", headers["X-App-Key"])
         assertEquals("1764144000", headers["X-Timestamp"])
         assertEquals("nonce-001", headers["X-Nonce"])
@@ -428,17 +439,17 @@ class ProNetworkHeadersTest : ChineseLocalizationTest() {
     }
 
     @Test
-    fun officialWebRtcWebSocketHeadersRequireLoginTokenAndDeviceId() {
+    fun officialWebRtcWebSocketHeadersRequireLoginTokenAndDeviceKey() {
         assertTrue(
             officialWebRtcWebSocketHeaders(
                 token = "",
-                deviceId = "device-a",
+                deviceKey = "device-a",
             ).isFailure,
         )
         assertTrue(
             officialWebRtcWebSocketHeaders(
                 token = "access-token",
-                deviceId = "",
+                deviceKey = "",
             ).isFailure,
         )
     }

@@ -14,15 +14,45 @@ Native desktop, Android, and iOS devices SHALL periodically broadcast a small UD
 - **THEN** peers on the same link or site can observe a beacon for that device
 - **AND** the beacon carries the current certificate fingerprint and session port
 
-#### Scenario: Unsigned or public beacons are ignored
+#### Scenario: Unverified LAN devices remain visible
 
-- **WHEN** a datagram arrives without a valid device identity signature
-- **OR** the source is not link-local or site-local
+- **WHEN** a fresh, structurally valid beacon arrives from a remote link-local or site-local address but its identity signature cannot be verified
+- **THEN** the receiver displays the device with an unverified identity status
+- **AND** discovery alone does not save device metadata, grant trust, or trigger automatic connection
+- **AND** an unverified advertisement cannot overwrite an existing verified identity or active connection for the same device
+
+#### Scenario: Invalid discovery envelopes are ignored
+
+- **WHEN** a datagram is malformed, expired, uses an unsupported protocol, has invalid endpoints, or comes from a public or local-self address
 - **THEN** the receiver does not add or update a discovered device from that datagram
+
+### Requirement: Unverified identities require explicit fingerprint confirmation
+
+Before authenticating a manually selected unverified LAN device, the client SHALL obtain its identity and actual certificate fingerprint using the existing public Session Identify bootstrap. The bootstrap SHALL be closed before an authenticated connection starts. The identified device id MUST match the selected device. The app SHALL show the device name, endpoint, SHA-256 certificate fingerprint, and any previously trusted fingerprint, with explicit trust and cancel actions. The confirmed fingerprint SHALL be persisted and the subsequent connection SHALL pin exactly that fingerprint. A matching previously saved fingerprint MAY be reused. Signature-valid discovery and existing certificate-change handling SHALL remain available.
+
+#### Scenario: User cancels identity confirmation
+
+- **WHEN** the user cancels or dismisses the trust prompt, or its UI host disappears
+- **THEN** the client sends no Connect authorization, credentials, file request, or share payload to that device
+- **AND** the device remains visible as unverified
+- **AND** no new fingerprint is saved
+
+#### Scenario: User trusts the observed identity
+
+- **WHEN** the user explicitly trusts the displayed TLS fingerprint
+- **THEN** the client persists that fingerprint and continues through the existing pinned connection and remote approval flow
+- **AND** a subsequent different fingerprint requires a new explicit decision
+- **AND** repeated discovery does not replace the identity currently awaiting confirmation
+
+#### Scenario: Device status is visible in the interface
+
+- **WHEN** an unverified device appears in the drawer or device page
+- **THEN** the status badge identifies the device as unverified and the manual action offers identity confirmation
+- **AND** the confirmation content remains selectable and scrollable on compact windows
 
 ### Requirement: Native discovery continuously consumes beacons instead of HTTPS ping
 
-Native device discovery SHALL continuously discover LAN devices by receiving valid beacons while the application runtime is active. It SHALL NOT start an address scan, probe the /24 with HTTPS ping requests, or expose a scan/pause control. When automatic discovery is blocked, the user MAY still enter an IP and connect to the session port with `folderspan/1`.
+Native device discovery SHALL continuously discover LAN devices by receiving current, structurally valid beacons while the application runtime is active, distinguishing verified and unverified signatures. It SHALL NOT start an address scan, probe the /24 with HTTPS ping requests, or expose a scan/pause control. When automatic discovery is blocked, the user MAY still enter an IP and connect to the session port with `folderspan/1`.
 Normal beacon broadcast, receive, expected self/local rejection, and discovered-device refresh SHALL NOT emit a log entry for every packet. Lifecycle transitions, validation warnings, and transport failures MAY still be logged.
 
 #### Scenario: Beacon upserts a discovered device
@@ -48,7 +78,7 @@ Normal beacon broadcast, receive, expected self/local rejection, and discovered-
 
 - **WHEN** native devices continuously broadcast, receive, reject expected self/local beacons, or refresh a discovered device
 - **THEN** those normal per-packet events do not emit repetitive log entries
-- **AND** listener lifecycle, invalid-signature warnings, and transport failures remain diagnosable
+- **AND** listener lifecycle and transport failures remain diagnosable, and unverified identity status remains visible without per-packet warnings
 
 #### Scenario: Isolated network still allows manual IP
 

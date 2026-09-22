@@ -13,6 +13,8 @@ data class NetworkFileEntry(
     val createdDate: Long = 0L,
     val updatedDate: Long = 0L,
     val isHidden: Boolean = false,
+    val isSymbolicLink: Boolean = false,
+    val isSymbolicLinkKnown: Boolean = false,
 )
 
 interface NetworkClient {

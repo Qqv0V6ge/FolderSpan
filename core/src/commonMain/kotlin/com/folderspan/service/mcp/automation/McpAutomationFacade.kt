@@ -29,7 +29,6 @@ import com.folderspan.service.mcp.file.FileWriteMode
 import com.folderspan.service.mcp.file.FileWriteResult
 import com.folderspan.service.http.server.HttpShareFileServerInterface
 import com.folderspan.service.http.tls.currentDeviceTlsFingerprint
-import com.folderspan.utils.FileShareSettings
 import com.folderspan.ui.state.file.DrawerBookmarkType
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.ui.state.main.DeviceState
@@ -403,16 +402,7 @@ data class McpDeviceGroups(
 
 class McpDeviceFacade(
     private val state: DeviceState,
-    private val scans: DeviceScanOperationStore,
 ) {
-    suspend fun startScan(subnet: String?): DeviceScanOperation = catchingSuspend {
-        scans.start(subnet, FileShareSettings.getPort())
-    }
-
-    suspend fun scanStatus(id: String): DeviceScanOperation = catchingSuspend {
-        scans.get(id) ?: throw NoSuchElementException()
-    }
-
     suspend fun list(transport: DeviceTransportType): McpDeviceGroups = catchingSuspend {
         groupOnlineDevices(
             devices = state.snapshotSocketDevices(transport),

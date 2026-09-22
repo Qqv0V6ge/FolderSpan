@@ -34,6 +34,14 @@ enum class DeviceTransportType(type: String) {
     WebRtc("WebRtc"),
 }
 
+/** Local discovery evidence; never accept a trust status supplied by a remote peer. */
+enum class DeviceDiscoveryStatus {
+    Unknown,
+    Verified,
+    Unverified,
+    Trusted,
+}
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SocketDevice(
@@ -51,6 +59,8 @@ data class SocketDevice(
     var token: String = "",
     @Transient
     var shareConnectNonce: String = "",
+    @Transient
+    val discoveryStatus: DeviceDiscoveryStatus = DeviceDiscoveryStatus.Unknown,
 ) {
     @Transient
     var httpClient: HttpRouteClientManager? = null
@@ -110,6 +120,7 @@ data class SocketDevice(
         tlsFingerprintSha256: String = this.tlsFingerprintSha256,
         token: String = this.token,
         shareConnectNonce: String = this.shareConnectNonce,
+        discoveryStatus: DeviceDiscoveryStatus = this.discoveryStatus,
         httpClient: HttpRouteClientManager? = this.httpClient,
         sessionClient: DeviceSessionClientManager? = this.sessionClient,
     ): SocketDevice {
@@ -126,6 +137,7 @@ data class SocketDevice(
             tlsFingerprintSha256 = normalizeTlsFingerprintSha256(tlsFingerprintSha256),
             token = token,
             shareConnectNonce = shareConnectNonce,
+            discoveryStatus = discoveryStatus,
         ).apply {
             this.httpClient = httpClient
             this.sessionClient = sessionClient

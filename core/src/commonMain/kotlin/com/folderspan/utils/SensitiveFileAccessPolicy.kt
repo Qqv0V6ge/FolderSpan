@@ -51,13 +51,18 @@ object SensitiveFileAccessPolicy {
         platformSensitivePathRules() + commonSensitivePathRules()
     }
 
-    fun classify(path: String): SensitivePathClassification =
-        classify(path, PathUtils.getPathSeparator(), rules, securityBoundaryCaseInsensitive)
+    fun classify(path: String): SensitivePathClassification {
+        if (isAndroidContentUriPath(path)) {
+            return SensitivePathClassification(FileSensitivity.None)
+        }
+        return classify(path, PathUtils.getPathSeparator(), rules, securityBoundaryCaseInsensitive)
+    }
 
     fun permissionForExternalPath(path: String): FileAccessPermission =
         if (classify(path).isProtected) FileAccessPermission.Denied else FileAccessPermission.Allowed
 
     fun deniedException(path: String): AuthorityException? {
+        if (isAndroidContentUriPath(path)) return null
         lexicalDeniedException(path)?.let { error -> return error }
         val canonical = PathUtils.resolveCanonicalPath(
             FileAccessPermission.Allowed,

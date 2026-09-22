@@ -72,32 +72,3 @@ fun DeviceEditDialog(
         }
     )
 }
-
-@Composable
-fun DeleteDeviceDialog(
-    deviceName: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(AppStrings.ui_confirm_deletion) },
-        text = {
-            Text(
-                AppStrings.dialog_delete_device.format(
-                    deviceName = deviceName,
-                ),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(AppStrings.ui_delete)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(AppStrings.ui_cancel)
-            }
-        }
-    )
-}

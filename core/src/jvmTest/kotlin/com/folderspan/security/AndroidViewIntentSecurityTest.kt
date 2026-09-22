@@ -27,6 +27,17 @@ class AndroidViewIntentSecurityTest : ChineseLocalizationTest() {
         assertFalse("clipboardUrlDownloadCoordinator" in sendHandler)
         assertTrue("fileShareState.updateIncomingFiles(normalizeShareListDropFiles(files))" in handler)
         assertTrue("mainState.requestOpenScreen(FileShareScreen)" in handler)
+        val opensShare = handler
+            .substringAfter("fun opensFileShareScreen(")
+            .substringBefore("fun handle(")
+        assertTrue("Intent.ACTION_VIEW -> hasGrantedContentViewUri(intent)" in opensShare)
+        val viewHandler = handler
+            .substringAfter("private fun handleView(")
+            .substringBefore("private fun hasGrantedContentViewUri(")
+        assertTrue("handleSharedFiles(listOf(uri), onComplete)" in viewHandler)
+        assertFalse("handleOpenFile" in viewHandler)
+        assertFalse("openHomeScreen()" in viewHandler)
+        assertTrue("ShareHandler.handleDroppedFilesForShare" in handler)
     }
 
     @Test
@@ -76,7 +87,14 @@ class AndroidViewIntentSecurityTest : ChineseLocalizationTest() {
             .substringAfter("fun handleSharedFilesForShare(")
             .substringBefore(AppStrings.ui_test_android_view_intent_security_process_drag_and_drop_import_across)
         assertTrue("getFileInfoFromUri(activity.contentResolver, uri)" in shareListPath)
+        assertTrue("publishIncomingShareDesk(fileState, uniqueUris, sharedFiles)" in shareListPath)
         assertFalse("openInputStream" in shareListPath)
+        val deskPublisher = shareHandler
+            .substringAfter("private fun publishIncomingShareDesk(")
+            .substringBefore("fun handleOpenFile(")
+        assertTrue("SharedUriFileRegistry.put" in deskPublisher)
+        assertTrue("fileState.updateDesk" in deskPublisher)
+        assertTrue("ensureSystemShareDesk()" in deskPublisher)
     }
 
     private fun projectRoot(): Path {

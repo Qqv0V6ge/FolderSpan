@@ -17,13 +17,13 @@ CREATE TABLE DevicePermission (
 CREATE UNIQUE INDEX DevicePermission_id_uindex
 ON DevicePermission (id);
 
--- 插入一些假数据到 DevicePermission 表
+-- 内置说明保存稳定标识，由 DevicePresetStrings 按当前语言显示。
 INSERT INTO DevicePermission (id, path, useAll, read, write, remove, rename, sortOrder, comment)
 VALUES 
-    (1, 'bookmark', 0, 1, 1, 1, 1, 1, '获取书签权限'),
-    (2, 'rootPaths', 0, 1, 0, 0, 0, 0, '获取根目录权限'),
-    (3, '/', 1, 1, 1, 1, 1, 1, '禁止将该权限，设置除超级管理员以外的角色'),
-    (4, '/', 1, 1, 0, 0, 0, 0, '允许读取根目录下的文件夹和文件夹');
+    (1, 'bookmark', 0, 1, 1, 1, 1, 1, '@device_permission_bookmarks_comment'),
+    (2, 'rootPaths', 0, 1, 0, 0, 0, 0, '@device_permission_root_paths_comment'),
+    (3, '/', 1, 1, 1, 1, 1, 1, '@device_permission_full_access_comment'),
+    (4, '/', 1, 1, 0, 0, 0, 0, '@device_permission_read_only_comment');
 
 lastInsertRowId:
 SELECT last_insert_rowid();

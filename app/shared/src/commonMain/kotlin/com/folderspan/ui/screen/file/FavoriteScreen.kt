@@ -24,6 +24,7 @@ import com.folderspan.db.FileFavorite
 import com.folderspan.extensions.replaceLast
 import com.folderspan.service.data.ConnectType
 import com.folderspan.service.data.DeviceTransportType
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.FavoritePickerDialog
 import com.folderspan.ui.components.file.FileFavoriteCard
 import com.folderspan.ui.components.filter.FilterOptionChip
@@ -203,7 +204,7 @@ class FavoriteScreen : AppScreenRoute {
                 FileProtocol.Device -> {
                     val resolvedId = protocolId.orEmpty()
                     if (resolvedId.isBlank()) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     val connected = deviceState.devices.firstOrNull { item -> item.id == resolvedId }
@@ -215,7 +216,7 @@ class FavoriteScreen : AppScreenRoute {
                         item.id == resolvedId && item.transportType == DeviceTransportType.Session
                     }
                     if (socketDevice == null) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     updateDeviceConnectType(socketDevice.id, ConnectType.Loading)
@@ -224,25 +225,25 @@ class FavoriteScreen : AppScreenRoute {
                         deviceState.devices.firstOrNull { item -> item.id == resolvedId }
                     } catch (_: Exception) {
                         updateDeviceConnectType(socketDevice.id, ConnectType.Fail)
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     if (target == null) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     openOnDesk(target)
                 }
 
                 FileProtocol.Share -> {
-                    snackbarHostState.showSnackbar(AppStrings.ui_collection_does_not_support_sharing_sources)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_collection_does_not_support_sharing_sources)
                     return
                 }
 
                 FileProtocol.Network -> {
                     val resolvedId = protocolId.orEmpty()
                     if (resolvedId.isBlank()) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     networkState.loadPersisted()
@@ -251,7 +252,7 @@ class FavoriteScreen : AppScreenRoute {
                     val entry = connectedEntry
                         ?: networkState.entries.firstOrNull { item -> item.network.protocolId == resolvedId }
                     if (entry == null) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                         return
                     }
                     if (connectedEntry == null) {
@@ -289,16 +290,17 @@ class FavoriteScreen : AppScreenRoute {
                     updated > 0 -> AppStrings.ui_pinned_arg0_items.format(arg0 = (updated).toString())
                     else -> AppStrings.ui_selected_items_pinned
                 }
-                snackbarHostState.showSnackbar(message)
+                snackbarHostState.showLatestSnackbar(message)
             }
         }
 
         fun confirmDelete(favorite: FileFavorite) {
             scope.launch {
-                val result = snackbarHostState.showSnackbar(
+                val result = snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_delete_collection_arg0.format(arg0 = favorite.name),
                     actionLabel = AppStrings.ui_delete,
-                    withDismissAction = true
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
                 )
                 if (result == SnackbarResult.ActionPerformed) {
                     fileFavoriteState.delete(favorite)
@@ -315,10 +317,11 @@ class FavoriteScreen : AppScreenRoute {
             }
 
             scope.launch {
-                val result = snackbarHostState.showSnackbar(
+                val result = snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_delete_selected_arg0_items.format(arg0 = (selectedFavorites.size).toString()),
                     actionLabel = AppStrings.ui_delete,
-                    withDismissAction = true
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
                 )
 
                 if (result != SnackbarResult.ActionPerformed) {
@@ -573,7 +576,7 @@ class FavoriteScreen : AppScreenRoute {
                             val skippedCount = selectedFiles.size - newFiles.size
 
                             if (newFiles.isEmpty()) {
-                                snackbarHostState.showSnackbar(AppStrings.ui_selected_item_already_your_collection)
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_selected_item_already_your_collection)
                                 return@launch
                             }
 
@@ -585,7 +588,7 @@ class FavoriteScreen : AppScreenRoute {
                             } else {
                                 AppStrings.ui_added_favorites
                             }
-                            snackbarHostState.showSnackbar(message)
+                            snackbarHostState.showLatestSnackbar(message)
                         }
                     }
                 )

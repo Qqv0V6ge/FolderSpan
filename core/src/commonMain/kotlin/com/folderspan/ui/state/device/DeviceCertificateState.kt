@@ -8,6 +8,7 @@ import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.executeAsListAwait
+import com.folderspan.utils.isAndroidContentUriPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -291,6 +292,12 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
         path: String,
     ): Boolean {
         val grant = scope.matchingContentGrant(path) ?: return false
+        if (isAndroidContentUriPath(path) || isAndroidContentUriPath(grant.path)) {
+            return !grant.isDirectory &&
+                isAndroidContentUriPath(grant.path) &&
+                isAndroidContentUriPath(path) &&
+                normalizeDeviceSharePath(path) == grant.path
+        }
         if (PathUtils.isSymbolicLink(fileAccessPermission, path)) return false
         val canonicalPath = PathUtils.resolveCanonicalPath(fileAccessPermission, path) ?: return false
         if (normalizeDeviceSharePath(canonicalPath) != normalizeDeviceSharePath(path)) return false

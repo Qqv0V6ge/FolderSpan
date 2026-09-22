@@ -51,6 +51,13 @@ class RequestRejectedTemplate : BaseTemplate() {
                         attributes["role"] = "alert"
                         +message
                     }
+
+                    a {
+                        href = "/"
+                        classes = setOf("btn", "btn--primary", "btn--block", "ripple")
+                        svgIcon(SvgIcon.Home)
+                        span { +AppStrings.ui_return }
+                    }
                 }
             }
         }

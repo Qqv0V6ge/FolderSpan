@@ -25,6 +25,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -56,6 +57,7 @@ import com.folderspan.extensions.replaceLast
 import com.folderspan.extensions.timestampToYearMonthDay
 import com.folderspan.service.data.ConnectType
 import com.folderspan.service.data.DeviceTransportType
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.filter.FilterOptionChip
 import com.folderspan.ui.components.filter.FilterSectionCard
 import com.folderspan.ui.components.filter.FilterSheetFrame
@@ -201,10 +203,11 @@ class RecentScreen : AppScreenRoute {
         fun confirmClearAll() {
             if (recents.isEmpty()) return
             scope.launch {
-                val result = snackbarHostState.showSnackbar(
+                val result = snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_clear_all_recent_records,
                     actionLabel = AppStrings.ui_clear,
-                    withDismissAction = true
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
                 )
                 if (result == SnackbarResult.ActionPerformed) {
                     fileRecentState.clear()
@@ -216,10 +219,11 @@ class RecentScreen : AppScreenRoute {
         fun confirmDeleteSelected() {
             if (selectedIds.isEmpty()) return
             scope.launch {
-                val result = snackbarHostState.showSnackbar(
+                val result = snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_delete_selected_arg0_records.format(arg0 = (selectedIds.size).toString()),
                     actionLabel = AppStrings.ui_delete,
-                    withDismissAction = true
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Short,
                 )
                 if (result == SnackbarResult.ActionPerformed) {
                     fileRecentState.deleteByIds(selectedIds.toList())
@@ -259,7 +263,7 @@ class RecentScreen : AppScreenRoute {
                     FileProtocol.Device -> {
                         val resolvedId = recent.protocolId
                         if (resolvedId.isBlank()) {
-                            snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                            snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                         }
                         val connected = deviceState.devices.firstOrNull { item -> item.id == resolvedId }
@@ -271,7 +275,7 @@ class RecentScreen : AppScreenRoute {
                             item.id == resolvedId && item.transportType == DeviceTransportType.Session
                         }
                         if (socketDevice == null) {
-                            snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                            snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                         }
                         updateDeviceConnectType(socketDevice.id, ConnectType.Loading)
@@ -280,25 +284,25 @@ class RecentScreen : AppScreenRoute {
                             deviceState.devices.firstOrNull { item -> item.id == resolvedId }
                         } catch (_: Exception) {
                             updateDeviceConnectType(socketDevice.id, ConnectType.Fail)
-                            snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                            snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                         }
                         if (target == null) {
-                            snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                            snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                     }
                     openOnDesk(target)
                 }
 
                 FileProtocol.Share -> {
-                    snackbarHostState.showSnackbar(AppStrings.ui_recent_records_do_not_support_sharing_sources)
+                    snackbarHostState.showLatestSnackbar(AppStrings.ui_recent_records_do_not_support_sharing_sources)
                     return@launch
                 }
 
                 FileProtocol.Network -> {
                     val resolvedId = recent.protocolId
                     if (resolvedId.isBlank()) {
-                        snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                        snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                         }
                         networkState.loadPersisted()
@@ -307,7 +311,7 @@ class RecentScreen : AppScreenRoute {
                         val entry = connectedEntry
                             ?: networkState.entries.firstOrNull { item -> item.network.protocolId == resolvedId }
                         if (entry == null) {
-                            snackbarHostState.showSnackbar(AppStrings.ui_target_unavailable)
+                            snackbarHostState.showLatestSnackbar(AppStrings.ui_target_unavailable)
                             return@launch
                         }
                         if (connectedEntry == null) {

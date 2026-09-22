@@ -5,7 +5,6 @@ import strings.AppStrings
 import com.folderspan.data.main.network.Network
 import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.utils.LogKit
-import com.folderspan.utils.NetworkHostUtils
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.mserref.NtStatus
@@ -17,43 +16,59 @@ import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.connection.Connection
-import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.util.*
 
 internal class SmbNetworkClient(private val network: Network) : NetworkClient, ChunkReadableNetworkClient {
     private suspend fun <T> withShare(block: suspend (DiskShare) -> T): Result<T> = withContext(Dispatchers.IO) {
-        val client = SMBClient(SmbConfig.builder().withSigningRequired(true).build())
-        var connection: Connection? = null
-        var session: Session? = null
-        var share: DiskShare? = null
-        val resolved = NetworkHostUtils.resolveHostPort(network.host, 445)
-        val host = resolved.host
-        val port = resolved.port ?: 445
-        val smbExtras = network.extras.smb
-        val shareNamePreview = smbExtras.share.ifBlank { "<empty>" }
-        val domainPreview = smbExtras.domain.ifBlank { "default" }
-        LogKit.i(AppStrings.ui_smb_connection_arg0_arg1_share_arg2_domain_arg3_user.format(arg0 = host, arg1 = (port).toString(), arg2 = shareNamePreview, arg3 = domainPreview, arg4 = network.username))
         try {
-            connection = client.connect(host, port)
-            val domain = smbExtras.domain.ifBlank { null }
-            val auth = AuthenticationContext(network.username, network.password.toCharArray(), domain)
-            session = connection.authenticate(auth)
-            val shareName = smbExtras.share.ifBlank { throw IllegalStateException(AppStrings.ui_smb_share_name_cannot_be_empty) }
-            share = session.connectShare(shareName) as DiskShare
-            LogKit.i(AppStrings.ui_smb_connected_arg0_arg1_share_arg2.format(arg0 = (host), arg1 = (port).toString(), arg2 = (shareName)))
-            Result.success(block(share))
-        } catch (e: Exception) {
-            LogKit.w(AppStrings.ui_smb_operation_failed_arg0.format(arg0 = (e.message).toString()), e)
-            Result.failure(e)
-        } finally {
-            runCatching { share?.close() }
-            runCatching { session?.close() }
-            runCatching { connection?.close() }
-            runCatching { client.close() }
+            val key = networkSessionKey(network, 445)
+            Result.success(sessions.use(key, { connectShare(key) }) { block(it.share) })
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            LogKit.w(AppStrings.ui_smb_operation_failed_arg0.format(arg0 = error.message.toString()), error)
+            Result.failure(error)
         }
+    }
+
+    private fun connectShare(key: NetworkSessionKey): AuthenticatedSmbSession {
+        val client = SMBClient(SmbConfig.builder().withSigningRequired(true).build())
+        var connected = false
+        try {
+            val extras = network.extras.smb
+            val shareName = extras.share.ifBlank { error(AppStrings.ui_smb_share_name_cannot_be_empty) }
+            LogKit.i(AppStrings.ui_smb_connection_arg0_arg1_share_arg2_domain_arg3_user.format(
+                arg0 = key.host, arg1 = key.port.toString(), arg2 = shareName,
+                arg3 = extras.domain.ifBlank { "default" }, arg4 = network.username,
+            ))
+            val connection = client.connect(key.host, key.port)
+            val auth = AuthenticationContext(network.username, network.password.toCharArray(), extras.domain.ifBlank { null })
+            val session = connection.authenticate(auth)
+            val share = session.connectShare(shareName) as DiskShare
+            LogKit.i(AppStrings.ui_smb_connected_arg0_arg1_share_arg2.format(
+                arg0 = key.host, arg1 = key.port.toString(), arg2 = shareName,
+            ))
+            return AuthenticatedSmbSession(client, connection, share).also { connected = true }
+        } finally {
+            if (!connected) runCatching { client.close() }
+        }
+    }
+
+    private class AuthenticatedSmbSession(val client: SMBClient, val connection: Connection, val share: DiskShare) {
+        val isOpen: Boolean get() = connection.isConnected && share.isConnected
+    }
+
+    companion object {
+        private val sessions = NetworkSessionCache<AuthenticatedSmbSession>(
+            isOpen = { it.isOpen },
+            close = { withContext(Dispatchers.IO) { runCatching { it.client.close() } } },
+            isConnectionFailure = ::isSmbConnectionFailure,
+        )
     }
 
     override suspend fun list(
@@ -76,7 +91,10 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient, C
                         size = if (isDir) -1 else entry.endOfFile,
                         createdDate = entry.lastWriteTime.toEpochMillis(),
                         updatedDate = entry.lastWriteTime.toEpochMillis(),
-                        isHidden = isHidden
+                        isHidden = isHidden,
+                        // ponytail: 重解析点保守视为链接；需要支持云占位文件时再读取 reparse tag。
+                        isSymbolicLink = attrs and FileAttributes.FILE_ATTRIBUTE_REPARSE_POINT.value != 0L,
+                        isSymbolicLinkKnown = true,
                     )
                 }
             LogKit.i(AppStrings.ui_smb_list_arg0_count_arg1.format(arg0 = target, arg1 = (files.size).toString()))
@@ -164,6 +182,8 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient, C
                     true
                 }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -197,6 +217,8 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient, C
                 }
                 true
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Result.failure(error)
         }
@@ -320,3 +342,14 @@ internal class SmbNetworkClient(private val network: Network) : NetworkClient, C
         return normalized + name
     }
 }
+
+
+internal fun isSmbConnectionFailure(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.take(8).any {
+        it is IOException || it is SMBApiException && it.status in setOf(
+            NtStatus.STATUS_NETWORK_SESSION_EXPIRED,
+            NtStatus.STATUS_USER_SESSION_DELETED,
+            NtStatus.STATUS_NETWORK_NAME_DELETED,
+            NtStatus.STATUS_CONNECTION_DISCONNECTED,
+        )
+    }

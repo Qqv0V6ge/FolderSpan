@@ -364,6 +364,7 @@ kotlin {
 
     android {
         namespace = "com.folderspan.core"
+        testNamespace = providers.gradleProperty("deviceTestApplicationId").orNull
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -377,6 +378,7 @@ kotlin {
             isIncludeAndroidResources = true
         }
         withDeviceTest {
+            applicationId = providers.gradleProperty("deviceTestApplicationId").orNull
             instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
             execution = "HOST"
         }
@@ -559,6 +561,8 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     sourceSets {
+        getByName("jvmTest").kotlin.srcDir("src/udpSocketTest/kotlin")
+        getByName("androidDeviceTest").kotlin.srcDir("src/udpSocketTest/kotlin")
         // The two interop endpoints must run together; keep them out of standalone suites.
         if (providers.gradleProperty("webrtcInterop").isPresent) {
             getByName("jvmTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropJvmTest/kotlin")
@@ -586,6 +590,9 @@ kotlin {
         val zstdMain = maybeCreate("zstdMain").apply {
             dependsOn(commonMain)
         }
+        val udpSocketMain = maybeCreate("udpSocketMain").apply {
+            dependsOn(commonMain)
+        }
         val skiaMain = maybeCreate("skiaMain").apply {
             dependsOn(commonMain)
         }
@@ -594,10 +601,12 @@ kotlin {
         androidMain.dependsOn(serverRouteMain)
         androidMain.dependsOn(fileStagingMain)
         androidMain.dependsOn(zstdMain)
+        androidMain.dependsOn(udpSocketMain)
         jvmMain.dependsOn(skiaMain)
         jvmMain.dependsOn(serverRouteMain)
         jvmMain.dependsOn(fileStagingMain)
         jvmMain.dependsOn(zstdMain)
+        jvmMain.dependsOn(udpSocketMain)
         iosMain.dependsOn(skiaMain)
         iosMain.dependsOn(kmpWebRtcMain)
         iosMain.dependsOn(serverRouteMain)
@@ -679,6 +688,7 @@ kotlin {
             }
         }
         androidMain.dependencies {
+            implementation("${libs.jna.get()}@aar")
             implementation(libs.commons.net)
             implementation(libs.apache.sshd.core)
             implementation(libs.apache.sshd.sftp)
@@ -725,6 +735,7 @@ kotlin {
             implementation(npm("crypto-js", "4.2.0"))
         }
         jvmMain.dependencies {
+            implementation(libs.jna)
             implementation(libs.commons.net)
             implementation(libs.apache.sshd.core)
             implementation(libs.apache.sshd.sftp)

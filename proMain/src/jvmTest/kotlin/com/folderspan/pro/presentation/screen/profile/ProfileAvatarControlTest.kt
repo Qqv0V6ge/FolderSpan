@@ -83,8 +83,26 @@ class ProfileAvatarControlTest {
         }
 
         onAllNodesWithText("alice@example.test").assertCountEquals(0)
-        onNodeWithText(AppStrings.ui_personal_data).assertIsDisplayed()
+        onNodeWithText(AppStrings.ui_nickname).assertIsDisplayed()
         onAllNodesWithText(AppStrings.ui_profile_avatar).assertCountEquals(0)
+    }
+
+    @Test
+    fun avatarRemovalConfirmationUsesSnackbar() = runComposeUiTest {
+        var confirmations = 0
+        setContent {
+            MaterialTheme {
+                EditProfilePage(
+                    state = EditProfileUiState(isAvatarRemovalConfirmationVisible = true),
+                    onConfirmAvatarRemoval = { confirmations += 1 },
+                )
+            }
+        }
+
+        onNodeWithText(AppStrings.ui_profile_avatar_remove_confirm_message).assertIsDisplayed()
+        onAllNodesWithText(AppStrings.ui_profile_avatar_remove_confirm_title).assertCountEquals(0)
+        onNodeWithText(AppStrings.ui_profile_avatar_remove).performClick()
+        runOnIdle { assertEquals(1, confirmations) }
     }
 
     @Test

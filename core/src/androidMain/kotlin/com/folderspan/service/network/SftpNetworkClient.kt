@@ -7,16 +7,17 @@ import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.network.Network
 import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.utils.LogKit
-import com.folderspan.utils.NetworkHostUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.sshd.client.SshClient
+import org.apache.sshd.client.config.hosts.HostConfigEntryResolver
 import org.apache.sshd.client.config.hosts.KnownHostEntry
-import org.apache.sshd.client.keyverifier.RejectAllServerKeyVerifier
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.common.NamedResource
 import org.apache.sshd.common.config.keys.KeyUtils
+import org.apache.sshd.common.config.keys.PublicKeyEntry
 import org.apache.sshd.common.util.security.SecurityUtils
 import org.apache.sshd.sftp.client.SftpClient
 import org.apache.sshd.sftp.client.SftpClientFactory
@@ -25,59 +26,98 @@ import org.apache.sshd.sftp.common.SftpConstants
 import org.apache.sshd.sftp.common.SftpException
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.security.KeyPair
 import java.security.Security
 import kotlin.time.Instant
+import kotlin.io.encoding.Base64
 
-internal class SftpNetworkClient(private val network: Network) : NetworkClient, ChunkReadableNetworkClient {
-    private suspend fun <T> withClient(block: suspend (SftpClient) -> T): Result<T> = withContext(Dispatchers.IO) {
-        ensureBouncyCastleProvider()
-        var client: SshClient? = null
-        var session: ClientSession? = null
-        var sftp: SftpClient? = null
-        val resolved = NetworkHostUtils.resolveHostPort(network.host, 22)
-        val host = resolved.host
-        val port = resolved.port ?: 22
-        val sftpExtras = network.extras.sftp
-        val authHint = if (sftpExtras.privateKey.isNotBlank()) "key" else "password"
-        val knownHostsHint = if (sftpExtras.knownHosts.isNotBlank()) "known_hosts=provided" else "known_hosts=missing"
-        LogKit.i(AppStrings.ui_sftp_connection_arg0_arg1_user_arg2_auth_arg3_arg4.format(arg0 = host, arg1 = (port).toString(), arg2 = network.username, arg3 = authHint, arg4 = knownHostsHint))
+internal class SftpNetworkClient(
+    private val network: Network,
+    private val hostKeyTrust: SftpHostKeyTrust = SftpHostKeyTrust.shared,
+) : NetworkClient, ChunkReadableNetworkClient {
+    private suspend fun <T> withClient(block: suspend (SftpClient) -> T): Result<T> =
+        hostKeyTrust.withTrust { withClientAttempt(block) }
+
+    private suspend fun <T> withClientAttempt(block: suspend (SftpClient) -> T): Result<T> = withContext(Dispatchers.IO) {
         try {
-            client = SshClient.setUpDefaultClient()
-            client.start()
-            client.serverKeyVerifier = resolveSftpServerKeyVerifier(
-                knownHosts = sftpExtras.knownHosts,
-                host = host,
-                port = port,
-            )
-            session = client.connect(network.username, host, port)
-                .verify(10_000)
-                .session
-
-            if (sftpExtras.privateKey.isNotBlank()) {
-                val keyPairs = loadPrivateKeyPairs(sftpExtras.privateKey, session)
-                keyPairs.forEach { keyPair ->
-                    session!!.addPublicKeyIdentity(keyPair)
-                }
-            } else {
-                session!!.addPasswordIdentity(network.password)
-            }
-
-            session!!.auth().verify(10_000)
-            sftp = SftpClientFactory.instance().createSftpClient(session)
-            LogKit.i(AppStrings.ui_sftp_connected_arg0_arg1.format(arg0 = host, arg1 = (port).toString()))
-            Result.success(block(sftp!!))
+            val key = networkSessionKey(network, 22, hostKeyTrust)
+            Result.success(sessions.use(key, { connectSession(key) }) { block(it.sftp) })
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: ExceptionInInitializerError) {
             LogKit.w(AppStrings.ui_sftp_initialization_failed_arg0.format(arg0 = (e.cause?.message ?: e.message).toString()), e)
             Result.failure(e)
         } catch (e: Exception) {
-            LogKit.w(AppStrings.ui_sftp_operation_failed_arg0.format(arg0 = (e.message).toString()), e)
+            if (e.sftpUnknownHostKeyOrNull() == null) {
+                LogKit.w(AppStrings.ui_sftp_operation_failed_arg0.format(arg0 = (e.message).toString()), e)
+            }
             Result.failure(e)
-        } finally {
-            runCatching { sftp?.close() }
-            runCatching { session?.close() }
-            runCatching { client?.stop() }
         }
+    }
+
+    private fun connectSession(key: NetworkSessionKey): AuthenticatedSftpSession {
+        ensureBouncyCastleProvider()
+        var client: SshClient? = null
+        var session: ClientSession? = null
+        var sftp: SftpClient? = null
+        var connected = false
+        val host = key.host
+        val port = key.port
+        val sftpExtras = network.extras.sftp
+        val authHint = if (sftpExtras.privateKey.isNotBlank()) "key" else "password"
+        val knownHostsHint = if (sftpExtras.knownHosts.isNotBlank()) "known_hosts=provided" else "known_hosts=automatic"
+        try {
+            LogKit.i(AppStrings.ui_sftp_connection_arg0_arg1_user_arg2_auth_arg3_arg4.format(arg0 = host, arg1 = port.toString(), arg2 = network.username, arg3 = authHint, arg4 = knownHostsHint))
+            val serverKeyVerifier = resolveSftpServerKeyVerifier(
+                knownHosts = sftpExtras.knownHosts,
+                host = host,
+                port = port,
+                hostKeyTrust = hostKeyTrust,
+            )
+            client = SshClient.setUpDefaultClient()
+            // The form supplies the endpoint; unrelated SSH config must not rewrite it.
+            client.hostConfigEntryResolver = HostConfigEntryResolver.EMPTY
+            client.serverKeyVerifier = serverKeyVerifier
+            client.start()
+            session = client.connect(network.username, host, port)
+                .verify(10_000)
+                .session
+            if (sftpExtras.privateKey.isNotBlank()) {
+                loadPrivateKeyPairs(sftpExtras.privateKey, session).forEach(session::addPublicKeyIdentity)
+            } else {
+                session.addPasswordIdentity(network.password)
+            }
+            session.auth().verify(10_000)
+            sftp = SftpClientFactory.instance().createSftpClient(session)
+            LogKit.i(AppStrings.ui_sftp_connected_arg0_arg1.format(arg0 = host, arg1 = port.toString()))
+            return AuthenticatedSftpSession(client, session, sftp).also { connected = true }
+        } finally {
+            if (!connected) {
+                runCatching { sftp?.close() }
+                runCatching { session?.close() }
+                runCatching { client?.stop() }
+            }
+        }
+    }
+
+    private class AuthenticatedSftpSession(val client: SshClient, val session: ClientSession, val sftp: SftpClient) {
+        val isOpen: Boolean get() = session.isOpen && session.isAuthenticated && sftp.isOpen
+
+        fun close() {
+            runCatching { sftp.close() }
+            runCatching { session.close() }
+            runCatching { client.stop() }
+        }
+    }
+
+    companion object {
+        // SSHD 2.19 的 SftpClient 支持并发请求，每次操作分别管理文件句柄和流。
+        private val sessions = NetworkSessionCache<AuthenticatedSftpSession>(
+            isOpen = { it.isOpen },
+            close = { withContext(Dispatchers.IO) { it.close() } },
+            isConnectionFailure = { error -> error is IOException && error !is SftpException },
+        )
     }
 
     private fun ensureBouncyCastleProvider() {
@@ -113,7 +153,9 @@ internal class SftpNetworkClient(private val network: Network) : NetworkClient, 
                         size = if (attrs.isDirectory) -1L else attrs.size,
                         createdDate = modified,
                         updatedDate = modified,
-                        isHidden = entry.filename.startsWith(".")
+                        isHidden = entry.filename.startsWith("."),
+                        isSymbolicLink = attrs.isSymbolicLink,
+                        isSymbolicLinkKnown = attrs.type != SftpConstants.SSH_FILEXFER_TYPE_UNKNOWN,
                     )
                 }
             LogKit.i(AppStrings.ui_sftp_list_arg0_count_arg1.format(arg0 = target, arg1 = (entries.size).toString()))
@@ -270,8 +312,14 @@ internal fun resolveSftpServerKeyVerifier(
     knownHosts: String,
     host: String,
     port: Int,
+    hostKeyTrust: SftpHostKeyTrust = SftpHostKeyTrust.shared,
 ): ServerKeyVerifier {
-    if (knownHosts.isBlank()) return RejectAllServerKeyVerifier.INSTANCE
+    if (knownHosts.isBlank()) {
+        return ServerKeyVerifier { _, _, key ->
+            val encodedKey = Base64.decode(PublicKeyEntry.toString(key).substringAfter(' '))
+            hostKeyTrust.verify(sftpHostKey(host, port, encodedKey))
+        }
+    }
     val entries = loadSftpKnownHostEntries(knownHosts)
     require(entries.isNotEmpty()) { AppStrings.ui_sftp_known_hosts_unparseable_connection_rejected }
     return buildSftpKnownHostsVerifier(entries, host, port)

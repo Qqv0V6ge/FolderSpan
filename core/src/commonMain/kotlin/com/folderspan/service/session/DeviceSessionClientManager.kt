@@ -182,6 +182,20 @@ class DeviceSessionClientManager(
         allowChangedTrustedCertificate: Boolean = false,
         accountDeviceAuthorization: Boolean = false,
     ): Boolean {
+        val trustedDevice = DeviceIdentityTrust.shared.resolve(connectDevice)
+        if (trustedDevice !== connectDevice && registerInDeviceState) {
+            withContext(Dispatchers.Main) {
+                upsertSocketDevice(trustedDevice, trustedDevice.connectType, token = "", manager = null)
+            }
+        }
+        return connectTrustedDevice(trustedDevice, allowChangedTrustedCertificate, accountDeviceAuthorization)
+    }
+
+    private suspend fun connectTrustedDevice(
+        connectDevice: SocketDevice,
+        allowChangedTrustedCertificate: Boolean,
+        accountDeviceAuthorization: Boolean,
+    ): Boolean {
         val tlsFingerprint = connectDevice.normalizedTlsFingerprint()
         LogKit.i(
             AppStrings.ui_device_session_connection_id_arg0_host_arg1.format(arg0 = (connectDevice.id), arg1 = (connectDevice.host)) +

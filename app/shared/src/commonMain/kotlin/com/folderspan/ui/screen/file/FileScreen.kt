@@ -30,6 +30,7 @@ import com.folderspan.exception.EmptyDataException
 import com.folderspan.extensions.fileOperationKey
 import com.folderspan.extensions.getFilterByExtension
 import com.folderspan.ignore.IgnoreFileMenuItem
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.buttons.FileFilterButtonGroup
 import com.folderspan.ui.components.buttons.FileFilterButtonGroupUiState
 import com.folderspan.ui.components.buttons.SortButton
@@ -419,7 +420,7 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
             }
             val onRemove = {
                 scope.launch(Dispatchers.Default) {
-                    val showSnackbar = snackbarHostState.showSnackbar(
+                    val showSnackbar = snackbarHostState.showLatestSnackbar(
                         message = item.name,
                         actionLabel = AppStrings.ui_delete,
                         withDismissAction = true,
@@ -576,7 +577,7 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
                         homeState.updateFileInfo(null)
                     }
                     .onFailure { throwable ->
-                        snackbarHostState.showSnackbar(
+                        snackbarHostState.showLatestSnackbar(
                             message = throwable.message ?: AppStrings.ui_creation_failed,
                             withDismissAction = true,
                             duration = SnackbarDuration.Short

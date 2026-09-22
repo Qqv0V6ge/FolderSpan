@@ -1,7 +1,3 @@
-# FolderSpan
-
-当前版本为 **1.0 预览版**（版本号 `1.0.0`），用于功能体验与测试反馈。
-
 这是一个面向 Android、iOS、Web、Desktop (JVM) 的 Kotlin 多平台项目。
 
 ## 项目结构

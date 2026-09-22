@@ -1,4 +1,7 @@
 # Keep rules for project-specific reflection/dynamic loading can be added here when needed.
+# JNA dispatches libc socket options through JNI and a reflected interface.
+-keep class com.sun.jna.** { *; }
+-keep interface com.folderspan.service.webrtc.models.SocketOptions { *; }
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 -dontwarn javax.el.BeanELResolver

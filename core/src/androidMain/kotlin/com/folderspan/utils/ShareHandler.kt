@@ -125,12 +125,34 @@ object ShareHandler : KoinComponent {
         val retainPermission: Boolean,
         val referencedPaths: Set<String>,
         val registryPaths: Set<String>,
+        val files: List<FileSimpleInfo> = emptyList(),
     )
 
     private fun ensureSystemShareDesk(): Share {
         val existing = deviceState.shares.firstOrNull { item -> item.id == SYSTEM_SHARE_DESK_ID }
         if (existing != null) return existing
         return buildSystemShareDesk().also { share -> deviceState.shares.add(share) }
+    }
+
+    private fun publishIncomingShareDesk(
+        fileState: FileState,
+        uris: List<Uri>,
+        sharedFiles: List<FileSimpleInfo>,
+    ) {
+        val deskPath = if (uris.size == 1) {
+            val uri = uris.first()
+            SharedUriFileRegistry.put(uri, sharedFiles)
+            uri.toString()
+        } else {
+            val bundleUri = "content://bundle/${System.currentTimeMillis()}".toUri()
+            SharedUriFileRegistry.put(bundleUri, sharedFiles)
+            bundleUri.toString()
+        }
+        fileState.updateDesk(
+            FileProtocol.Share,
+            ensureSystemShareDesk(),
+            pathOverride = deskPath,
+        )
     }
 
     /**
@@ -382,10 +404,12 @@ object ShareHandler : KoinComponent {
     }
 
     /**
-     * 把 ACTION_SEND / ACTION_SEND_MULTIPLE 的文件 URI 归一化为分享列表条目。
+     * 把 ACTION_SEND / ACTION_SEND_MULTIPLE / ACTION_VIEW 的文件 URI
+     * 登记到系统分享桌面，并归一化为分享列表条目。
      */
     fun handleSharedFilesForShare(
         activity: Activity,
+        fileState: FileState,
         uris: List<Uri>,
         onComplete: (List<FileSimpleInfo>) -> Unit,
     ) {
@@ -422,6 +446,8 @@ object ShareHandler : KoinComponent {
                     }
                     if (sharedFiles.isEmpty()) {
                         Toast.makeText(activity, AppStrings.ui_unable_read_shared_file, Toast.LENGTH_SHORT).show()
+                    } else {
+                        publishIncomingShareDesk(fileState, uniqueUris, sharedFiles)
                     }
                 }
             } finally {
@@ -529,18 +555,17 @@ object ShareHandler : KoinComponent {
                     }
 
                     val delivered = ShareListDropRegistry.deliver(topLevelFiles)
-                    if (!delivered) {
-                        fileState.updateDesk(
-                            FileProtocol.Share,
-                            ensureSystemShareDesk(),
-                            pathOverride = bundleUri.toString(),
-                        )
-                    }
+                    fileState.updateDesk(
+                        FileProtocol.Share,
+                        ensureSystemShareDesk(),
+                        pathOverride = bundleUri.toString(),
+                    )
                     result = DroppedFilesResult(
                         deliveredToShareList = delivered,
                         retainPermission = true,
                         referencedPaths = topLevelFiles.map { item -> item.path }.toSet(),
                         registryPaths = registryEntries.keys.map { uri -> uri.toString() }.toSet(),
+                        files = topLevelFiles,
                     )
                 }
             } finally {

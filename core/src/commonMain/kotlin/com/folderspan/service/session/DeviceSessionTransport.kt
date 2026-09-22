@@ -36,7 +36,7 @@ internal class DeviceSessionTransport(
                 "receiveWindow=${receivePlan.sessionWindowBytes}",
         )
         return scope.launch {
-            val writer = launch {
+            val writer = launch(channel.ioContext) {
                 try {
                     var pendingFrame: DeviceSessionFrame? = null
                     while (true) {
@@ -66,7 +66,7 @@ internal class DeviceSessionTransport(
                     connection.close()
                 }
             }
-            val reader = launch {
+            val reader = launch(channel.ioContext) {
                 try {
                     while (true) {
                         incoming.send(DeviceSessionIo.readFrame(channel))

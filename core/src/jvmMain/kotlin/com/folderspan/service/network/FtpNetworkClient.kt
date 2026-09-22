@@ -6,7 +6,7 @@ import com.folderspan.data.main.network.FtpPathEncoding
 import com.folderspan.data.main.network.Network
 import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.utils.LogKit
-import com.folderspan.utils.NetworkHostUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.commons.net.ftp.*
@@ -14,49 +14,55 @@ import java.io.*
 
 internal class FtpNetworkClient(private val network: Network) : NetworkClient, ChunkReadableNetworkClient {
     private suspend fun <T> withClient(block: suspend (FTPClient) -> T): Result<T> = withContext(Dispatchers.IO) {
-        val ftpExtras = network.extras.ftp
-        val client: FTPClient = createFtpTransportClient(ftpExtras.ftpsEnabled)
-        val resolved = NetworkHostUtils.resolveHostPort(network.host, 21)
-        val host = resolved.host
-        val port = resolved.port ?: 21
-        val controlEncoding = ftpExtras.pathEncoding.toControlEncoding()
-        val autoDetectUtf8 = ftpExtras.pathEncoding == FtpPathEncoding.Auto
-        LogKit.i(
-            AppStrings.ui_ftp_connection_arg0_arg1_passive_arg2_ftps_arg3_encoding.format(arg0 = host, arg1 = (port).toString(), arg2 = (ftpExtras.passiveMode).toString(), arg3 = (ftpExtras.ftpsEnabled).toString(), arg4 = (ftpExtras.pathEncoding).toString())
-        )
         try {
-            client.controlEncoding = controlEncoding
-            client.autodetectUTF8 = autoDetectUtf8
-            client.connect(host, port)
-            if (!FTPReply.isPositiveCompletion(client.replyCode)) {
-                throw IllegalStateException(client.replyString)
-            }
-            val username = network.username.ifBlank { "anonymous" }
-            val password = network.password
-            if (!client.login(username, password)) {
-                throw IllegalStateException(AppStrings.ui_ftp_login_failed)
-            }
-            LogKit.i(AppStrings.ui_ftp_connected_arg0_arg1.format(arg0 = (host), arg1 = (port).toString()))
-            if (ftpExtras.passiveMode) {
-                client.enterLocalPassiveMode()
-            } else {
-                client.enterLocalActiveMode()
-            }
-            client.setFileType(FTP.BINARY_FILE_TYPE)
+            val key = networkSessionKey(network, 21)
+            Result.success(sessions.use(key, { connectClient(key) }, block))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            LogKit.w(AppStrings.ui_ftp_operation_failed_arg0.format(arg0 = error.message.toString()), error)
+            Result.failure(error)
+        }
+    }
+
+    private fun connectClient(key: NetworkSessionKey): FTPClient {
+        val extras = network.extras.ftp
+        val client = createFtpTransportClient(extras.ftpsEnabled)
+        var connected = false
+        try {
+            client.connectTimeout = 10_000
+            client.defaultTimeout = 10_000
+            client.controlEncoding = extras.pathEncoding.toControlEncoding()
+            client.autodetectUTF8 = extras.pathEncoding == FtpPathEncoding.Auto
+            LogKit.i(AppStrings.ui_ftp_connection_arg0_arg1_passive_arg2_ftps_arg3_encoding.format(
+                arg0 = key.host, arg1 = key.port.toString(), arg2 = extras.passiveMode.toString(),
+                arg3 = extras.ftpsEnabled.toString(), arg4 = extras.pathEncoding.toString(),
+            ))
+            client.connect(key.host, key.port)
+            check(FTPReply.isPositiveCompletion(client.replyCode)) { client.replyString }
+            check(client.login(network.username.ifBlank { "anonymous" }, network.password)) { AppStrings.ui_ftp_login_failed }
+            if (extras.passiveMode) client.enterLocalPassiveMode() else client.enterLocalActiveMode()
+            check(client.setFileType(FTP.BINARY_FILE_TYPE)) { client.replyString }
             if (client is FTPSClient) {
                 client.execPBSZ(0)
                 client.execPROT("P")
             }
-            Result.success(block(client))
-        } catch (e: Exception) {
-            LogKit.w(AppStrings.ui_ftp_operation_failed_arg0.format(arg0 = (e.message).toString()), e)
-            Result.failure(e)
+            LogKit.i(AppStrings.ui_ftp_connected_arg0_arg1.format(arg0 = key.host, arg1 = key.port.toString()))
+            return client.also { connected = true }
         } finally {
-            if (client.isConnected) {
-                runCatching { client.logout() }
-                runCatching { client.disconnect() }
-            }
+            if (!connected) runCatching { client.disconnect() }
         }
+    }
+
+    companion object {
+        private val sessions = NetworkSessionCache<FTPClient>(
+            // FTP 控制连接由一个操作独占，NOOP 验证服务器尚未关闭空闲连接。
+            isOpen = { it.isConnected && runCatching { it.sendNoOp() }.getOrDefault(false) },
+            close = { withContext(Dispatchers.IO) { runCatching { it.disconnect() } } },
+            // 中断传输可能留下未消费的完成响应，不能将这样的连接交给下一个操作。
+            isConnectionFailure = { true },
+            exclusive = true,
+        )
     }
 
     override suspend fun list(
@@ -67,6 +73,7 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient, C
         return withClient { client ->
             val target = normalizePath(path)
             val files = client.listFiles(target) ?: emptyArray()
+            check(FTPReply.isPositiveCompletion(client.replyCode)) { client.replyString }
             val entries = files.filterNot { isUnsafeNetworkPathSegment(it.name) }
                 .map { file ->
                     NetworkFileEntry(
@@ -76,7 +83,9 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient, C
                         size = if (file.isDirectory) -1 else file.size,
                         createdDate = file.timestamp?.time?.time ?: 0L,
                         updatedDate = file.timestamp?.time?.time ?: 0L,
-                        isHidden = file.name.startsWith(".")
+                        isHidden = file.name.startsWith("."),
+                        isSymbolicLink = file.isSymbolicLink,
+                        isSymbolicLinkKnown = !file.isUnknown,
                     )
                 }
             LogKit.i(AppStrings.ui_ftp_list_arg0_count_arg1.format(arg0 = target, arg1 = (entries.size).toString()))
@@ -115,9 +124,10 @@ internal class FtpNetworkClient(private val network: Network) : NetworkClient, C
                 relayStreamByChunks(input, size.coerceAtLeast(0L), onChunk).getOrElse { error ->
                     throw error
                 }
-                client.completePendingCommand()
+                true
             } ?: false
-            if (!success) {
+            val completed = success && client.completePendingCommand()
+            if (!completed) {
                 throw IllegalStateException(AppStrings.ui_ftp_stream_download_failed_arg0.format(arg0 = (client.replyString).toString()))
             }
             true

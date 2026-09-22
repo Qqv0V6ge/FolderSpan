@@ -1,6 +1,7 @@
 package com.folderspan.ui.components.dialog
 
 import strings.AppStrings
+import com.folderspan.localization.localizedRoleName
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -89,7 +90,7 @@ fun EditCombinedDeviceDialog(
     }
     var deviceRole by rememberSaveable(combinedDeviceKey, roleNames) {
         mutableStateOf(
-            serverDevice?.roleName?.takeIf { roleName -> roleName.isNotBlank() }
+            serverDevice?.localizedRoleName?.takeIf { roleName -> roleName.isNotBlank() }
                 ?: roleNames.firstOrNull().orEmpty()
         )
     }

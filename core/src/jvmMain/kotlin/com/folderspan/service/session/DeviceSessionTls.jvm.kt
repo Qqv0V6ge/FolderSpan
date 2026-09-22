@@ -18,6 +18,7 @@ import strings.AppStrings
 internal class JvmDeviceSessionByteChannel(
     private val socket: Socket,
 ) : DeviceSessionByteChannel {
+    override val ioContext = Dispatchers.IO
     private val input: InputStream = socket.getInputStream()
     private val output: OutputStream = socket.getOutputStream()
 

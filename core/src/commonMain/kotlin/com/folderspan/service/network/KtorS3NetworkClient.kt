@@ -98,7 +98,9 @@ internal class KtorS3NetworkClient(
                             size = -1L,
                             createdDate = -1L,
                             updatedDate = -1L,
-                            isHidden = dirName.startsWith('.')
+                            isHidden = dirName.startsWith('.'),
+                            // S3 目录是对象键前缀，不会解析文件系统符号链接。
+                            isSymbolicLinkKnown = true,
                         )
                     }
                 }
@@ -128,7 +130,8 @@ internal class KtorS3NetworkClient(
                             size = if (isDirectory) -1L else item.size,
                             createdDate = if(isDirectory) -1L else updated,
                             updatedDate =  if(isDirectory) -1L else updated,
-                            isHidden = name.startsWith('.')
+                            isHidden = name.startsWith('.'),
+                            isSymbolicLinkKnown = true,
                         )
                     }
                 }

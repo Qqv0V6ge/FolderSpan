@@ -60,6 +60,9 @@ data class WebRtcRoomInput(
 
     fun canSave(): Boolean {
         val normalized = normalized()
+        if (normalized.source == WebRtcRoomSource.Official) {
+            return normalized.name.isNotBlank() && normalized.name.length <= OfficialRoomNameMaxLength
+        }
         return normalized.name.isNotBlank() &&
             normalized.wssUrl.isNotBlank() &&
             normalized.roomId.isNotBlank() &&
@@ -80,8 +83,15 @@ data class WebRtcRoomProfile(
     val pinned: Boolean,
     val sortOrder: Long,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val maxDevices: Int = 0,
 ) {
+    val catalogKey: String
+        get() = when (source) {
+            WebRtcRoomSource.Official -> "official:$roomId"
+            WebRtcRoomSource.Other -> "other:$id"
+        }
+
     val roomIdValid: Boolean
         get() = isValidRoomId(roomId)
 
@@ -139,12 +149,92 @@ fun WebRtcRoomProfile.toWebRtcConfigResult(): Result<WebRtcConfig> {
 }
 
 fun WebRtcRoomProfile.matchesActiveConfig(config: WebRtcConfig?): Boolean {
+    if (config == null) return false
+    if (source == WebRtcRoomSource.Official) {
+        return config.roomId == roomId
+    }
     val roomConfig = toWebRtcConfig()
-    return config != null &&
-        roomConfig.wssUrl == config.wssUrl &&
+    return roomConfig.wssUrl == config.wssUrl &&
         roomConfig.roomId == config.roomId &&
         roomConfig.iceServers == config.iceServers &&
         roomConfig.unreliableMode == config.unreliableMode
+}
+
+fun officialWebRtcRoomProfile(
+    name: String,
+    roomId: String,
+    stunUrl: String = "",
+    turnUrl: String = "",
+    turnUsername: String = "",
+    turnPassword: String = "",
+    createdAt: Long = 0L,
+    updatedAt: Long = 0L,
+    maxDevices: Int = 0,
+): WebRtcRoomProfile = WebRtcRoomProfile(
+    id = 0L,
+    name = name,
+    wssUrl = "",
+    roomId = roomId,
+    stunUrl = stunUrl,
+    turnUrl = turnUrl,
+    turnUsername = turnUsername,
+    turnPassword = turnPassword,
+    source = WebRtcRoomSource.Official,
+    pinned = false,
+    sortOrder = 0L,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    maxDevices = maxDevices,
+)
+
+fun WebRtcRoomProfile.withoutCachedTurnPassword(): WebRtcRoomProfile =
+    if (turnPassword.isEmpty()) this else copy(turnPassword = "")
+
+data class OfficialWebRtcRoomPage(
+    val rooms: List<WebRtcRoomProfile>,
+    val total: Int,
+    val page: Int,
+    val pageSize: Int,
+)
+
+interface WebRtcOfficialRoomsClient {
+    suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage>
+
+    suspend fun getRoom(roomId: String): Result<WebRtcRoomProfile>
+
+    suspend fun createRoom(input: WebRtcRoomInput): Result<WebRtcRoomProfile>
+
+    suspend fun updateRoom(roomId: String, input: WebRtcRoomInput): Result<WebRtcRoomProfile>
+
+    suspend fun deleteRoom(roomId: String): Result<Unit>
+}
+
+object WebRtcOfficialRooms {
+    var client: WebRtcOfficialRoomsClient = UnavailableWebRtcOfficialRoomsClient
+
+    const val DefaultPageSize: Int = 20
+}
+
+const val OfficialRoomNameMaxLength: Int = 100
+
+private object UnavailableWebRtcOfficialRoomsClient : WebRtcOfficialRoomsClient {
+    override suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage> =
+        unavailable()
+
+    override suspend fun getRoom(roomId: String): Result<WebRtcRoomProfile> =
+        unavailable()
+
+    override suspend fun createRoom(input: WebRtcRoomInput): Result<WebRtcRoomProfile> =
+        unavailable()
+
+    override suspend fun updateRoom(roomId: String, input: WebRtcRoomInput): Result<WebRtcRoomProfile> =
+        unavailable()
+
+    override suspend fun deleteRoom(roomId: String): Result<Unit> =
+        unavailable()
+
+    private fun <T> unavailable(): Result<T> =
+        Result.failure(IllegalStateException(AppStrings.ui_log_in_before_connecting_official_webrtc_room))
 }
 
 fun WebRtcConnectionStatus.isBusy(): Boolean {

@@ -46,18 +46,13 @@ The system SHALL expose `folderspan_tasks_list`, `folderspan_tasks_get`, `folder
 - **WHEN** a Token requests deletion of a running or paused task
 - **THEN** the tool rejects deletion until the task is terminal or canceled
 
-### Requirement: HTTP device discovery and connection tools
-The system SHALL expose `folderspan_device_scan`, `folderspan_device_scan_status`, `folderspan_devices_list`, and `folderspan_device_connect`. A scan without a subnet SHALL cover all active non-loopback IPv4 interface subnets. A specific scan SHALL accept an IPv4 CIDR containing at most 4096 host addresses. Scan SHALL return an operation ID immediately. Device listing SHALL exclude offline and failed devices and SHALL group remaining devices as `connected`, `connecting`, `approval_required`, or `discovered`.
+### Requirement: HTTP device listing and connection tools
+The system SHALL expose `folderspan_devices_list` and `folderspan_device_connect`. Device listing SHALL exclude offline and failed devices and SHALL group remaining devices as `connected`, `connecting`, `approval_required`, or `discovered`. MCP SHALL NOT initiate subnet scanning and SHALL use the application's existing device discovery state.
 
-#### Scenario: Scan all LAN subnets
-- **WHEN** `folderspan_device_scan` is called without a subnet by a Token with `devices.scan`
-- **THEN** the system starts one bounded scan over every active IPv4 interface subnet
-- **AND** returns an operation ID that can be queried until completed, failed, or canceled
-
-#### Scenario: Scan one subnet
-- **WHEN** a valid bounded IPv4 CIDR is supplied
-- **THEN** only addresses in that CIDR are scanned
-- **AND** local addresses, network addresses, and broadcast addresses are not probed as remote devices
+#### Scenario: List discovered HTTP devices
+- **WHEN** `folderspan_devices_list` is called by a Token with `devices.read`
+- **THEN** the tool returns currently discovered online HTTP devices grouped by connection status
+- **AND** no network scan is started
 
 #### Scenario: Connect requires existing trust flow
 - **WHEN** `folderspan_device_connect` targets a discovered device that requires certificate or user approval

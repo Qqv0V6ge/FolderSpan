@@ -228,7 +228,7 @@ class FeedbackPageComposeTest {
     }
 
     @Test
-    fun attachmentSectionShowsSupportedTypesAndConfirmsBeforeDelete() = runComposeUiTest {
+    fun attachmentSectionShowsSupportedTypesAndConfirmsWithSnackbarBeforeDelete() = runComposeUiTest {
         var deletedAttachmentUuid: String? = null
         val ticket = feedbackCase("ticket").copy(
             attachments = listOf(
@@ -269,10 +269,12 @@ class FeedbackPageComposeTest {
         onNodeWithContentDescription(AppStrings.ui_feedback_delete_attachment)
             .performScrollTo()
             .performClick()
-        onNodeWithText(AppStrings.ui_feedback_confirm_delete_attachment_title).assertIsDisplayed()
+        onNodeWithText(
+            AppStrings.ui_feedback_confirm_delete_attachment_message_arg0.format(arg0 = "diagnostic.log"),
+        ).assertIsDisplayed()
         assertEquals(null, deletedAttachmentUuid)
-        onNodeWithText(AppStrings.ui_feedback_delete_attachment).performClick()
-        assertEquals("attachment", deletedAttachmentUuid)
+        onNodeWithText(AppStrings.ui_delete).performClick()
+        runOnIdle { assertEquals("attachment", deletedAttachmentUuid) }
     }
 
     @Test

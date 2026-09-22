@@ -37,35 +37,6 @@ fun NetworkConnectDialog(
 }
 
 @Composable
-fun NetworkDeleteDialog(
-    name: String,
-    onConfirm: () -> Unit,
-    onDismissRequest: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(AppStrings.ui_confirm_deletion) },
-        text = {
-            Text(
-                AppStrings.dialog_delete_device.format(
-                    deviceName = name,
-                ),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(AppStrings.ui_delete)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(AppStrings.ui_cancel)
-            }
-        }
-    )
-}
-
-@Composable
 fun NetworkBatchConnectDialog(
     count: Int,
     onConfirm: () -> Unit,
@@ -84,35 +55,6 @@ fun NetworkBatchConnectDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(AppStrings.ui_connect)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(AppStrings.ui_cancel)
-            }
-        }
-    )
-}
-
-@Composable
-fun NetworkBatchDeleteDialog(
-    count: Int,
-    onConfirm: () -> Unit,
-    onDismissRequest: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(AppStrings.ui_batch_delete) },
-        text = {
-            Text(
-                AppStrings.dialog_delete_selected_network_devices.format(
-                    count = count.toString(),
-                ),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(AppStrings.ui_delete)
             }
         },
         dismissButton = {

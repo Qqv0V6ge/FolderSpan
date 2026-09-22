@@ -23,12 +23,9 @@ import com.folderspan.service.http.clipboard.ClipboardUrlShareInspector
 import com.folderspan.service.http.clipboard.DefaultClipboardUrlShareInspector
 import com.folderspan.service.mcp.McpServerSettingsStore
 import com.folderspan.service.mcp.auth.McpTokenRepository
-import com.folderspan.service.mcp.automation.DeviceScanOperationStore
-import com.folderspan.service.mcp.automation.FolderSpanActiveIpv4SubnetProvider
 import com.folderspan.service.mcp.automation.McpAutomationFacade
 import com.folderspan.service.mcp.automation.McpCatalogFacade
 import com.folderspan.service.mcp.automation.McpDeviceFacade
-import com.folderspan.service.mcp.automation.TlsHandshakeMcpDeviceProbe
 import com.folderspan.service.mcp.automation.McpFileFacade
 import com.folderspan.service.mcp.automation.McpFileSharing
 import com.folderspan.service.mcp.automation.McpFileSharingFacade
@@ -157,13 +154,6 @@ val commonScreenModule = module {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         )
     }
-    single {
-        DeviceScanOperationStore(
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-            subnetProvider = FolderSpanActiveIpv4SubnetProvider,
-            probe = TlsHandshakeMcpDeviceProbe,
-        )
-    }
     single<HttpShareFileServerInterface> { HttpShareFileServer.getInstance(get()) }
     single<McpShareAddressProvider> {
         McpShareAddressProvider { getAllIPAddresses(SocketClientIPEnum.ALL).ifEmpty { listOf("localhost") } }
@@ -171,7 +161,7 @@ val commonScreenModule = module {
     single<McpFileSharing> { McpFileSharingFacade(get(), get(), get(), get(), get()) }
     single { McpCatalogFacade(get(), get(), get()) }
     single { McpTaskFacade(get()) }
-    single { McpDeviceFacade(get(), get()) }
+    single { McpDeviceFacade(get()) }
     single { McpNetworkFacade(get()) }
     single { McpSyncFacade(get()) }
     single { McpFileFacade(get(), get(), get(), get(), get()) }

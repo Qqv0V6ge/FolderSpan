@@ -27,6 +27,7 @@ import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.extensions.DeviceIcon
 import com.folderspan.service.data.ConnectType
 import com.folderspan.service.data.ConnectType.*
+import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.http.server.SocketClientIPEnum
@@ -184,7 +185,11 @@ internal fun rememberAppDrawerDeviceUiState(): AppDrawerDeviceUiState {
             when (device.connectType) {
                 UnConnect, Fail, Rejected ->
                     updateDeviceStateAndConnect(deviceState, device, Loading, shouldConnect = true)
-                New -> pendingSocketDevice = device
+                New -> if (device.discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+                    updateDeviceStateAndConnect(deviceState, device, Loading, shouldConnect = true)
+                } else {
+                    pendingSocketDevice = device
+                }
                 Connect -> deviceState.devices
                     .firstOrNull { item -> item.id == device.id }
                     ?.let { connectedDevice -> fileState.updateDesk(FileProtocol.Device, connectedDevice) }
@@ -388,6 +393,12 @@ internal fun DeviceDrawerListItem(
             device.type.DeviceIcon()
         },
         badge = {
+            if (device.discoveryStatus == DeviceDiscoveryStatus.Unverified) {
+                Badge(containerColor = MaterialTheme.colorScheme.tertiaryContainer) {
+                    Text(AppStrings.ui_device_identity_unverified)
+                }
+                return@NavigationDrawerItem
+            }
             when (device.connectType) {
                 Connect -> Icon(
                     Icons.Default.Close,
@@ -398,7 +409,11 @@ internal fun DeviceDrawerListItem(
                 )
 
                 Fail -> Badge { Text(AppStrings.ui_connection_failed) }
-                UnConnect -> Badge { Text(AppStrings.ui_not_connected) }
+                UnConnect -> Badge {
+                    Text(if (device.discoveryStatus == DeviceDiscoveryStatus.Trusted) {
+                        AppStrings.ui_device_identity_trusted
+                    } else AppStrings.ui_not_connected)
+                }
                 Loading -> Badge(
                     containerColor = MaterialTheme.colorScheme.tertiary
                 ) { Text(AppStrings.ui_connecting) }

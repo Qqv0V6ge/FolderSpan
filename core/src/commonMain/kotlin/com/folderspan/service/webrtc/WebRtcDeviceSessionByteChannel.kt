@@ -77,6 +77,10 @@ internal class WebRtcDeviceSessionByteChannel(
     private val writeMutex = Mutex()
     private val lifecycleJobs = mutableListOf<Job>()
 
+    // This adapter owns all sends. Under writeMutex, sent bytes only increase this
+    // upper bound; native draining can only decrease it. Avoid a native thread hop
+    // for every 16 KiB fragment, and sample again before crossing the high watermark.
+    private var bufferedAmountUpperBound = limits.bufferedAmountHighBytes
     private var pendingInboundBytes = 0L
     private var currentInbound: ByteArray? = null
     private var currentInboundOffset = 0
@@ -151,6 +155,7 @@ internal class WebRtcDeviceSessionByteChannel(
                     fail(error)
                     throw error
                 }
+                bufferedAmountUpperBound += chunkLength
                 sourceOffset += chunkLength
             }
         }
@@ -223,12 +228,15 @@ internal class WebRtcDeviceSessionByteChannel(
     }
 
     private suspend fun awaitWritableBuffer() {
-        if (dataChannel.bufferedAmount < limits.bufferedAmountHighBytes) return
+        if (bufferedAmountUpperBound < limits.bufferedAmountHighBytes) return
+        bufferedAmountUpperBound = dataChannel.bufferedAmount
+        if (bufferedAmountUpperBound < limits.bufferedAmountHighBytes) return
         try {
             withTimeout(limits.bufferedAmountTimeout) {
-                while (dataChannel.bufferedAmount > limits.bufferedAmountLowBytes) {
+                while (bufferedAmountUpperBound > limits.bufferedAmountLowBytes) {
                     ensureOpenForWrite()
                     delay(limits.bufferedAmountPollInterval)
+                    bufferedAmountUpperBound = dataChannel.bufferedAmount
                 }
             }
         } catch (error: TimeoutCancellationException) {

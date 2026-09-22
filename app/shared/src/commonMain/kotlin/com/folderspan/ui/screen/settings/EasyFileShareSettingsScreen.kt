@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.folderspan.service.http.server.HttpShareFileServer
 import com.folderspan.service.http.server.toServerStartFailureMessage
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.dialog.EasyFileSharePathSelectorDialog
 import com.folderspan.ui.components.dialog.TextFieldDialog
 import com.folderspan.ui.components.grid.GridList
@@ -79,7 +80,7 @@ class EasyFileShareSettingsScreen : AppScreenRoute {
             duration: SnackbarDuration = SnackbarDuration.Short
         ) {
             scope.launch {
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showLatestSnackbar(
                     message = message,
                     duration = duration
                 )
@@ -100,7 +101,7 @@ class EasyFileShareSettingsScreen : AppScreenRoute {
             if (!httpShareFileServer.isRunning()) return
 
             scope.launch {
-                val result = snackbarHostState.showSnackbar(
+                val result = snackbarHostState.showLatestSnackbar(
                     message = AppStrings.ui_port_has_been_updated_service_currently_running_do_you,
                     actionLabel = AppStrings.ui_restart,
                     withDismissAction = true,
@@ -114,7 +115,7 @@ class EasyFileShareSettingsScreen : AppScreenRoute {
                         httpShareFileServer.start(port)
                     }
                 }
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showLatestSnackbar(
                     message = restartResult.fold(
                         onSuccess = { AppStrings.ui_service_has_been_restarted_using_new_port },
                         onFailure = { throwable ->

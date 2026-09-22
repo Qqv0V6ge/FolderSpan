@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.folderspan.extensions.timestampToAdaptiveDateTime
 import com.folderspan.service.message.*
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.grid.GridList
 import com.folderspan.ui.components.pagestate.PageStateLayout
 import com.folderspan.ui.components.pagestate.resolvePageViewState
@@ -336,10 +337,11 @@ data class DeviceMessageScreen(
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    val snackbarResult = snackbarHostState.showSnackbar(
+                                    val snackbarResult = snackbarHostState.showLatestSnackbar(
                                         message = AppStrings.device_message_delete_confirm_body,
                                         actionLabel = AppStrings.ui_delete,
                                         withDismissAction = true,
+                                        duration = SnackbarDuration.Short,
                                     )
                                     if (snackbarResult == SnackbarResult.ActionPerformed) {
                                         deviceState.deleteDeviceMessageConversation(peerDeviceId)
@@ -437,7 +439,7 @@ data class DeviceMessageScreen(
                                             )
                                             retryingMessageIds = retryingMessageIds - message.messageId
                                             result.exceptionOrNull()?.let { failure ->
-                                                snackbarHostState.showSnackbar(
+                                                snackbarHostState.showLatestSnackbar(
                                                     deviceMessageFailureText(failure),
                                                 )
                                             }
@@ -468,7 +470,7 @@ data class DeviceMessageScreen(
                             if (result.isSuccess) {
                                 draft = ""
                             } else {
-                                snackbarHostState.showSnackbar(
+                                snackbarHostState.showLatestSnackbar(
                                     deviceMessageFailureText(result.exceptionOrNull()),
                                 )
                             }

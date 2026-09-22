@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -112,6 +113,7 @@ import com.folderspan.pro.domain.model.UserNotificationSnapshot
 import com.folderspan.pro.domain.model.UserNotificationStatus
 import com.folderspan.pro.domain.model.isRead
 import com.folderspan.service.data.SocketDevice
+import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.combinedClickableWithContextClick
 import com.folderspan.ui.components.dialog.DeviceRoleSelectionDialog
 import com.folderspan.ui.components.dialog.DeviceShareSavePathDialog
@@ -554,10 +556,11 @@ class NotificationScreen internal constructor(
                             if (unreadTotal > 0) {
                                 IconButton(onClick = {
                                     scope.launch {
-                                        val result = snackbarHostState.showSnackbar(
+                                        val result = snackbarHostState.showLatestSnackbar(
                                             message = AppStrings.ui_notification_loaded_all_read,
                                             actionLabel = AppStrings.ui_mark_read,
                                             withDismissAction = true,
+                                            duration = SnackbarDuration.Short,
                                         )
                                         if (result == SnackbarResult.ActionPerformed) {
                                             when (effectiveTab) {
@@ -600,12 +603,13 @@ class NotificationScreen internal constructor(
                         onMarkRead = {
                             val itemsToMarkRead = selectedItems.filter { !it.isRead }
                             scope.launch {
-                                val result = snackbarHostState.showSnackbar(
+                                val result = snackbarHostState.showLatestSnackbar(
                                     message = AppStrings.ui_notification_mark_selected_read_arg0.format(
                                         arg0 = itemsToMarkRead.size.toString(),
                                     ),
                                     actionLabel = AppStrings.ui_mark_read,
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (result == SnackbarResult.ActionPerformed) {
                                     val localIds = itemsToMarkRead.filterIsInstance<TimelineNotification.Local>()
@@ -623,12 +627,13 @@ class NotificationScreen internal constructor(
                         onMarkUnread = {
                             val itemsToMarkUnread = selectedItems.filter(TimelineNotification::isRead)
                             scope.launch {
-                                val result = snackbarHostState.showSnackbar(
+                                val result = snackbarHostState.showLatestSnackbar(
                                     message = AppStrings.ui_notification_mark_selected_unread_arg0.format(
                                         arg0 = itemsToMarkUnread.size.toString(),
                                     ),
                                     actionLabel = AppStrings.ui_mark_unread,
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (result == SnackbarResult.ActionPerformed) {
                                     val localIds = itemsToMarkUnread.filterIsInstance<TimelineNotification.Local>()
@@ -646,12 +651,13 @@ class NotificationScreen internal constructor(
                         onDelete = {
                             val itemsToDelete = selectedItems.toList()
                             scope.launch {
-                                val result = snackbarHostState.showSnackbar(
+                                val result = snackbarHostState.showLatestSnackbar(
                                     message = AppStrings.ui_notification_delete_selected_arg0.format(
                                         arg0 = itemsToDelete.size.toString(),
                                     ),
                                     actionLabel = AppStrings.ui_delete,
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (result == SnackbarResult.ActionPerformed) {
                                     val local = itemsToDelete.filterIsInstance<TimelineNotification.Local>()
@@ -1594,10 +1600,11 @@ private fun AccountNotificationDetailContent(notification: AccountNotification) 
                 actions = {
                     IconButton(onClick = {
                         scope.launch {
-                            val result = snackbarHostState.showSnackbar(
+                            val result = snackbarHostState.showLatestSnackbar(
                                 message = AppStrings.ui_notification_delete_selected_arg0.format(arg0 = "1"),
                                 actionLabel = AppStrings.ui_delete,
                                 withDismissAction = true,
+                                duration = SnackbarDuration.Short,
                             )
                             if (result == SnackbarResult.ActionPerformed) {
                                 runtime.delete(listOf(notification.id))
@@ -1633,7 +1640,7 @@ private fun AccountNotificationDetailContent(notification: AccountNotification) 
                         onClick = {
                             val markRead = notification.status != UserNotificationStatus.Read
                             scope.launch {
-                                val result = snackbarHostState.showSnackbar(
+                                val result = snackbarHostState.showLatestSnackbar(
                                     message = if (markRead) {
                                         AppStrings.ui_notification_mark_selected_read_arg0.format(arg0 = "1")
                                     } else {
@@ -1645,6 +1652,7 @@ private fun AccountNotificationDetailContent(notification: AccountNotification) 
                                         AppStrings.ui_mark_unread
                                     },
                                     withDismissAction = true,
+                                    duration = SnackbarDuration.Short,
                                 )
                                 if (result == SnackbarResult.ActionPerformed) {
                                     if (markRead) {
