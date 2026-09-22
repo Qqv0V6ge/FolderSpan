@@ -91,15 +91,26 @@ class McpHttpServiceJvmTest {
         val lanHttps = runCatching { postJson("https://$lanHost:$port/mcp/stateless", token, body) }
         assertTrue(lanHttps.isSuccess, "$lanHost: ${lanHttps.exceptionOrNull()}")
         assertTrue(lanHttps.getOrThrow().contains("\"result\""))
-        val lanHttpError = runCatching { postJson("http://$lanHost:$port/mcp/stateless", token, body) }.exceptionOrNull()
-        assertTrue(
-            lanHttpError is ConnectException ||
-                lanHttpError is NoRouteToHostException ||
-                lanHttpError is SocketTimeoutException ||
-                lanHttpError is SocketException ||
-                lanHttpError is AssertionError,
-            lanHttpError?.toString(),
-        )
+        withContext(Dispatchers.IO) {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(lanHost, port), 5_000)
+                socket.soTimeout = 5_000
+                // Verify transport rejection directly, without HttpURLConnection retries.
+                val response = runCatching {
+                    val request = "POST /mcp/stateless HTTP/1.1\r\n" +
+                        "Host: $lanHost:$port\r\nAuthorization: Bearer $token\r\n" +
+                        "Content-Type: application/json\r\nContent-Length: ${body.encodeToByteArray().size}\r\n" +
+                        "Connection: close\r\n\r\n$body"
+                    socket.getOutputStream().write(request.encodeToByteArray())
+                    socket.getOutputStream().flush()
+                    socket.getInputStream().read()
+                }
+                assertTrue(
+                    response.getOrNull() == -1 || response.exceptionOrNull() is SocketException,
+                    "Plain HTTP must be closed without a response: $response",
+                )
+            }
+        }
 
         val stopped = current.stop()
         assertFalse(stopped.running)
