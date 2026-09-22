@@ -5,6 +5,17 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本（MAJOR.MINOR.PATCH）"
+        required: true
+        default: "1.0.0"
+        type: string
+      create_draft:
+        description: "全部构建通过后创建草稿 Release"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -15,43 +26,31 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
-  ORG_GRADLE_PROJECT_releaseVersion: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '1.0.0' }}
+  ORG_GRADLE_PROJECT_releaseVersion: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version || '1.0.0' }}
   ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
 
 jobs:
-  quality:
-    name: Test shared code (${{ matrix.edition }})
+  prepare:
+    name: Validate release version
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [pro, no-pro]
-    env:
-      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Validate version
+        id: version
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release version must use MAJOR.MINOR.PATCH format."
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Run JVM tests
-        run: ./gradlew :core:jvmTest :app:shared:jvmTest :core:verifyNotificationRoutes --stacktrace
-
-      - name: Upload notification route catalog
-        uses: actions/upload-artifact@v7
-        with:
-          name: notification-routes-release-${{ matrix.edition }}
-          path: notification-routes.json
-          if-no-files-found: error
-          retention-days: 30
+  quality:
+    needs: prepare
+    uses: ./.github/workflows/shared-quality.yml
 
   android:
     name: Package Android (${{ matrix.edition }})
@@ -106,7 +105,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: >-
-          ./gradlew :app:androidApp:bundleRelease
+          ./gradlew --no-daemon :app:androidApp:bundleRelease
           -PandroidEnableAbiSplits=false
           --stacktrace
 
@@ -121,7 +120,7 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:androidApp:clean :app:androidApp:assembleRelease --stacktrace
+        run: ./gradlew --no-daemon :app:androidApp:clean :app:androidApp:assembleRelease --stacktrace
 
       - name: Stage release APKs
         shell: bash
@@ -168,7 +167,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build JS and Wasm production distribution
-        run: ./gradlew :app:webApp:composeCompatibilityBrowserDistribution --stacktrace
+        run: ./gradlew --no-daemon :app:webApp:composeCompatibilityBrowserDistribution --stacktrace
 
       - name: Create Web release archive
         shell: bash
@@ -279,7 +278,7 @@ jobs:
 
       - name: Build native installers
         run: >-
-          ./gradlew ${{ matrix.platform.tasks }}
+          ./gradlew --no-daemon ${{ matrix.platform.tasks }}
           -Dorg.gradle.jvmargs=-Xmx3g
           -Pkotlin.daemon.jvmargs=-Xmx2g
           --stacktrace
@@ -337,13 +336,14 @@ jobs:
           retention-days: 30
 
   release:
-    name: Publish GitHub Release
+    name: Prepare draft GitHub Release
     needs:
+      - prepare
       - android
       - web
       - desktop
     if: >-
-      startsWith(github.ref, 'refs/tags/v') &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.create_draft) &&
       needs.android.result == 'success' &&
       needs.web.result == 'success' &&
       needs.desktop.result == 'success'
@@ -353,7 +353,24 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
+      - name: Check out release commit and tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify existing tag targets this build
+        shell: bash
+        run: |
+          if tag_commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" 2>/dev/null); then
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::Existing release tag points to another commit. Choose a new version."
+              exit 1
+            fi
+          fi
+
       - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -381,13 +398,19 @@ jobs:
           cd release-assets
           sha256sum ./* > SHA256SUMS.txt
 
-      - name: Create or update GitHub Release
+      - name: Create or update draft GitHub Release
         shell: bash
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          if is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [[ "$is_draft" != "true" ]]; then
+              echo "::error::Refusing to overwrite an already published release."
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release-assets/* \
-              --verify-tag \
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --draft --target "$GITHUB_SHA" \
+              --title "FolderSpan ${RELEASE_TAG#v}" \
               --generate-notes
           fi
+          gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"

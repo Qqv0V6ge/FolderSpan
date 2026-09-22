@@ -23,38 +23,7 @@ env:
 
 jobs:
   quality:
-    name: Test shared code (${{ matrix.edition }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [pro, no-pro]
-    env:
-      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Run JVM tests
-        run: ./gradlew :core:jvmTest :app:shared:jvmTest :core:verifyNotificationRoutes --stacktrace
-
-      - name: Upload notification route catalog
-        uses: actions/upload-artifact@v7
-        with:
-          name: notification-routes-preview-${{ matrix.edition }}
-          path: notification-routes.json
-          if-no-files-found: error
-          retention-days: 14
+    uses: ./.github/workflows/shared-quality.yml
 
   android:
     name: Package Android preview (${{ matrix.edition }})
@@ -81,7 +50,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build debug APK
-        run: ./gradlew :app:androidApp:assembleDebug --stacktrace
+        run: ./gradlew --no-daemon :app:androidApp:assembleDebug --stacktrace
 
       - name: Upload Android preview
         uses: actions/upload-artifact@v7
@@ -117,7 +86,7 @@ jobs:
 
       - name: Build JS and Wasm development distributions
         run: >-
-          ./gradlew
+          ./gradlew --no-daemon
           :app:webApp:jsBrowserDevelopmentExecutableDistribution
           :app:webApp:wasmJsBrowserDevelopmentExecutableDistribution
           --stacktrace
@@ -229,7 +198,7 @@ jobs:
 
       - name: Build debug native installers
         run: >-
-          ./gradlew ${{ matrix.platform.tasks }}
+          ./gradlew --no-daemon ${{ matrix.platform.tasks }}
           -Dorg.gradle.jvmargs=-Xmx3g
           -Pkotlin.daemon.jvmargs=-Xmx2g
           --stacktrace

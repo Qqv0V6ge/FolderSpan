@@ -3,6 +3,8 @@
 本文说明 FolderSpan 的 GitHub Actions 预览与发布流水线、签名配置、构建产物和发布流程。工作流定义位于：
 
 ```text
+.github/workflows/ci.yml
+.github/workflows/shared-quality.yml
 .github/workflows/build-preview.yml
 .github/workflows/build-release.yml
 ```
@@ -15,17 +17,22 @@
 
 | 触发方式 | 共享测试 | Android | Web | Desktop | GitHub Release |
 | --- | --- | --- | --- | --- | --- |
+| 推送 `main` / Pull Request 到 `main` | 执行 | 不执行 | 不执行 | 不执行 | 不创建 |
 | 推送 `develop` | 执行 | Debug APK | Development ZIP | 全平台 Debug 预览包 | 不创建 |
 | Pull Request 到 `develop` | 执行 | Debug APK | Development ZIP | 不执行 | 不创建 |
 | 手动运行 `Build Preview` | 执行 | Debug APK | Development ZIP | 全平台 Debug 预览包 | 不创建 |
-| 手动运行 `Build and Release` | 执行 | 签名 APK/AAB | 生产 ZIP | 全平台 Release 包 | 不创建 |
-| 推送 `v*` 标签 | 执行 | 签名 APK/AAB | 生产 ZIP | 全平台 | 自动创建或更新 |
+| 手动运行 `Build and Release` | 执行 | 签名 APK/AAB | 生产 ZIP | 全平台 Release 包 | 默认创建草稿，可取消 |
+| 推送 `v*` 标签 | 执行 | 签名 APK/AAB | 生产 ZIP | 全平台 | 创建或更新草稿 |
 
 共享测试包含：
 
 ```bash
-./gradlew :core:jvmTest :app:shared:jvmTest
+./gradlew --no-daemon :core:jvmTest :app:shared:jvmTest :core:verifyNotificationRoutes
 ```
+
+测试逻辑统一位于 `shared-quality.yml`，同时验证 Pro 与普通版；Pro 版本另外执行 `:proMain:jvmTest`。Linux Runner 安装 Xvfb 和 WebRTC 原生运行库，在虚拟显示环境中执行真实桌面剪贴板及 WebRTC 测试。运行库列表依据 [webrtc-java 官方说明](https://jrtc.dev/guide/get-started)，保留当前 0.16.0 需要的 PulseAudio、udev 和 D-Bus 依赖。
+
+JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译器堆为 2 GiB。失败时仍上传 `test-reports-pro` / `test-reports-no-pro`，包含 HTML 和 JUnit XML；通知路由目录在验证成功后单独上传。所有流水线 Gradle 命令使用 `--no-daemon`。
 
 `Build Preview` 不读取发布签名，只生成使用调试证书签名的 Debug APK。全平台 Desktop 预览包只在直接推送 `develop` 或手动运行预览工作流时构建，Pull Request 不执行耗时较长的 Desktop 矩阵。
 
@@ -50,7 +57,7 @@
 SHA256SUMS.txt
 ```
 
-最终文件会作为附件上传到标签对应的 GitHub Release。Release 说明由 GitHub 根据提交记录自动生成。
+最终文件会作为附件上传到对应版本的 GitHub Release 草稿。Release 说明由 GitHub 根据提交记录自动生成，维护者检查产物和说明后再手动发布。流水线拒绝覆盖已发布版本，也不会移动指向其他提交的已有标签。
 
 ## Android 发布签名
 
@@ -195,11 +202,13 @@ Actions
   → Run workflow
 ```
 
-手动运行会构建 Android Release、Web 和全部 Desktop Release 产物，包括 Linux x86_64/ARM64、Windows x64/ARM64、macOS Intel/Apple Silicon，但不会创建 GitHub Release。四个 Android 签名 Secrets 仍然是必需的。
+手动运行会构建 Android Release、Web 和全部 Desktop Release 产物，包括 Linux x86_64/ARM64、Windows x64/ARM64、macOS Intel/Apple Silicon，默认在全部构建通过后创建 GitHub Release 草稿。运行时填写 `version`（默认 `1.0.0`）；取消 `create_draft` 可只保存 Actions 产物。四个 Android 签名 Secrets 仍然是必需的。草稿明确绑定本次构建的提交。
 
-### 创建正式发布
+### 准备并发布正式版本
 
-创建并推送三段数字版本标签：
+推荐先手动运行 `Build and Release`，填写 `version=1.0.0` 并保持 `create_draft=true`。所有平台和两个版本均通过后，在 Releases 中检查 `FolderSpan 1.0.0` 草稿及 `SHA256SUMS.txt`，再点击发布。
+
+也可以创建并推送三段数字版本标签；这种方式同样只生成草稿：
 
 ```bash
 git tag v1.0.0
@@ -268,6 +277,12 @@ AGP 不允许在启用多 APK 拆分时直接构建 AAB。工作流已经自动�
   -PandroidEnableAbiSplits=false
 ```
 
+### Linux 共享测试失败
+
+- `HeadlessException`：确认 JVM 测试通过 `xvfb-run` 执行，未丢失 `DISPLAY`。
+- `UnsatisfiedLinkError` / `NativeLibraries` 初始化失败：从 `test-reports-*` 的 JUnit XML 查看缺失的具体动态库，检查 `Install desktop test runtime` 是否成功。
+- 局域网服务测试失败：查看同一报告中的断言详情、监听地址和异常；不要禁用测试来使流水线通过。
+
 ### Desktop 打包失败
 
 - Linux DEB/RPM 需要 `fakeroot` 和 `rpm` 等系统工具。
@@ -282,6 +297,6 @@ AGP 不允许在启用多 APK 拆分时直接构建 AAB。工作流已经自动�
 
 确认以下条件：
 
-- 触发来源是推送到远端的 `v*` 标签，而不是普通分支或手动运行。
+- 触发来源是推送到远端的 `v*` 标签，或手动运行且启用了 `create_draft`。
 - Android、Web 和六个 Desktop 矩阵任务全部成功。
 - 仓库允许 GitHub Actions 使用 `contents: write` 创建 Release。
