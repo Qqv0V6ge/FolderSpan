@@ -6,7 +6,9 @@ import com.folderspan.test.ChineseLocalizationTest
 import com.folderspan.test.createInMemorySettings
 import com.folderspan.test.runSuspendTest
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlin.test.Test
@@ -800,10 +802,11 @@ class FileEditorDocumentTest : ChineseLocalizationTest() {
         override val size: Long,
         override val canWrite: Boolean = false,
     ) : FileEditorContentSource {
-        val reads = mutableListOf<Pair<Long, Long>>()
+        private val recordedReads = MutableStateFlow<List<Pair<Long, Long>>>(emptyList())
+        val reads: List<Pair<Long, Long>> get() = recordedReads.value
 
         override suspend fun readRange(startOffset: Long, endOffsetExclusive: Long): Result<ByteArray> {
-            reads += startOffset to endOffsetExclusive
+            recordedReads.update { it + (startOffset to endOffsetExclusive) }
             return Result.success(ByteArray((endOffsetExclusive - startOffset).toInt()) { 0x41 })
         }
 
@@ -823,7 +826,8 @@ class FileEditorDocumentTest : ChineseLocalizationTest() {
         override val size: Long
             get() = data.size.toLong()
 
-        val reads = mutableListOf<Pair<Long, Long>>()
+        private val recordedReads = MutableStateFlow<List<Pair<Long, Long>>>(emptyList())
+        val reads: List<Pair<Long, Long>> get() = recordedReads.value
         val writtenChunkSizes = mutableListOf<Int>()
         var replaceFailure: Throwable? = null
         var readFailure: Throwable? = null
@@ -841,7 +845,7 @@ class FileEditorDocumentTest : ChineseLocalizationTest() {
         )
 
         override suspend fun readRange(startOffset: Long, endOffsetExclusive: Long): Result<ByteArray> {
-            reads += startOffset to endOffsetExclusive
+            recordedReads.update { it + (startOffset to endOffsetExclusive) }
             readFailure?.let { error ->
                 if (throwReadFailure) throw error
                 return Result.failure(error)

@@ -4,7 +4,7 @@
 
 - docs / 跨模块文档分类、主题索引与维护约定：docs/README.md
 - docs/delivery / FolderSpan Android、Desktop（含双架构 Linux 与 Windows ARM64 便携包）、iOS 与 Web Release 打包命令、体积优化与字体回退、Web 编译内存、签名准备及产物位置：docs/delivery/release-packaging.md
-- docs/delivery / FolderSpan 主分支 CI、共享 Linux 图形与 WebRTC 测试环境、预览与 Release 草稿工作流、Android 临时签名 Secrets、多平台产物和故障排查：docs/delivery/ci-cd-pipeline.md
+- docs/delivery / FolderSpan 主分支 CI、共享 Linux 图形与 WebRTC 测试环境、正式网关配置、预览与 Release 草稿工作流、Android 临时签名 Secrets、多平台产物和故障排查：docs/delivery/ci-cd-pipeline.md
 - docs/networking / 网络协议新增/维护需求清单（含 S3 Ktor 实现、iOS/Web 与断点续传）：docs/networking/network-protocol-requirements.md
 - docs/networking / iOS 原生网络依赖（FTP/SFTP/SMB）：docs/networking/ios-native-libs.md
 - docs/networking / Device HTTP 路由客户端 requestId、batchId 请求取消说明（Remote Share 使用 Session，不在此范围）：docs/networking/http-client-request-cancel.md

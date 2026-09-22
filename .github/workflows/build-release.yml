@@ -26,6 +26,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_folderspanBuildType: release
   ORG_GRADLE_PROJECT_releaseVersion: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version || '1.0.0' }}
   ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
 
@@ -401,9 +402,15 @@ jobs:
       - name: Create or update draft GitHub Release
         shell: bash
         run: |
-          if is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+          if release_info=$(gh release view "$RELEASE_TAG" --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv' 2>/dev/null); then
+            read -r is_draft target_commit <<< "$release_info"
             if [[ "$is_draft" != "true" ]]; then
               echo "::error::Refusing to overwrite an already published release."
+              exit 1
+            fi
+            if ! git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" >/dev/null 2>&1 &&
+              [[ "$target_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::Existing draft belongs to another commit. Choose a new version or rerun that commit."
               exit 1
             fi
             gh release upload "$RELEASE_TAG" release-assets/* --clobber

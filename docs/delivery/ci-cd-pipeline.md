@@ -34,6 +34,8 @@
 
 JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译器堆为 2 GiB。失败时仍上传 `test-reports-pro` / `test-reports-no-pro`，包含 HTML 和 JUnit XML；通知路由目录在验证成功后单独上传。所有流水线 Gradle 命令使用 `--no-daemon`。
 
+共享测试和正式打包显式设置 `folderspanBuildType=release`，使用正式网关且不启用本地开发代理。Web 的 `composeCompatibilityBrowserDistribution` 任务名不含 `release` / `production`，不能依赖任务名自动推断构建类型。
+
 `Build Preview` 不读取发布签名，只生成使用调试证书签名的 Debug APK。全平台 Desktop 预览包只在直接推送 `develop` 或手动运行预览工作流时构建，Pull Request 不执行耗时较长的 Desktop 矩阵。
 
 ## 自动发布产物
@@ -57,7 +59,7 @@ JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译�
 SHA256SUMS.txt
 ```
 
-最终文件会作为附件上传到对应版本的 GitHub Release 草稿。Release 说明由 GitHub 根据提交记录自动生成，维护者检查产物和说明后再手动发布。流水线拒绝覆盖已发布版本，也不会移动指向其他提交的已有标签。
+最终文件会作为附件上传到对应版本的 GitHub Release 草稿。Release 说明由 GitHub 根据提交记录自动生成，维护者检查产物和说明后再手动发布。流水线拒绝覆盖已发布版本，也不会移动指向其他提交的已有标签。已有草稿必须绑定同一构建提交，才允许重跑时覆盖附件；不同提交不能混用同一个版本草稿。
 
 ## Android 发布签名
 
@@ -223,7 +225,7 @@ git push origin v1.0.0
 - Flatpak 分别使用 `ubuntu-24.04` 和 `ubuntu-24.04-arm` 构建 x86_64、aarch64 bundle，两个架构不能互相转换。
 - Flatpak 使用 Freedesktop Platform/SDK 25.08，运行时由 Flathub 下载；应用沙箱权限由 `packaging/flatpak/` 下的 manifest 统一维护。
 - Windows ARM64 使用公开预览的 `windows-11-arm` Runner 和 Microsoft OpenJDK 17，当前生成包含 ARM64 Runtime 的便携 ZIP，不生成依赖 WiX 的 MSI/EXE。
-- `webrtc-java 0.14.0` 没有 Windows ARM64 原生库，因此该便携包暂不支持本机 WebRTC；其他功能仍需在 Windows ARM64 设备上冒烟验证。
+- 当前 `webrtc-java 0.16.0` 的项目依赖配置未提供 Windows ARM64 原生库，因此该便携包暂不支持本机 WebRTC；其他功能仍需在 Windows ARM64 设备上冒烟验证。
 - 当前 Windows x64 安装包未配置 Authenticode 签名。
 - 当前 macOS 安装包未启用 Developer ID 签名和 Apple 公证，用户安装时可能看到系统安全提示。
 - 当前流水线不生成 iOS IPA。iOS 自动发布需要额外配置 Apple 证书、Provisioning Profile、Team ID 和导出策略。

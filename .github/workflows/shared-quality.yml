@@ -17,6 +17,7 @@ jobs:
         edition: [pro, no-pro]
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
