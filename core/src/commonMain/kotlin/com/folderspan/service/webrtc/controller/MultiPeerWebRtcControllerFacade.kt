@@ -62,6 +62,7 @@ import com.folderspan.utils.SettingsUtils.KEY_DEVICE_ID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -71,6 +72,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -890,21 +892,36 @@ class MultiPeerWebRtcController(
         fun onOpen() {
             if (generation == session.generation) startDeviceSession(session, channel, generation)
         }
-        session.dataChannelCollectors += channel.onOpen.onEach { onOpen() }.launchIn(scope)
-        if (channel.state == WebRtcDataChannelState.Open) scope.launch(Dispatchers.Default) { onOpen() }
-        session.dataChannelCollectors += channel.onClose.onEach {
-            if (generation != session.generation || session.sessionChannel !== channel) return@onEach
-            session.carrierFailures.tryEmit(IllegalStateException("Device Session DataChannel closed"))
-            session.sessionChannel = null
-            closeDeviceSession(session)
-            if (!session.manualDisconnect) {
-                handleUnexpectedPeerDisconnect(
-                    session,
-                    WebRtcConnectionStatus.Disconnected,
-                    "Device Session DataChannel closed",
-                )
+        // Register before sampling state: native OPEN can arrive before a queued collector starts.
+        val closeCollector = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            channel.onClose.collect {
+                if (generation != session.generation || session.sessionChannel !== channel) return@collect
+                session.carrierFailures.tryEmit(IllegalStateException("Device Session DataChannel closed"))
+                session.sessionChannel = null
+                closeDeviceSession(session)
+                if (!session.manualDisconnect) {
+                    handleUnexpectedPeerDisconnect(
+                        session,
+                        WebRtcConnectionStatus.Disconnected,
+                        "Device Session DataChannel closed",
+                    )
+                }
             }
-        }.launchIn(scope)
+        }
+        if (generation != session.generation || session.sessionChannel !== channel) {
+            closeCollector.cancel()
+            return
+        }
+        session.dataChannelCollectors += closeCollector
+        val openCollector = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            channel.onOpen.collect { onOpen() }
+        }
+        if (generation != session.generation || session.sessionChannel !== channel) {
+            openCollector.cancel()
+            return
+        }
+        session.dataChannelCollectors += openCollector
+        if (channel.state == WebRtcDataChannelState.Open) scope.launch { onOpen() }
         publishPeerSessionStates()
     }
 

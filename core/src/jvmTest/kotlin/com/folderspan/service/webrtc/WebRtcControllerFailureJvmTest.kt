@@ -1,6 +1,7 @@
 package com.folderspan.service.webrtc
 
 import com.folderspan.service.webrtc.controller.MultiPeerWebRtcController
+import com.folderspan.service.session.WebRtcDeviceSessionServerLauncher
 import com.folderspan.service.webrtc.models.WebRtcConnectionStatus
 import com.folderspan.service.webrtc.models.WebRtcConfig
 import com.folderspan.service.data.DeviceSessionBootstrapAuthorization
@@ -12,11 +13,14 @@ import com.folderspan.service.webrtc.signaling.SignalingDevice
 import com.folderspan.service.webrtc.signaling.SignalingMessage
 import com.folderspan.test.runSuspendTest
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.withTimeout
 import strings.AppStrings
@@ -25,8 +29,76 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import java.util.concurrent.atomic.AtomicInteger
 
 class WebRtcControllerFailureJvmTest {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun channelOpeningDuringAttachmentStartsExactlyOneSession() = runSuspendTest {
+        verifyOpeningSession(returnOpenSnapshot = false)
+    }
+
+    @Test
+    fun openEventAndOpenSnapshotStartExactlyOneSession() = runSuspendTest {
+        verifyOpeningSession(returnOpenSnapshot = true)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private suspend fun verifyOpeningSession(returnOpenSnapshot: Boolean) {
+        val dispatcher = StandardTestDispatcher()
+        val parent = SupervisorJob()
+        val controller = MultiPeerWebRtcController(CoroutineScope(parent + dispatcher))
+        val started = CompletableDeferred<Unit>()
+        val starts = AtomicInteger()
+        val openEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        var channelState = WebRtcDataChannelState.Connecting
+        val channel = object : WebRtcDataChannel {
+            override val label = WEB_RTC_DEVICE_SESSION_CHANNEL_LABEL
+            override val state: WebRtcDataChannelState
+                get() {
+                    val snapshot = channelState
+                    if (snapshot == WebRtcDataChannelState.Connecting) {
+                        // Native OPEN arrives after sampling state, before queued collectors run.
+                        channelState = WebRtcDataChannelState.Open
+                        openEvents.tryEmit(Unit)
+                    }
+                    return if (returnOpenSnapshot) channelState else snapshot
+                }
+            override val bufferedAmount = 0L
+            override val onOpen = openEvents
+            override val onClose = emptyFlow<Unit>()
+            override val onMessage = emptyFlow<ByteArray>()
+            override fun send(data: ByteArray) = true
+            override fun close() { channelState = WebRtcDataChannelState.Closed }
+        }
+        try {
+            controller.javaClass.getDeclaredField("serverLauncher").apply { isAccessible = true }.set(
+                controller,
+                WebRtcDeviceSessionServerLauncher { _, _, _, _, _ ->
+                    starts.incrementAndGet()
+                    started.complete(Unit)
+                    awaitCancellation()
+                },
+            )
+            val remote = SignalingDevice("opening-peer")
+            val session = controller.javaClass.getDeclaredMethod("ensureSession", String::class.java, SignalingDevice::class.java)
+                .apply { isAccessible = true }.invoke(controller, remote.id, remote)
+            controller.javaClass.getDeclaredMethod(
+                "attachSessionChannel", session.javaClass, WebRtcDataChannel::class.java, Int::class.javaPrimitiveType,
+            ).apply { isAccessible = true }.invoke(controller, session, channel, 0)
+            dispatcher.scheduler.runCurrent()
+            withTimeout(2_000L) { started.await() }
+            openEvents.emit(Unit)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(1, starts.get(), "Opening a channel must start its session exactly once")
+        } finally {
+            controller.disconnect()
+            parent.cancel()
+            dispatcher.scheduler.runCurrent()
+            parent.join()
+        }
+    }
+
     @Test
     fun delayedApprovalCannotRestartFailedAttempt() = runSuspendTest {
         val controllerScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher())
