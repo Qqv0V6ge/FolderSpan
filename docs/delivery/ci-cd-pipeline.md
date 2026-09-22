@@ -32,6 +32,8 @@
 
 测试逻辑统一位于 `shared-quality.yml`，同时验证 Pro 与普通版；Pro 版本另外执行 `:proMain:jvmTest`。Linux Runner 安装 Xvfb 和 WebRTC 原生运行库，在虚拟显示环境中执行真实桌面剪贴板及 WebRTC 测试。运行库列表依据 [webrtc-java 官方说明](https://jrtc.dev/guide/get-started)，保留当前 0.16.0 需要的 PulseAudio、udev 和 D-Bus 依赖。
 
+无声卡的 Runner 还会启动 PulseAudio，并通过 [`module-null-sink`](https://wiki.freedesktop.org/www/Software/PulseAudio/Documentation/User/Modules/) 提供虚拟输出和监听输入；仅安装 `libpulse0` 不足以初始化 WebRTC 音频模块。测试结束后停止本次启动的音频服务。
+
 JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译器堆为 2 GiB。失败时仍上传 `test-reports-pro` / `test-reports-no-pro`，包含 HTML 和 JUnit XML；通知路由目录在验证成功后单独上传。所有流水线 Gradle 命令使用 `--no-daemon`。
 
 共享测试和正式打包显式设置 `folderspanBuildType=release`，使用正式网关且不启用本地开发代理。Web 的 `composeCompatibilityBrowserDistribution` 任务名不含 `release` / `production`，不能依赖任务名自动推断构建类型。
