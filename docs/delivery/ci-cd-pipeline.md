@@ -42,6 +42,8 @@ JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译�
 
 正式 Web 打包通过 `NODE_OPTIONS=--max-old-space-size=8192` 为生产压缩提供 8 GiB Node.js 堆，避免默认堆限制导致 `ERR_WORKER_OUT_OF_MEMORY`。该任务使用 `--max-workers=1`，防止 JS 和 Wasm 构建同时占用高峰内存。
 
+Web 冷构建在托管 Linux Runner 上可能超过 40 分钟，因此正式 Web Job 预留 60 分钟。生产压缩保持启用。
+
 `Build Preview` 不读取发布签名，只生成使用调试证书签名的 Debug APK。全平台 Desktop 预览包只在直接推送 `develop` 或手动运行预览工作流时构建，Pull Request 不执行耗时较长的 Desktop 矩阵。
 
 ## 自动发布产物
@@ -261,6 +263,8 @@ Missing Android signing secrets
 ```
 
 检查四个 Android Repository Secrets 是否全部存在，名称是否完全一致。
+
+如果 `signReleaseBundle` 报告 `Get Key failed: Given final block not properly padded`，说明已进入私钥解密阶段但签名配置不匹配。优先核对 `ANDROID_KEY_PASSWORD` 是否为该私钥的密码，并确认 Keystore、别名和 Store Password 属于同一份证书；不要把密码写入源码或日志。更新 Secrets 后，在同一构建中重跑失败任务，可复用已成功的其他平台产物。
 
 ### releaseVersion 格式错误
 
