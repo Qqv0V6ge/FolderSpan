@@ -154,6 +154,7 @@ jobs:
         edition: [pro, no-pro]
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -168,7 +169,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build JS and Wasm production distribution
-        run: ./gradlew --no-daemon :app:webApp:composeCompatibilityBrowserDistribution --stacktrace
+        run: ./gradlew --no-daemon --max-workers=1 :app:webApp:composeCompatibilityBrowserDistribution --stacktrace
 
       - name: Create Web release archive
         shell: bash

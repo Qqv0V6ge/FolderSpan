@@ -38,6 +38,8 @@ JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译�
 
 共享测试和正式打包显式设置 `folderspanBuildType=release`，使用正式网关且不启用本地开发代理。Web 的 `composeCompatibilityBrowserDistribution` 任务名不含 `release` / `production`，不能依赖任务名自动推断构建类型。
 
+正式 Web 打包通过 `NODE_OPTIONS=--max-old-space-size=8192` 为生产压缩提供 8 GiB Node.js 堆，避免默认堆限制导致 `ERR_WORKER_OUT_OF_MEMORY`。该任务使用 `--max-workers=1`，防止 JS 和 Wasm 构建同时占用高峰内存。
+
 `Build Preview` 不读取发布签名，只生成使用调试证书签名的 Debug APK。全平台 Desktop 预览包只在直接推送 `develop` 或手动运行预览工作流时构建，Pull Request 不执行耗时较长的 Desktop 矩阵。
 
 ## 自动发布产物
