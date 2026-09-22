@@ -39,6 +39,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
       - name: Run JVM tests with virtual display and audio
         shell: bash

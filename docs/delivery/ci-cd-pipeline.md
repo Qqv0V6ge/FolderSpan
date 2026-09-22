@@ -36,6 +36,8 @@
 
 JVM 测试限制 Gradle 为 2 个 worker，Gradle 堆为 3 GiB，Kotlin 编译器堆为 2 GiB。失败时仍上传 `test-reports-pro` / `test-reports-no-pro`，包含 HTML 和 JUnit XML；通知路由目录在验证成功后单独上传。所有流水线 Gradle 命令使用 `--no-daemon`。
 
+共享质量检查在推送或手动运行时保存 Gradle 缓存，避免发布分支每次都冷编译；Pull Request 和合并队列只读缓存。缓存仍遵循 GitHub 的分支隔离规则。
+
 共享测试和正式打包显式设置 `folderspanBuildType=release`，使用正式网关且不启用本地开发代理。Web 的 `composeCompatibilityBrowserDistribution` 任务名不含 `release` / `production`，不能依赖任务名自动推断构建类型。
 
 正式 Web 打包通过 `NODE_OPTIONS=--max-old-space-size=8192` 为生产压缩提供 8 GiB Node.js 堆，避免默认堆限制导致 `ERR_WORKER_OUT_OF_MEMORY`。该任务使用 `--max-workers=1`，防止 JS 和 Wasm 构建同时占用高峰内存。
