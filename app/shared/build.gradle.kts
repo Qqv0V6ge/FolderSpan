@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import java.io.File
 
 plugins {
@@ -13,6 +14,33 @@ plugins {
 val kotlinVersion = libs.versions.kotlin.get()
 val sqlDelightVersion = libs.versions.sqldelight.get()
 val includeProMain = findProject(":proMain") != null
+val proSourceExcludes = listOf(
+    "**/ProIntegration.kt",
+    "**/ui/components/avatar/**",
+    "**/notification/AccountNotification*.kt",
+    "**/notification/AppNotificationRouteRegistry.kt",
+    "**/ui/components/dialog/FeedbackAttachmentPicker*.kt",
+    "**/ui/components/filter/FeedbackTicketFilterSheetProvider*.kt",
+    "**/ui/components/notification/NotificationMarkdownContent*.kt",
+    "**/ui/screen/main/UnifiedNotificationScreen.kt",
+    "**/ui/screen/settings/AboutSoftwareScreen*.kt",
+    "**/ui/screen/settings/AppUpdateHistoryScreen*.kt",
+    "**/AppProAuthSessionInitializationTest.kt",
+    "**/ui/components/drawer/AppDrawerAccountHeaderTest.kt",
+    "**/ui/components/drawer/AppDrawerMenuTest.kt",
+    "**/ui/components/drawer/AppDrawerSignInPromptTest.kt",
+    "**/ui/screen/main/AccountNotificationActionRowTest.kt",
+    "**/ui/screen/main/NotificationPageStateTest.kt",
+    "**/ui/screen/main/NotificationRowColorsTest.kt",
+    "**/ui/screen/main/NotificationScreenNavigationTest.kt",
+)
+
+if (!includeProMain) {
+    // AGP 会从 srcDirs 重新添加 Android 源码，需在编译任务层保留相同排除规则。
+    tasks.withType<KotlinJvmCompile>().configureEach {
+        exclude(proSourceExcludes)
+    }
+}
 
 fun iosNativeTargetSuffix(targetName: String): String =
     targetName.replaceFirstChar { it.uppercase() }
@@ -180,26 +208,7 @@ kotlin {
     if (!includeProMain) {
         sourceSets.configureEach {
             // Pro 文件留在原目录；关闭模块时排除接入代码，并使用本地功能入口。
-            kotlin.exclude(
-                "**/ProIntegration.kt",
-                "**/ui/components/avatar/**",
-                "**/notification/AccountNotification*.kt",
-                "**/notification/AppNotificationRouteRegistry.kt",
-                "**/ui/components/dialog/FeedbackAttachmentPicker*.kt",
-                "**/ui/components/filter/FeedbackTicketFilterSheetProvider*.kt",
-                "**/ui/components/notification/NotificationMarkdownContent*.kt",
-                "**/ui/screen/main/UnifiedNotificationScreen.kt",
-                "**/ui/screen/settings/AboutSoftwareScreen*.kt",
-                "**/ui/screen/settings/AppUpdateHistoryScreen*.kt",
-                "**/AppProAuthSessionInitializationTest.kt",
-                "**/ui/components/drawer/AppDrawerAccountHeaderTest.kt",
-                "**/ui/components/drawer/AppDrawerMenuTest.kt",
-                "**/ui/components/drawer/AppDrawerSignInPromptTest.kt",
-                "**/ui/screen/main/AccountNotificationActionRowTest.kt",
-                "**/ui/screen/main/NotificationPageStateTest.kt",
-                "**/ui/screen/main/NotificationRowColorsTest.kt",
-                "**/ui/screen/main/NotificationScreenNavigationTest.kt",
-            )
+            kotlin.exclude(proSourceExcludes)
             kotlin.srcDir("src/noPro/$name/kotlin")
         }
     }

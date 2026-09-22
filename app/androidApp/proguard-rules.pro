@@ -2,6 +2,12 @@
 # JNA dispatches libc socket options through JNI and a reflected interface.
 -keep class com.sun.jna.** { *; }
 -keep interface com.folderspan.service.webrtc.models.SocketOptions { *; }
+# JNA 的 AWT 辅助方法仅用于桌面；Android 不提供、也不调用这些类型。
+# https://github.com/java-native-access/jna/blob/master/www/FrequentlyAskedQuestions.md#jna-on-android
+-dontwarn java.awt.Component
+-dontwarn java.awt.GraphicsEnvironment
+-dontwarn java.awt.HeadlessException
+-dontwarn java.awt.Window
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 -dontwarn javax.el.BeanELResolver

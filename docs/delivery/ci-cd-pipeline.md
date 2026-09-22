@@ -228,6 +228,7 @@ git push origin v1.0.0
 ## 平台限制与签名状态
 
 - Desktop 原生安装包必须在目标操作系统上生成，因此流水线使用 Linux、Windows、macOS Intel 和 macOS arm64 Runner 分别打包。
+- 跨平台 Gradle 打包步骤统一使用 Bash，并将 JVM 属性参数完整引用，避免 Windows 默认 PowerShell 拆分包含点号的参数。
 - Flatpak 分别使用 `ubuntu-24.04` 和 `ubuntu-24.04-arm` 构建 x86_64、aarch64 bundle，两个架构不能互相转换。
 - Flatpak 使用 Freedesktop Platform/SDK 25.08，运行时由 Flathub 下载；应用沙箱权限由 `packaging/flatpak/` 下的 manifest 统一维护。
 - Windows ARM64 使用公开预览的 `windows-11-arm` Runner 和 Microsoft OpenJDK 17，当前生成包含 ARM64 Runtime 的便携 ZIP，不生成依赖 WiX 的 MSI/EXE。
@@ -298,7 +299,12 @@ AGP 不允许在启用多 APK 拆分时直接构建 AAB。工作流已经自动�
 - Flatpak 元数据校验失败时，先本地执行 `desktop-file-validate packaging/flatpak/com.folderspan.FolderSpan.desktop` 和 `appstreamcli validate --no-net packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml`。
 - Desktop 打包必须使用包含 `jmods/` 的完整 JDK。
 - Windows MSI/EXE 需要 WiX Toolset。
-- Windows ARM64 预览包使用 `packageAppImage`，正式包使用 `packageReleaseAppImage`，随后执行 `Compress-Archive`；两者都不依赖 WiX。
+- Windows ARM64 预览包使用 `createDistributable`，正式包使用 `createReleaseDistributable`，随后执行 `Compress-Archive`；两者都不依赖 WiX。`packageAppImage` 只在配置了对应格式时注册，不应作为 Windows 可运行目录任务。
+
+### Android 正式包编译失败
+
+- 普通版出现 Pro 类未解析或重复声明时，确认 `app/shared/build.gradle.kts` 同时在 source set 和 `KotlinJvmCompile` 任务层应用 Pro 源码排除规则。AGP 9.1 的 KMP 插件会从源码目录重新添加文件，单独配置 `kotlin.exclude` 不足以约束 Android 编译输入。
+- R8 报告 JNA 引用 `java.awt.Component`、`GraphicsEnvironment`、`HeadlessException` 或 `Window` 时，使用 `app/androidApp/proguard-rules.pro` 中的具体类型规则。这些是 Android 不使用的桌面辅助入口；规则依据 [JNA Android 官方说明](https://github.com/java-native-access/jna/blob/master/www/FrequentlyAskedQuestions.md#jna-on-android)，不要关闭 R8 或忽略所有缺失类。
 - macOS DMG/PKG 必须在 macOS 上构建。
 
 ### Release 没有创建

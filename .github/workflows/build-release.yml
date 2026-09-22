@@ -221,7 +221,7 @@ jobs:
           - os: windows-11-arm
             label: windows-arm64
             java_distribution: microsoft
-            tasks: :app:desktopApp:packageReleaseAppImage
+            tasks: :app:desktopApp:createReleaseDistributable
             paths: app/desktopApp/build/compose/binaries/main-release/**/*.zip
           - os: macos-15-intel
             label: macos-x64
@@ -279,10 +279,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build native installers
+        shell: bash
         run: >-
           ./gradlew --no-daemon ${{ matrix.platform.tasks }}
-          -Dorg.gradle.jvmargs=-Xmx3g
-          -Pkotlin.daemon.jvmargs=-Xmx2g
+          "-Dorg.gradle.jvmargs=-Xmx3g"
+          "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
 
       - name: Build Flatpak bundle

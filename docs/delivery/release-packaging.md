@@ -176,13 +176,13 @@ app/desktopApp/build/compose/binaries/main-release/msi/
 app/desktopApp/build/compose/binaries/main-release/exe/
 ```
 
-CI 的 Windows ARM64 任务运行在 `windows-11-arm`，使用 Microsoft OpenJDK 17 执行 `packageReleaseAppImage`，随后将可运行目录压缩为：
+CI 的 Windows ARM64 任务运行在 `windows-11-arm`，使用 Microsoft OpenJDK 17 执行 `createReleaseDistributable`，随后将可运行目录压缩为：
 
 ```text
 app/desktopApp/build/compose/binaries/main-release/zip/FolderSpan-<version>-windows-arm64.zip
 ```
 
-该 ZIP 不依赖 WiX，解压后直接运行 `FolderSpan.exe`。`webrtc-java 0.14.0` 暂无 Windows ARM64 原生库，因此 ARM64 便携包暂不支持本机 WebRTC；Windows x64 MSI/EXE 不受此限制。
+该 ZIP 不依赖 WiX，解压后直接运行 `FolderSpan.exe`。`webrtc-java 0.16.0` 的项目依赖配置未提供 Windows ARM64 原生库，因此 ARM64 便携包暂不支持本机 WebRTC；Windows x64 MSI/EXE 不受此限制。
 
 ### macOS
 
