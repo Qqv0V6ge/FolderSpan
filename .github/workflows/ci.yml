@@ -17,3 +17,5 @@ concurrency:
 jobs:
   quality:
     uses: ./.github/workflows/shared-quality.yml
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}

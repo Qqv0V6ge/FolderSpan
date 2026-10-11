@@ -37,7 +37,6 @@ server/keystore.p12
 !.env.example
 *.pem
 *.key
-proMain/
 .claude/
 .codex/
 .codebase-memory/
