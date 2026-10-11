@@ -1,0 +1,17 @@
+CREATE TABLE BookmarkScopeImport
+(
+    protocol    TEXT NOT NULL,
+    sourceId    TEXT NOT NULL,
+    importedAt  INTEGER NOT NULL,
+    PRIMARY KEY (protocol, sourceId)
+);
+
+markImported:
+INSERT OR IGNORE INTO BookmarkScopeImport (protocol, sourceId, importedAt)
+VALUES (?, ?, ?);
+
+selectByScope:
+SELECT * FROM BookmarkScopeImport WHERE protocol = ? AND sourceId = ?;
+
+deleteByScope:
+DELETE FROM BookmarkScopeImport WHERE protocol = ? AND sourceId = ?;

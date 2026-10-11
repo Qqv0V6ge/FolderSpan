@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "routeKey": "feedback_tickets",
+      "displayName": {
+        "zh-CN": "工单详情",
+        "en-US": "Ticket details"
+      },
+      "group": "account",
+      "requiresAuth": true,
+      "params": [
+        {
+          "name": "ticketUuid",
+          "type": "string",
+          "required": false,
+          "displayName": {
+            "zh-CN": "工单 UUID",
+            "en-US": "Ticket UUID"
+          }
+        }
+      ]
+    },
+    {
+      "routeKey": "notification_center",
+      "displayName": {
+        "zh-CN": "通知中心",
+        "en-US": "Notification center"
+      },
+      "group": "account",
+      "requiresAuth": false,
+      "params": []
+    },
+    {
+      "routeKey": "permission_settings",
+      "displayName": {
+        "zh-CN": "权限设置",
+        "en-US": "Permission settings"
+      },
+      "group": "settings",
+      "requiresAuth": false,
+      "params": []
+    },
+    {
+      "routeKey": "personal_settings",
+      "displayName": {
+        "zh-CN": "个人设置",
+        "en-US": "Personal settings"
+      },
+      "group": "account",
+      "requiresAuth": true,
+      "params": []
+    },
+    {
+      "routeKey": "settings",
+      "displayName": {
+        "zh-CN": "设置",
+        "en-US": "Settings"
+      },
+      "group": "settings",
+      "requiresAuth": false,
+      "params": []
+    },
+    {
+      "routeKey": "user_profile",
+      "displayName": {
+        "zh-CN": "用户资料",
+        "en-US": "User profile"
+      },
+      "group": "account",
+      "requiresAuth": true,
+      "params": []
+    }
+  ]
+}

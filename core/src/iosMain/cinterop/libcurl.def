@@ -1,0 +1,3 @@
+headers = curl/curl.h
+package = platform.curl
+linkerOpts = -lcurl

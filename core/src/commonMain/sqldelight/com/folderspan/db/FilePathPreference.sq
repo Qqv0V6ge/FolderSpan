@@ -1,0 +1,55 @@
+import com.folderspan.data.file.FileFilterSort;
+import com.folderspan.data.file.FileProtocol;
+import kotlin.Boolean;
+import kotlin.String;
+import kotlin.collections.List;
+
+CREATE TABLE FilePathPreference
+(
+    id            INTEGER                     NOT NULL CONSTRAINT FilePathPreference_pk PRIMARY KEY AUTOINCREMENT,
+    protocol      TEXT    AS FileProtocol     NOT NULL,
+    protocolId    TEXT                        NOT NULL DEFAULT '',
+    path          TEXT                        NOT NULL,
+    sort          TEXT    AS FileFilterSort   NOT NULL,
+    isHideFile    INTEGER AS Boolean          NOT NULL DEFAULT 0,
+    ignoreFiles   TEXT    AS List<String>     NOT NULL DEFAULT '',
+    createdAt     INTEGER                     NOT NULL,
+    updatedAt     INTEGER                     NOT NULL,
+    lastAccessed  INTEGER                     NOT NULL
+);
+
+CREATE UNIQUE INDEX FilePathPreference_scope_uindex
+    ON FilePathPreference (protocol, protocolId, path);
+
+CREATE INDEX FilePathPreference_lastAccessed_idx
+    ON FilePathPreference (lastAccessed DESC, id DESC);
+
+upsert:
+INSERT OR REPLACE INTO FilePathPreference (
+    protocol, protocolId, path, sort, isHideFile, ignoreFiles,
+    createdAt, updatedAt, lastAccessed
+)
+VALUES (
+    :protocol, :protocolId, :path, :sort, :isHideFile, :ignoreFiles,
+    :createdAt, :updatedAt, :lastAccessed
+);
+
+queryByPath:
+SELECT *
+FROM FilePathPreference
+WHERE protocol = :protocol
+  AND protocolId = :protocolId
+  AND path = :path
+LIMIT 1;
+
+deleteExtras:
+DELETE FROM FilePathPreference
+WHERE id NOT IN (
+    SELECT id
+    FROM FilePathPreference
+    ORDER BY lastAccessed DESC, id DESC
+    LIMIT :keep
+);
+
+deleteAll:
+DELETE FROM FilePathPreference;

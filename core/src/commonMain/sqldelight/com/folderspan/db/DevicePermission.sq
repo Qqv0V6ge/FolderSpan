@@ -1,0 +1,60 @@
+import kotlin.Boolean;
+
+CREATE TABLE DevicePermission (
+    id        INTEGER         NOT NULL 
+                              CONSTRAINT DevicePermission_pk PRIMARY KEY AUTOINCREMENT 
+                              CONSTRAINT DevicePermission_pk_2 UNIQUE,
+    path      TEXT            NOT NULL,
+    useAll    INTEGER AS Boolean NOT NULL DEFAULT 1,
+    read      INTEGER AS Boolean NOT NULL DEFAULT 1,
+    write     INTEGER AS Boolean NOT NULL DEFAULT 1,
+    remove    INTEGER AS Boolean NOT NULL DEFAULT 1,
+    rename    INTEGER AS Boolean NOT NULL DEFAULT 1,
+    sortOrder INTEGER         NOT NULL DEFAULT 0,
+    comment   TEXT
+);
+
+CREATE UNIQUE INDEX DevicePermission_id_uindex
+ON DevicePermission (id);
+
+-- 内置说明保存稳定标识，由 DevicePresetStrings 按当前语言显示。
+INSERT INTO DevicePermission (id, path, useAll, read, write, remove, rename, sortOrder, comment)
+VALUES 
+    (1, 'bookmark', 0, 1, 1, 1, 1, 1, '@device_permission_bookmarks_comment'),
+    (2, 'rootPaths', 0, 1, 0, 0, 0, 0, '@device_permission_root_paths_comment'),
+    (3, '/', 1, 1, 1, 1, 1, 1, '@device_permission_full_access_comment'),
+    (4, '/', 1, 1, 0, 0, 0, 0, '@device_permission_read_only_comment');
+
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+-- 插入新设备权限记录
+insert:
+INSERT INTO DevicePermission (path, comment)
+VALUES (?, ?);
+
+insertWithId:
+INSERT OR REPLACE INTO DevicePermission (id, path, useAll, read, write, remove, rename, sortOrder, comment)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+select:
+SELECT * FROM DevicePermission;
+
+-- 根据ID查询设备权限记录
+selectById:
+SELECT * FROM DevicePermission
+WHERE id = ?;
+
+-- 更新指定ID的设备权限记录
+updateById:
+UPDATE DevicePermission
+SET path = ?, useAll = ?, read = ?, write = ?, remove = ?, rename = ?, sortOrder = ?, comment = ?
+WHERE id = ?;
+
+-- 根据ID删除设备权限记录
+deleteById:
+DELETE FROM DevicePermission
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM DevicePermission;

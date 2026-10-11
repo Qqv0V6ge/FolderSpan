@@ -1,0 +1,82 @@
+-- 角色与设备权限关联表：用于多对多关系
+CREATE TABLE DeviceRoleDevicePermission (
+    id                  INTEGER NOT NULL  CONSTRAINT DeviceRoleDevicePermission_pk PRIMARY KEY AUTOINCREMENT CONSTRAINT DeviceRoleDevicePermission_pk_2 UNIQUE,
+    deviceRoleId              INTEGER NOT NULL,
+    devicePermissionId INTEGER NOT NULL,
+    FOREIGN KEY (deviceRoleId) REFERENCES DeviceRole (id),
+    FOREIGN KEY (devicePermissionId) REFERENCES DevicePermission (id)
+);
+
+CREATE UNIQUE INDEX DeviceRoleDevicePermission_id_uindex
+ON DeviceRoleDevicePermission (id);
+
+INSERT INTO DeviceRoleDevicePermission (id, deviceRoleId, devicePermissionId) VALUES
+    (1, 1, 1),
+    (2, 1, 2),
+    (3, 1, 3),
+    (4, 2, 1),
+    (5, 2, 2),
+    (6, 2, 4);
+
+-- 插入数据
+insert:
+INSERT INTO DeviceRoleDevicePermission (deviceRoleId, devicePermissionId)
+VALUES (:deviceRoleId, :devicePermissionId);
+
+-- 按照主键ID更新记录
+updateById:
+UPDATE DeviceRoleDevicePermission
+SET deviceRoleId = :deviceRoleId,
+    devicePermissionId = :devicePermissionId
+WHERE id = :id;
+
+-- 按照主键ID删除记录
+deleteById:
+DELETE FROM DeviceRoleDevicePermission
+WHERE id = :id;
+
+deleteAll:
+DELETE FROM DeviceRoleDevicePermission;
+
+-- 按照多个devicePermissionId批量删除记录
+deleteByDevicePermissionIds:
+DELETE FROM DeviceRoleDevicePermission
+WHERE devicePermissionId IN :devicePermissionIds;
+
+-- 按照角色ID和多个devicePermissionId批量删除记录
+deleteByRoleIdAndDevicePermissionIds:
+DELETE FROM DeviceRoleDevicePermission
+WHERE deviceRoleId = :deviceRoleId
+AND devicePermissionId IN :devicePermissionIds;
+
+-- 查询所有记录
+queryAll:
+SELECT * FROM DeviceRoleDevicePermission;
+
+-- 按照ID查询记录
+queryById:
+SELECT * FROM DeviceRoleDevicePermission
+WHERE id = :id;
+
+-- 按照deviceRoleId查询记录
+queryDevicePermissionIdByRoleId:
+SELECT devicePermissionId FROM DeviceRoleDevicePermission
+WHERE deviceRoleId = :deviceRoleId;
+
+-- 按照devicePermissionId查询记录
+queryByDevicePermissionId:
+SELECT * FROM DeviceRoleDevicePermission
+WHERE devicePermissionId = :devicePermissionId;
+
+-- 查询指定 deviceRoleId 的记录数量
+queryCountByDeviceRoleId:
+SELECT COUNT(*) FROM DeviceRoleDevicePermission
+WHERE deviceRoleId = :deviceRoleId;
+
+-- 根据角色ID和路径查询设备权限信息
+queryByRoleId:
+SELECT dp.*
+FROM DeviceRoleDevicePermission drdp
+LEFT JOIN DevicePermission dp 
+ON drdp.devicePermissionId = dp.id
+WHERE drdp.deviceRoleId = :roleId;

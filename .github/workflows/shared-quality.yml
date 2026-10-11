@@ -1,0 +1,113 @@
+name: Test Shared Code
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: JVM tests (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [no-pro]
+        platform:
+          - os: ubuntu-24.04
+            label: linux
+          - os: windows-2025
+            label: windows
+          - os: macos-15
+            label: macos
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Linux desktop test runtime
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb xauth pulseaudio pulseaudio-utils \
+            libasound2t64 libpulse0 libudev1 libdbus-1-3 \
+            libx11-6 libxext6 libxfixes3 libxdamage1 libxi6 libxtst6 \
+            libxrandr2 libxcomposite1 libglib2.0-0t64 libgbm1 libdrm2 libgl1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+      - name: Test native macOS installer
+        if: runner.os == 'macOS'
+        run: swift test --package-path app/desktopApp/installer
+
+      - name: Run JVM tests on Linux and macOS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          tasks=(:core:jvmTest :app:shared:jvmTest :app:desktopApp:test :app:headlessRuntime:compileKotlin :core:verifyNotificationRoutes)
+          gradle_command=(
+            ./gradlew --no-daemon --max-workers=2
+            "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
+            -Pkotlin.daemon.jvmargs=-Xmx2g
+            "${tasks[@]}" --stacktrace
+          )
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            pulseaudio --start --exit-idle-time=-1
+            trap 'pulseaudio --kill || true' EXIT
+            pactl load-module module-null-sink sink_name=ci_audio
+            pactl set-default-sink ci_audio
+            pactl set-default-source ci_audio.monitor
+            xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
+              "${gradle_command[@]}"
+          else
+            "${gradle_command[@]}"
+          fi
+
+      - name: Run JVM tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $gradleTasks = @(':core:jvmTest', ':app:shared:jvmTest', ':app:desktopApp:test', ':app:headlessRuntime:compileKotlin', ':core:verifyNotificationRoutes')
+          & .\gradlew.bat --no-daemon --max-workers=2 `
+            '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' `
+            '-Pkotlin.daemon.jvmargs=-Xmx2g' `
+            @gradleTasks --stacktrace
+          exit $LASTEXITCODE
+
+      - name: Upload JVM test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: |
+            core/build/reports/tests/jvmTest/
+            core/build/test-results/jvmTest/
+            app/shared/build/reports/tests/jvmTest/
+            app/shared/build/test-results/jvmTest/
+            app/desktopApp/build/reports/tests/test/
+            app/desktopApp/build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload notification route catalog
+        uses: actions/upload-artifact@v7
+        with:
+          name: notification-routes-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: notification-routes.json
+          if-no-files-found: error
+          retention-days: 14

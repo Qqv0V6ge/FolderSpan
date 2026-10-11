@@ -1,0 +1,43 @@
+import com.folderspan.data.main.device.DeviceConnectType;
+
+-- DeviceReceiveShare: 存储可接收分享的设备信息的表
+CREATE TABLE DeviceReceiveShare (
+    id TEXT NOT NULL PRIMARY KEY,              -- 设备的唯一标识符
+    connectionType TEXT AS DeviceConnectType NOT NULL, -- 连接类型
+    path TEXT NOT NULL                         -- 设备路径
+);
+
+-- 添加新的可接收分享的设备
+insert:
+INSERT INTO DeviceReceiveShare (id, connectionType, path) 
+VALUES (?, ?, ?);
+
+-- 更新设备信息
+update:
+UPDATE DeviceReceiveShare 
+SET connectionType = ?, path = ? 
+WHERE id = ?;
+
+-- 根据ID更新设备的连接类型
+updateConnectionTypeAndPathById:
+UPDATE DeviceReceiveShare 
+SET connectionType = ?, path = ?
+WHERE id = ?;
+
+-- 删除指定设备
+deleteById:
+DELETE FROM DeviceReceiveShare 
+WHERE id = ?;
+
+-- 查询所有可接收分享的设备
+selectAll:
+SELECT d.*, dev.name, dev.type
+FROM DeviceReceiveShare d
+JOIN Device dev ON d.id = dev.id;
+
+-- 根据ID查询特定设备
+selectById:
+SELECT d.*, dev.name, dev.type
+FROM DeviceReceiveShare d
+JOIN Device dev ON d.id = dev.id
+WHERE d.id = ?;

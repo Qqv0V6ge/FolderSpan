@@ -1,0 +1,4 @@
+<resources>
+    <style name="ThemeOverlay.AppTheme.MediumContrast" parent="Theme.Material3.DynamicColors.DayNight" />
+    <style name="ThemeOverlay.AppTheme.HighContrast" parent="Theme.Material3.DynamicColors.DayNight" />
+</resources>

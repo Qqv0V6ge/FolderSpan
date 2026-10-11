@@ -1,0 +1,3 @@
+headers = openssl_wrapper.h
+package = platform.openssl
+linkerOpts = -lssl -lcrypto

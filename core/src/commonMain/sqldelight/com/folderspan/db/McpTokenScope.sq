@@ -1,0 +1,19 @@
+CREATE TABLE McpTokenScope
+(
+    tokenLookupId TEXT NOT NULL,
+    scope         TEXT NOT NULL,
+    PRIMARY KEY (tokenLookupId, scope),
+    FOREIGN KEY (tokenLookupId) REFERENCES McpToken(lookupId) ON DELETE CASCADE
+);
+
+insert:
+INSERT OR IGNORE INTO McpTokenScope (tokenLookupId, scope) VALUES (?, ?);
+
+selectByToken:
+SELECT scope FROM McpTokenScope WHERE tokenLookupId = ? ORDER BY scope;
+
+deleteByToken:
+DELETE FROM McpTokenScope WHERE tokenLookupId = ?;
+
+deleteOne:
+DELETE FROM McpTokenScope WHERE tokenLookupId = ? AND scope = ?;

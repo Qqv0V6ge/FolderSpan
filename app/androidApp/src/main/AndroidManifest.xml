@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+	<queries>
+		<intent>
+			<action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION"/>
+		</intent>
+		<intent>
+			<action android:name="android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION"/>
+		</intent>
+	</queries>
+
+	<uses-permission android:name="android.permission.INTERNET"/>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+	<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
+	<uses-permission
+			android:name="android.permission.READ_EXTERNAL_STORAGE"
+			android:maxSdkVersion="32"/>
+	<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+	<uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+	<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
+	<uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission
+			android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+			android:maxSdkVersion="29"/>
+	<uses-permission
+			android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+			tools:ignore="ScopedStorage"/>
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+	<uses-permission android:name="android.permission.WAKE_LOCK"/>
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+	<application
+			android:allowBackup="false"
+			android:fullBackupContent="@xml/backup_rules"
+			android:dataExtractionRules="@xml/data_extraction_rules"
+			android:icon="@mipmap/ic_launcher"
+			android:label="@string/app_name"
+			android:roundIcon="@mipmap/ic_launcher_round"
+			android:supportsRtl="true"
+			android:name=".AndroidApp"
+			android:theme="@style/AppTheme"
+			android:localeConfig="@xml/locales_config"
+			android:networkSecurityConfig="@xml/network_security_config">
+		<activity
+				android:name=".MainActivity"
+				android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|locale|layoutDirection"
+				android:launchMode="singleTask"
+				android:resizeableActivity="true"
+				android:windowSoftInputMode="adjustPan"
+				android:exported="true">
+			<!-- 接收单个文件分享 -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:mimeType="*/*"/>
+			</intent-filter>
+
+			<!-- 接收多个文件分享 -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND_MULTIPLE"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:mimeType="*/*"/>
+			</intent-filter>
+
+			<!-- 接收文本分享 -->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:mimeType="text/plain"/>
+			</intent-filter>
+
+			<!-- 接收由调用方显式授予读取权限的任意类型 content URI -->
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:scheme="content"/>
+				<data android:mimeType="*/*"/>
+			</intent-filter>
+		</activity>
+
+		<activity-alias
+				android:name=".DynamicLauncherAlias"
+				android:enabled="true"
+				android:exported="true"
+				android:icon="@mipmap/ic_launcher"
+				android:label="@string/app_name"
+				android:roundIcon="@mipmap/ic_launcher_round"
+				android:targetActivity=".MainActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN"/>
+				<category android:name="android.intent.category.LAUNCHER"/>
+			</intent-filter>
+			<meta-data
+					android:name="android.app.shortcuts"
+					android:resource="@xml/shortcuts"/>
+		</activity-alias>
+
+		<activity-alias
+				android:name=".FixedLauncherAlias"
+				android:enabled="false"
+				android:exported="true"
+				android:icon="@mipmap/ic_launcher_fixed"
+				android:label="@string/app_name"
+				android:roundIcon="@mipmap/ic_launcher_fixed_round"
+				android:targetActivity=".MainActivity">
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN"/>
+				<category android:name="android.intent.category.LAUNCHER"/>
+			</intent-filter>
+			<meta-data
+					android:name="android.app.shortcuts"
+					android:resource="@xml/shortcuts"/>
+		</activity-alias>
+
+		<provider
+				android:name="androidx.core.content.FileProvider"
+				android:authorities="com.folderspan.provider"
+				android:exported="false"
+				android:grantUriPermissions="true">
+			<meta-data
+					android:name="android.support.FILE_PROVIDER_PATHS"
+					android:resource="@xml/provider_paths"/>
+		</provider>
+
+		<provider
+				android:name="rikka.shizuku.ShizukuProvider"
+				android:authorities="${applicationId}.shizuku"
+				android:multiprocess="false"
+				android:enabled="true"
+				android:exported="true"
+				android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"/>
+
+		<service
+				android:name=".service.BackgroundService"
+				android:enabled="true"
+				android:exported="false"
+				android:foregroundServiceType="dataSync"/>
+
+		<service
+				android:name="com.folderspan.root.RootFileService"
+				android:enabled="true"
+				android:exported="false"/>
+
+		<receiver
+				android:name=".service.BootCompletedReceiver"
+				android:enabled="true"
+				android:exported="false">
+			<intent-filter>
+				<action android:name="android.intent.action.BOOT_COMPLETED"/>
+				<action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+			</intent-filter>
+		</receiver>
+	</application>
+
+</manifest>
