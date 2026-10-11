@@ -1,0 +1,39 @@
+import kotlin.Boolean;
+
+CREATE TABLE McpToken
+(
+    lookupId    TEXT NOT NULL PRIMARY KEY,
+    secretHash  TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    enabled     INTEGER AS Boolean NOT NULL DEFAULT 1,
+    createdAt   INTEGER NOT NULL,
+    updatedAt   INTEGER NOT NULL,
+    lastUsedAt  INTEGER
+);
+
+insert:
+INSERT INTO McpToken (lookupId, secretHash, name, enabled, createdAt, updatedAt, lastUsedAt)
+VALUES (:lookupId, :secretHash, :name, :enabled, :createdAt, :updatedAt, :lastUsedAt);
+
+selectByLookupId:
+SELECT * FROM McpToken WHERE lookupId = ?;
+
+selectAll:
+SELECT * FROM McpToken ORDER BY createdAt DESC, lookupId;
+
+updateName:
+UPDATE McpToken SET name = :name, updatedAt = :updatedAt WHERE lookupId = :lookupId;
+
+updateEnabled:
+UPDATE McpToken SET enabled = :enabled, updatedAt = :updatedAt WHERE lookupId = :lookupId;
+
+updateSecret:
+UPDATE McpToken
+SET secretHash = :secretHash, updatedAt = :updatedAt, lastUsedAt = NULL
+WHERE lookupId = :lookupId;
+
+updateLastUsed:
+UPDATE McpToken SET lastUsedAt = :lastUsedAt WHERE lookupId = :lookupId;
+
+deleteByLookupId:
+DELETE FROM McpToken WHERE lookupId = ?;

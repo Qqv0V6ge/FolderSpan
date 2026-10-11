@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.folderspan.FolderSpan</id>
+  <name>FolderSpan</name>
+  <summary>Cross-platform file manager and file sharing tool</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <developer id="com.folderspan">
+    <name>FolderSpan</name>
+  </developer>
+  <description>
+    <p>
+      FolderSpan manages local and remote files and supports sharing files
+      between desktop, mobile, and web devices.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.folderspan.FolderSpan.desktop</launchable>
+  <url type="homepage">https://github.com/Qqv0V6ge/FileManager</url>
+  <url type="bugtracker">https://github.com/Qqv0V6ge/FileManager/issues</url>
+  <provides>
+    <binary>folderspan</binary>
+  </provides>
+  <categories>
+    <category>System</category>
+    <category>FileTools</category>
+    <category>FileManager</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.0.0" date="2026-08-02" />
+  </releases>
+</component>

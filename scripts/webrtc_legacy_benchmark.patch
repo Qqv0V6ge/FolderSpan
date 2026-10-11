@@ -1,0 +1,773 @@
+diff --git a/core/build.gradle.kts b/core/build.gradle.kts
+index b7d8f11c..c51b3ce3 100644
+--- a/core/build.gradle.kts
++++ b/core/build.gradle.kts
+@@ -376,6 +376,15 @@ kotlin {
+         withHostTest {
+             isIncludeAndroidResources = true
+         }
++        packaging.resources {
++            excludes += "/META-INF/{AL2.0,LGPL2.1,DEPENDENCIES}"
++            excludes += "/META-INF/INDEX.LIST"
++            pickFirsts += "/META-INF/LICENSE.md"
++        }
++        withDeviceTest {
++            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
++            execution = "HOST"
++        }
+     }
+
+     val iosArm64Target = iosArm64()
+@@ -526,12 +535,18 @@ kotlin {
+     }
+
+     js {
+-        browser()
++        browser {
++            testTask { useKarma { useChromeHeadless() } }
++        }
++        binaries.executable()
+     }
+
+     @OptIn(ExperimentalWasmDsl::class)
+     wasmJs {
+-        browser()
++        browser {
++            testTask { useKarma { useChromeHeadless() } }
++        }
++        binaries.executable()
+         compilerOptions {
+             freeCompilerArgs.add("-Xwasm-use-new-exception-proposal")
+         }
+@@ -638,6 +653,11 @@ kotlin {
+             implementation(libs.zstd.kmp)
+             implementation(libs.zstd.kmp.okio)
+         }
++        getByName("androidDeviceTest").dependsOn(getByName("commonTest"))
++        getByName("androidDeviceTest").dependencies {
++            implementation(libs.androidx.test.ext.junit)
++            implementation("androidx.test:runner:1.7.0")
++        }
+         commonTest.dependencies {
+             implementation(libs.kotlin.test)
+             implementation(libs.kotlinx.coroutines.test)
+diff --git a/core/karma.config.d/session-tests.js b/core/karma.config.d/session-tests.js
+new file mode 100644
+index 00000000..6fb8ded8
+--- /dev/null
++++ b/core/karma.config.d/session-tests.js
+@@ -0,0 +1,25 @@
++// Real ICE/SCTP establishment can exceed Mocha's two-second unit-test default.
++config.client = config.client || {};
++if (process.env.FOLDERSPAN_WEBRTC_INTEROP_PORT) {
++    config.client.args = [process.env.FOLDERSPAN_WEBRTC_INTEROP_PORT];
++}
++config.client.mocha = Object.assign({}, config.client.mocha, { timeout: 60000 });
++config.failOnEmptyTestSuite = true;
++config.browserNoActivityTimeout = 65000;
++// Keep loopback ICE independent of the host's multicast DNS configuration.
++config.customLaunchers = Object.assign({}, config.customLaunchers, {
++    ChromeHeadlessWebRtc: {
++        base: 'ChromeHeadless',
++        flags: [
++            '--disable-features=WebRtcHideLocalIpsWithMdns',
++            '--allow-loopback-in-peer-connection',
++            '--use-fake-ui-for-media-stream',
++            '--use-fake-device-for-media-stream',
++            '--force-webrtc-ip-handling-policy=default',
++        ],
++    },
++});
++config.browsers = ['ChromeHeadlessWebRtc'];
++config.files.unshift(require('path').resolve(
++    config.basePath, '../../../../core/src/webTest/resources/webrtc-test-setup.js',
++));
+diff --git a/core/src/androidDeviceTest/AndroidManifest.xml b/core/src/androidDeviceTest/AndroidManifest.xml
+new file mode 100644
+index 00000000..3cb3262d
+--- /dev/null
++++ b/core/src/androidDeviceTest/AndroidManifest.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++</manifest>
+diff --git a/core/src/androidDeviceTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkAndroidTest.kt b/core/src/androidDeviceTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkAndroidTest.kt
+new file mode 100644
+index 00000000..0d207577
+--- /dev/null
++++ b/core/src/androidDeviceTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkAndroidTest.kt
+@@ -0,0 +1,11 @@
++package com.folderspan.service.webrtc
++import com.folderspan.test.runSuspendTest
++import kotlin.test.Test
++class LegacyWebRtcBenchmarkAndroidTest {
++    @Test fun measureLegacyProtocolOnAndroid() = runSuspendTest {
++        measureLegacyProtocol {
++            val runtime = Runtime.getRuntime()
++            runtime.totalMemory() - runtime.freeMemory()
++        }
++    }
++}
+diff --git a/core/src/androidDeviceTest/kotlin/com/folderspan/test/CoroutineTestCompat.android.kt b/core/src/androidDeviceTest/kotlin/com/folderspan/test/CoroutineTestCompat.android.kt
+new file mode 100644
+index 00000000..aa1745c0
+--- /dev/null
++++ b/core/src/androidDeviceTest/kotlin/com/folderspan/test/CoroutineTestCompat.android.kt
+@@ -0,0 +1,8 @@
++package com.folderspan.test
++
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.test.TestResult
++
++actual fun runSuspendTest(block: suspend () -> Unit): TestResult = runBlocking {
++    block()
++}
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/http/clipboard/ClipboardUrlDownloadEngineTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/http/clipboard/ClipboardUrlDownloadEngineTest.kt
+index e731999a..772653f0 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/http/clipboard/ClipboardUrlDownloadEngineTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/http/clipboard/ClipboardUrlDownloadEngineTest.kt
+@@ -13,7 +13,7 @@ import io.ktor.http.HttpStatusCode
+ import io.ktor.http.headersOf
+ import io.ktor.utils.io.ByteReadChannel
+ import kotlinx.coroutines.CancellationException
+-import kotlinx.coroutines.runBlocking
++import com.folderspan.test.runSuspendTest
+ import kotlinx.io.IOException
+ import kotlin.test.Test
+ import kotlin.test.assertContentEquals
+@@ -24,7 +24,7 @@ import kotlin.test.assertFailsWith
+
+ class ClipboardUrlDownloadEngineTest {
+     @Test
+-    fun singleGetStreamsToStagingWithTaskHeaders(): Unit = runBlocking {
++    fun singleGetStreamsToStagingWithTaskHeaders() = runSuspendTest {
+         val requests = mutableListOf<Map<String, String>>()
+         val client = mockClient { request ->
+             requests += request.headers.entries().associate { (name, values) -> name to values.joinToString() }
+@@ -55,7 +55,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun missingContentLengthIsRejectedWithoutPublishing(): Unit = runBlocking {
++    fun missingContentLengthIsRejectedWithoutPublishing() = runSuspendTest {
+         val body = "stream-without-size".encodeToByteArray()
+         val progress = mutableListOf<ClipboardUrlDownloadProgress>()
+         val staging = TrackingStagingFactory()
+@@ -84,7 +84,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun unknownRangeTotalFallsBackAndRejectsFullResponseWithoutLength(): Unit = runBlocking {
++    fun unknownRangeTotalFallsBackAndRejectsFullResponseWithoutLength() = runSuspendTest {
+         val body = "unknown-range-total".encodeToByteArray()
+         var fullGets = 0
+         val progress = mutableListOf<ClipboardUrlDownloadProgress>()
+@@ -129,7 +129,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun retryableStatusUsesBoundedRetryThenSucceeds(): Unit = runBlocking {
++    fun retryableStatusUsesBoundedRetryThenSucceeds() = runSuspendTest {
+         var calls = 0
+         val waits = mutableListOf<Long>()
+         val client = mockClient {
+@@ -159,7 +159,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun retryableStatusStopsAfterConfiguredRetryCount(): Unit = runBlocking {
++    fun retryableStatusStopsAfterConfiguredRetryCount() = runSuspendTest {
+         var calls = 0
+         val client = mockClient {
+             calls++
+@@ -180,7 +180,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun transportFailureIsRetried(): Unit = runBlocking {
++    fun transportFailureIsRetried() = runSuspendTest {
+         var calls = 0
+         val client = mockClient {
+             calls++
+@@ -204,7 +204,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun htmlAndAuthenticationAreNotRetried(): Unit = runBlocking {
++    fun htmlAndAuthenticationAreNotRetried() = runSuspendTest {
+         var calls = 0
+         val client = mockClient {
+             calls++
+@@ -223,7 +223,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun knownSizeIsDownloadedWithoutAFixedPolicyLimit(): Unit = runBlocking {
++    fun knownSizeIsDownloadedWithoutAFixedPolicyLimit() = runSuspendTest {
+         val result = ClipboardUrlDownloadEngine(
+             clientProvider = {
+                 mockClient {
+@@ -244,7 +244,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun declaredSizeAboveFormerNativeLimitIsNotRejectedBeforeStreaming(): Unit = runBlocking {
++    fun declaredSizeAboveFormerNativeLimitIsNotRejectedBeforeStreaming() = runSuspendTest {
+         val declaredSize = 4L * 1024L * 1024L * 1024L + 1L
+         val progress = mutableListOf<ClipboardUrlDownloadProgress>()
+         val client = mockClient {
+@@ -271,7 +271,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun rangeProbeUsesContentRangeTotalWhenContentLengthIsMissing(): Unit = runBlocking {
++    fun rangeProbeUsesContentRangeTotalWhenContentLengthIsMissing() = runSuspendTest {
+         val client = mockClient { request ->
+             when (request.headers[HttpHeaders.Range]) {
+                 "bytes=0-0" -> respond(
+@@ -303,7 +303,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun validRangesAreDownloadedAndMergedInOrder(): Unit = runBlocking {
++    fun validRangesAreDownloadedAndMergedInOrder() = runSuspendTest {
+         val seenRanges = mutableListOf<String>()
+         val client = mockClient { request ->
+             val range = request.headers[HttpHeaders.Range].orEmpty()
+@@ -327,7 +327,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun ignoredRangeCleansSegmentsAndFallsBackToSingleGet(): Unit = runBlocking {
++    fun ignoredRangeCleansSegmentsAndFallsBackToSingleGet() = runSuspendTest {
+         var fullGets = 0
+         val client = mockClient { request ->
+             when (request.headers[HttpHeaders.Range]) {
+@@ -361,7 +361,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun changedRangeValidatorCleansSegmentsAndFallsBackToSingleGet(): Unit = runBlocking {
++    fun changedRangeValidatorCleansSegmentsAndFallsBackToSingleGet() = runSuspendTest {
+         var fullGets = 0
+         val client = mockClient { request ->
+             when (request.headers[HttpHeaders.Range]) {
+@@ -394,7 +394,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun manualRedirectDropsCookieAcrossOriginsAndDoesNotAdoptSetCookie(): Unit = runBlocking {
++    fun manualRedirectDropsCookieAcrossOriginsAndDoesNotAdoptSetCookie() = runSuspendTest {
+         val seen = mutableListOf<Triple<String, String?, String?>>()
+         val client = mockClient { request ->
+             seen += Triple(
+@@ -432,7 +432,7 @@ class ClipboardUrlDownloadEngineTest {
+     }
+
+     @Test
+-    fun cancellationIsPropagatedAndStagingIsCleaned(): Unit = runBlocking {
++    fun cancellationIsPropagatedAndStagingIsCleaned() = runSuspendTest {
+         val client = mockClient { throw CancellationException("test") }
+         val staging = TrackingStagingFactory()
+         assertFailsWith<CancellationException> {
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/http/server/HttpServerStartErrorTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/http/server/HttpServerStartErrorTest.kt
+index 34049ebc..cc527ec2 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/http/server/HttpServerStartErrorTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/http/server/HttpServerStartErrorTest.kt
+@@ -15,7 +15,7 @@ class HttpServerStartErrorTest {
+     }
+
+     @Test
+-    fun `returns fixed port occupied message`() {
++    fun returnsFixedPortOccupiedMessage() {
+         LibresSettings.languageCode = "zhHans"
+         val result = portInUseMessage(1204)
+
+@@ -23,7 +23,7 @@ class HttpServerStartErrorTest {
+     }
+
+     @Test
+-    fun `returns generic message with detail when no bind hint`() {
++    fun returnsGenericMessageWithDetailWhenNoBindHint() {
+         LibresSettings.languageCode = "zhHans"
+         val error = RuntimeException("network init timeout")
+
+@@ -34,7 +34,7 @@ class HttpServerStartErrorTest {
+     }
+
+     @Test
+-    fun `returns port occupied message for bind failure`() {
++    fun returnsPortOccupiedMessageForBindFailure() {
+         LibresSettings.languageCode = "zhHans"
+         val error = RuntimeException("java.net.BindException: Address already in use")
+
+@@ -44,7 +44,7 @@ class HttpServerStartErrorTest {
+     }
+
+     @Test
+-    fun `renders server start messages in English`() {
++    fun rendersServerStartMessagesInEnglish() {
+         LibresSettings.languageCode = "en"
+
+         assertEquals(
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/HttpWebRtcSignalingHubTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/HttpWebRtcSignalingHubTest.kt
+index 1a665039..e92196a8 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/HttpWebRtcSignalingHubTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/HttpWebRtcSignalingHubTest.kt
+@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
+
+ class HttpWebRtcSignalingHubTest {
+     @Test
+-    fun `browser join exposes app host only`() {
++    fun browserJoinExposesAppHostOnly() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app", name = "Desktop")
+         val browserA = SignalingDevice(id = "browser-a", name = "Browser A")
+@@ -31,7 +31,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `browser joins are capped to avoid unbounded peer growth`() {
++    fun browserJoinsAreCappedToAvoidUnboundedPeerGrowth() {
+         val hub = HttpWebRtcSignalingHub()
+         hub.registerHost(SignalingDevice(id = "app"))
+
+@@ -45,7 +45,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `send throttles a browser that floods host signaling`() {
++    fun sendThrottlesABrowserThatFloodsHostSignaling() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browser = SignalingDevice(id = "browser")
+@@ -71,7 +71,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `browser cannot send connect approved signal`() {
++    fun browserCannotSendConnectApprovedSignal() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browser = SignalingDevice(id = "browser")
+@@ -94,7 +94,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `oversized device and message fields are rejected`() {
++    fun oversizedDeviceAndMessageFieldsAreRejected() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browser = SignalingDevice(id = "browser")
+@@ -120,7 +120,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `joining new host replaces previous host`() {
++    fun joiningNewHostReplacesPreviousHost() {
+         val hub = HttpWebRtcSignalingHub()
+         val oldApp = SignalingDevice(id = "app-old", name = "Old Desktop")
+         val newApp = SignalingDevice(id = "app-new", name = "New Desktop")
+@@ -134,7 +134,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `discover host returns app without joining browser`() {
++    fun discoverHostReturnsAppWithoutJoiningBrowser() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(
+             id = "app",
+@@ -157,7 +157,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `external join cannot register host role`() {
++    fun externalJoinCannotRegisterHostRole() {
+         val hub = HttpWebRtcSignalingHub()
+         val result = hub.join(HttpWebRtcSignalingRole.Host, SignalingDevice(id = "fake-host"))
+
+@@ -166,7 +166,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `browser join cannot reuse an existing peer id`() {
++    fun browserJoinCannotReuseAnExistingPeerId() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app", name = "Desktop")
+         val browser = SignalingDevice(id = "browser")
+@@ -186,7 +186,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `poll and leave require matching client token`() {
++    fun pollAndLeaveRequireMatchingClientToken() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browser = SignalingDevice(id = "browser")
+@@ -201,7 +201,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `send requires matching client id and token`() {
++    fun sendRequiresMatchingClientIdAndToken() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browser = SignalingDevice(id = "browser")
+@@ -236,7 +236,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `browser cannot send signaling to another browser`() {
++    fun browserCannotSendSignalingToAnotherBrowser() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browserA = SignalingDevice(id = "browser-a")
+@@ -262,7 +262,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `app routes signaling to the selected browser only`() {
++    fun appRoutesSignalingToTheSelectedBrowserOnly() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browserA = SignalingDevice(id = "browser-a")
+@@ -288,7 +288,7 @@ class HttpWebRtcSignalingHubTest {
+     }
+
+     @Test
+-    fun `browser leave notifies host but not other browsers`() {
++    fun browserLeaveNotifiesHostButNotOtherBrowsers() {
+         val hub = HttpWebRtcSignalingHub()
+         val app = SignalingDevice(id = "app")
+         val browserA = SignalingDevice(id = "browser-a")
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmark.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmark.kt
+new file mode 100644
+index 00000000..e789ae27
+--- /dev/null
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmark.kt
+@@ -0,0 +1,121 @@
++package com.folderspan.service.webrtc
++
++import com.folderspan.service.webrtc.controller.rpc.MultiPeerWebRtcControllerDeviceRpc
++import com.folderspan.service.webrtc.models.*
++import com.folderspan.service.webrtc.signaling.SignalingDevice
++import kotlinx.coroutines.*
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.update
++import kotlin.test.assertEquals
++import kotlin.time.TimeSource
++
++internal suspend fun measureLegacyProtocol(sampleMemory: () -> Long) = coroutineScope {
++        withTimeout(120_000L) {
++            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++            val peakBuffered = MutableStateFlow(0L)
++            val sender = BenchmarkController(scope)
++            val receiver = BenchmarkController(scope)
++            val left = WebRtcPeerConnection(emptyList())
++            val right = WebRtcPeerConnection(emptyList())
++            val readyLeft = CompletableDeferred<Unit>()
++            val readyRight = CompletableDeferred<Unit>()
++            val leftSession = sender.install(left, "right").also { it.isOfferer = true }
++            val rightSession = receiver.install(right, "left")
++            val forward = launch(start = CoroutineStart.UNDISPATCHED) {
++                left.onIceCandidate.collect { readyRight.await(); right.addIceCandidate(it) }
++            }
++            val backward = launch(start = CoroutineStart.UNDISPATCHED) {
++                right.onIceCandidate.collect { readyLeft.await(); left.addIceCandidate(it) }
++            }
++            val incoming = scope.launch(start = CoroutineStart.UNDISPATCHED) {
++                right.onDataChannel.collect { receiver.attach(rightSession, it) }
++            }
++            var stage = "negotiate"
++            var primaryFailure: Throwable? = null
++            var sampling: Job? = null
++            try {
++                val control = checkNotNull(left.createDataChannel("control"))
++                sender.attach(leftSession, control)
++                val offer = left.createOffer()
++                left.setLocalDescription(offer)
++                right.setRemoteDescription(offer)
++                readyRight.complete(Unit)
++                val answer = right.createAnswer()
++                right.setLocalDescription(answer)
++                left.setRemoteDescription(answer)
++                readyLeft.complete(Unit)
++                stage = "wait-control-channel"
++                while (!leftSession.isConnected() || !rightSession.isConnected()) delay(10)
++                stage = "warmup-send"
++                sender.sendRandomPayload(leftSession, 256L * 1024)
++                stage = "warmup-receive"
++                receiver.transfers.first { entries -> entries.size == 1 && entries.values.all { it.status == TransferStatus.Completed } }
++                for (concurrency in listOf(1, 4)) {
++                  repeat(3) { iteration ->
++                    stage = "sample-$concurrency-$iteration"
++                    val before = receiver.transfers.value.size
++                    val beforeBytes = receiver.transfers.value.values.sumOf { it.transferredBytes }
++                    peakBuffered.value = 0L
++                    val baselineMemory = sampleMemory()
++                    var peakHeap = baselineMemory
++                    sampling = launch {
++                        while (isActive) {
++                            peakBuffered.update { maxOf(it, leftSession.activeChannels.sumOf { channel -> channel.bufferedAmount }) }
++                            peakHeap = maxOf(peakHeap, sampleMemory())
++                            delay(2)
++                        }
++                    }
++                    val mark = TimeSource.Monotonic.markNow()
++                    (1..concurrency).map { async { sender.sendRandomPayload(leftSession, 4L * 1024 * 1024) } }.awaitAll()
++                    check(sender.transfers.value.values.none { it.status == TransferStatus.Failed }) { sender.transfers.value.toString() }
++                    val results = receiver.transfers.first { entries ->
++                        entries.size == before + concurrency && entries.values.all { it.status == TransferStatus.Completed }
++                    }
++                    val elapsedMs = mark.elapsedNow().inWholeMilliseconds
++                    sampling.cancelAndJoin()
++                    sampling = null
++                    assertEquals(beforeBytes + concurrency * 4L * 1024 * 1024, results.values.sumOf { it.transferredBytes })
++                    println("WEBRTC_BENCH protocol=legacy iteration=$iteration concurrent=$concurrency bytes=${concurrency * 4L * 1024 * 1024} elapsedMs=$elapsedMs sampledPeakBuffered=${peakBuffered.value} baselineMemory=$baselineMemory peakMemory=$peakHeap")
++                  }
++                }
++            } catch (error: Throwable) {
++                primaryFailure = error
++                println("WEBRTC_BENCH_STATE stage=$stage left=${leftSession.controlChannel?.state} right=${rightSession.controlChannel?.state} sender=${sender.transfers.value.values.map { it.status }} receiver=${receiver.transfers.value.values.map { it.status }}")
++                throw error
++            } finally {
++                withContext(NonCancellable) {
++                    var failure = primaryFailure
++                    val actions: List<suspend () -> Unit> = listOf(
++                        { sampling?.cancelAndJoin() },
++                        { forward.cancelAndJoin() },
++                        { backward.cancelAndJoin() },
++                        { incoming.cancelAndJoin() },
++                        { sender.dispose() },
++                        { receiver.dispose() },
++                        { scope.coroutineContext.job.cancelAndJoin() },
++                    )
++                    for (action in actions) {
++                        try { withTimeout(5_000L) { action() } } catch (error: Throwable) {
++                            if (failure == null) failure = error
++                            else if (failure !== error) failure.addSuppressed(error)
++                        }
++                    }
++                    if (primaryFailure == null) failure?.let { throw it }
++                }
++            }
++        }
++}
++
++private class BenchmarkController(scope: CoroutineScope) : MultiPeerWebRtcControllerDeviceRpc(scope) {
++    fun install(connection: WebRtcPeerConnection, id: String): PeerSession =
++        PeerSession(SignalingDevice(id = id, name = id)).also {
++            it.peerConnection = connection
++            it.status = WebRtcConnectionStatus.Connected
++            it.connectRequested = true
++            peerSessions[id] = it
++        }
++    fun attach(session: PeerSession, channel: WebRtcDataChannel) =
++        attachDataChannel(session, channel, session.generation, ChannelOrigin.Remote)
++    fun dispose() = disconnectInternal(clearConfig = true, clearTransfers = true)
++}
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcConnectionDisplayStatusTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcConnectionDisplayStatusTest.kt
+index 866939c6..d07850f3 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcConnectionDisplayStatusTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcConnectionDisplayStatusTest.kt
+@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
+
+ class WebRtcConnectionDisplayStatusTest {
+     @Test
+-    fun `waiting approval takes precedence over generic connecting`() {
++    fun waitingApprovalTakesPrecedenceOverGenericConnecting() {
+         assertEquals(
+             WebRtcPeerSessionDisplayStatus.WaitingForApproval,
+             resolveWebRtcPeerSessionDisplayStatus(
+@@ -22,7 +22,7 @@ class WebRtcConnectionDisplayStatusTest {
+     }
+
+     @Test
+-    fun `connected peer connection without channel maps to establishing data channel`() {
++    fun connectedPeerConnectionWithoutChannelMapsToEstablishingDataChannel() {
+         assertEquals(
+             WebRtcPeerSessionDisplayStatus.EstablishingDataChannel,
+             resolveWebRtcPeerSessionDisplayStatus(
+@@ -35,7 +35,7 @@ class WebRtcConnectionDisplayStatusTest {
+     }
+
+     @Test
+-    fun `generic connecting maps to ice negotiating`() {
++    fun genericConnectingMapsToIceNegotiating() {
+         assertEquals(
+             WebRtcPeerSessionDisplayStatus.IceNegotiating,
+             resolveWebRtcPeerSessionDisplayStatus(
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcIceConfigTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcIceConfigTest.kt
+index 26abacd1..c6e3fda0 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcIceConfigTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcIceConfigTest.kt
+@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
+
+ class WebRtcIceConfigTest {
+     @Test
+-    fun `buildWebRtcIceServers uses stun only by default`() {
++    fun buildWebRtcIceServersUsesStunOnlyByDefault() {
+         val servers = buildWebRtcIceServers()
+
+         assertEquals(
+@@ -16,7 +16,7 @@ class WebRtcIceConfigTest {
+     }
+
+     @Test
+-    fun `buildWebRtcIceServers skips blank urls and keeps turn credentials`() {
++    fun buildWebRtcIceServersSkipsBlankUrlsAndKeepsTurnCredentials() {
+         val servers = buildWebRtcIceServers(
+             stunUrl = " ",
+             turnUrl = "turn:119.91.209.238:3478",
+@@ -37,7 +37,7 @@ class WebRtcIceConfigTest {
+     }
+
+     @Test
+-    fun `buildWebRtcIceServerAttempts removes credentialless turn before stun only fallback`() {
++    fun buildWebRtcIceServerAttemptsRemovesCredentiallessTurnBeforeStunOnlyFallback() {
+         val servers = listOf(
+             WebRtcIceServerConfig(urls = listOf("stun:119.91.209.238:3478")),
+             WebRtcIceServerConfig(urls = listOf("turn:119.91.209.238:3478"))
+@@ -65,7 +65,7 @@ class WebRtcIceConfigTest {
+     }
+
+     @Test
+-    fun `buildWebRtcIceServers keeps blank turn credentials blank`() {
++    fun buildWebRtcIceServersKeepsBlankTurnCredentialsBlank() {
+         val servers = buildWebRtcIceServers(
+             stunUrl = " ",
+             turnUrl = "turn:119.91.209.238:3478",
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcRoomEntriesTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcRoomEntriesTest.kt
+index 202c5881..e8028f4d 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcRoomEntriesTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcRoomEntriesTest.kt
+@@ -7,7 +7,7 @@ import kotlin.test.assertNull
+
+ class WebRtcRoomEntriesTest {
+     @Test
+-    fun `parseWebRtcRoomEntries builds host room combinations`() {
++    fun parseWebRtcRoomEntriesBuildsHostRoomCombinations() {
+         val entries = parseWebRtcRoomEntries(
+             wssUrl = "wss://a.example/ws, wss://b.example/ws",
+             roomId = "room-a, room-b, room-c"
+@@ -30,7 +30,7 @@ class WebRtcRoomEntriesTest {
+     }
+
+     @Test
+-    fun `parseWebRtcRoomEntries keeps blank side as single dimension`() {
++    fun parseWebRtcRoomEntriesKeepsBlankSideAsSingleDimension() {
+         val entries = parseWebRtcRoomEntries(
+             wssUrl = "wss://a.example/ws, wss://b.example/ws",
+             roomId = ""
+diff --git a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcSignalingTransportTest.kt b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcSignalingTransportTest.kt
+index 9391997d..5644c87a 100644
+--- a/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcSignalingTransportTest.kt
++++ b/core/src/commonTest/kotlin/com/folderspan/service/webrtc/WebRtcSignalingTransportTest.kt
+@@ -8,24 +8,24 @@ import kotlin.test.assertTrue
+
+ class WebRtcSignalingTransportTest {
+     @Test
+-    fun `http urls use http signaling transport`() {
++    fun httpUrlsUseHttpSignalingTransport() {
+         assertEquals(WebRtcSignalingTransport.Http, resolveWebRtcSignalingTransport("http://127.0.0.1:12040"))
+     }
+
+     @Test
+-    fun `websocket urls use websocket signaling transport`() {
++    fun websocketUrlsUseWebsocketSignalingTransport() {
+         assertEquals(WebRtcSignalingTransport.WebSocket, resolveWebRtcSignalingTransport("ws://127.0.0.1:8443/ws"))
+         assertEquals(WebRtcSignalingTransport.WebSocket, resolveWebRtcSignalingTransport("wss://example.test/ws"))
+         assertEquals(WebRtcSignalingTransport.WebSocket, resolveWebRtcSignalingTransport("https://example.test/webrtc"))
+     }
+
+     @Test
+-    fun `room config never accepts empty room id`() {
++    fun roomConfigNeverAcceptsEmptyRoomId() {
+         assertFalse(isWebRtcConfigRoomIdValidForTransport(""))
+     }
+
+     @Test
+-    fun `browser http config uses http signaling url`() {
++    fun browserHttpConfigUsesHttpSignalingUrl() {
+         val config = buildBrowserWebRtcConfig(" http://127.0.0.1:12040 ")
+
+         assertEquals("http://127.0.0.1:12040", config.wssUrl)
+@@ -34,7 +34,7 @@ class WebRtcSignalingTransportTest {
+     }
+
+     @Test
+-    fun `browser device signaling base url always uses http signaling`() {
++    fun browserDeviceSignalingBaseUrlAlwaysUsesHttpSignaling() {
+         assertEquals(
+             "http://192.168.1.20:12040",
+             buildBrowserWebRtcDeviceBaseUrl("192.168.1.20", 12040)
+@@ -56,7 +56,7 @@ class WebRtcSignalingTransportTest {
+     }
+
+     @Test
+-    fun `browser signaling base url accepts only http device ports`() {
++    fun browserSignalingBaseUrlAcceptsOnlyHttpDevicePorts() {
+         assertTrue(isAllowedBrowserWebRtcSignalingBaseUrl("http://192.168.1.20:12040"))
+         assertTrue(isAllowedBrowserWebRtcSignalingBaseUrl("http://localhost:12040"))
+         assertTrue(isAllowedBrowserWebRtcSignalingBaseUrl("http://127.0.0.1:12040"))
+@@ -68,7 +68,7 @@ class WebRtcSignalingTransportTest {
+     }
+
+     @Test
+-    fun `browser signaling enable also requires secure browser context`() {
++    fun browserSignalingEnableAlsoRequiresSecureBrowserContext() {
+         assertTrue(canEnableBrowserWebRtcSignaling("http://192.168.1.20:12040", browserSecureContext = true))
+         assertFalse(canEnableBrowserWebRtcSignaling("http://192.168.1.20:12040", browserSecureContext = false))
+         assertFalse(canEnableBrowserWebRtcSignaling("https://192.168.1.20:12040", browserSecureContext = true))
+diff --git a/core/src/jsTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkBrowserTest.kt b/core/src/jsTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkBrowserTest.kt
+new file mode 100644
+index 00000000..0e8a8527
+--- /dev/null
++++ b/core/src/jsTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkBrowserTest.kt
+@@ -0,0 +1,8 @@
++package com.folderspan.service.webrtc
++import com.folderspan.test.runSuspendTest
++import kotlin.test.Test
++class LegacyWebRtcBenchmarkBrowserTest {
++    @Test fun measureLegacyProtocolInBrowser() = runSuspendTest {
++        measureLegacyProtocol { (js("performance.memory.usedJSHeapSize") as Double).toLong() }
++    }
++}
+diff --git a/core/src/jvmTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkTest.kt b/core/src/jvmTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkTest.kt
+new file mode 100644
+index 00000000..6248a117
+--- /dev/null
++++ b/core/src/jvmTest/kotlin/com/folderspan/service/webrtc/LegacyWebRtcBenchmarkTest.kt
+@@ -0,0 +1,16 @@
++package com.folderspan.service.webrtc
++import com.folderspan.test.runSuspendTest
++import kotlin.test.Test
++class LegacyWebRtcBenchmarkTest {
++    @Test fun measureLegacyProtocolOnJvm() = runSuspendTest {
++        val runs = (System.getenv("FOLDERSPAN_WEBRTC_BENCHMARK_RUNS") ?: "1").toInt()
++        require(runs in 1..20) { "Benchmark runs must be between 1 and 20" }
++        repeat(runs) { iteration ->
++            println("WEBRTC_BENCH_RUN iteration=$iteration")
++            measureLegacyProtocol {
++                val runtime = Runtime.getRuntime()
++                runtime.totalMemory() - runtime.freeMemory()
++            }
++        }
++    }
++}
+diff --git a/core/src/webTest/resources/webrtc-test-setup.js b/core/src/webTest/resources/webrtc-test-setup.js
+new file mode 100644
+index 00000000..30f438ef
+--- /dev/null
++++ b/core/src/webTest/resources/webrtc-test-setup.js
+@@ -0,0 +1,7 @@
++// Chrome restricts ICE to the default route until media permission is granted.
++// With a VPN that route may be an unreachable virtual NIC. The test launcher
++// supplies fake devices, so this hook never opens a real microphone or camera.
++before(async function () {
++    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
++    stream.getTracks().forEach(track => track.stop());
++});

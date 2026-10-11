@@ -1,0 +1,103 @@
+import com.folderspan.ui.state.file.DrawerBookmarkType;
+import com.folderspan.data.file.FileProtocol;
+
+CREATE TABLE FileBookmark
+(
+    id          INTEGER NOT NULL CONSTRAINT FileBookmark_pk PRIMARY KEY AUTOINCREMENT CONSTRAINT FileBookmark_pk_2 UNIQUE,
+    name        TEXT                            NOT NULL,
+    type        TEXT AS DrawerBookmarkType      NOT NULL,
+    path        TEXT                            NOT NULL,
+    icon        TEXT,
+    sort        INTEGER NOT NULL,
+    protocol    TEXT AS FileProtocol NOT NULL DEFAULT 'Local',
+    sourceId    TEXT NOT NULL DEFAULT '',
+    createdAt   INTEGER NOT NULL DEFAULT 0,
+    updatedAt   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX FileBookmark_id_uindex
+    ON FileBookmark (id);
+
+insert:
+INSERT INTO FileBookmark (name, type, path, icon, sort)
+VALUES (?, ?, ?, ?, ?);
+
+insertScoped:
+INSERT INTO FileBookmark (name, type, path, icon, sort, protocol, sourceId, createdAt, updatedAt)
+VALUES (:name, :type, :path, :icon, :sort, :protocol, :sourceId, :createdAt, :updatedAt);
+
+deleteById:
+DELETE FROM FileBookmark WHERE id = ?;
+
+deleteScopedById:
+DELETE FROM FileBookmark
+WHERE id = :id AND protocol = :protocol AND sourceId = :sourceId;
+
+selectAll:
+SELECT *
+FROM FileBookmark
+ORDER BY sort, id;
+
+selectByScope:
+SELECT *
+FROM FileBookmark
+WHERE protocol = :protocol AND sourceId = :sourceId
+ORDER BY sort, id
+LIMIT :limit OFFSET :offset;
+
+selectByScopedId:
+SELECT *
+FROM FileBookmark
+WHERE id = :id AND protocol = :protocol AND sourceId = :sourceId;
+
+selectIdsByScope:
+SELECT id
+FROM FileBookmark
+WHERE protocol = :protocol AND sourceId = :sourceId
+ORDER BY sort, id;
+
+selectNextSortByScope:
+SELECT coalesce(max(sort), -1) + 1
+FROM FileBookmark
+WHERE protocol = :protocol AND sourceId = :sourceId;
+
+selectLastInsertedId:
+SELECT last_insert_rowid();
+
+countByScope:
+SELECT count(*)
+FROM FileBookmark
+WHERE protocol = :protocol AND sourceId = :sourceId;
+
+deleteAll:
+DELETE FROM FileBookmark;
+
+updateById:
+UPDATE FileBookmark
+SET name = :name,
+    type = :type,
+    path = :path,
+    icon = :icon,
+    sort = :sort
+WHERE id = :id;
+
+updateScopedById:
+UPDATE FileBookmark
+SET name = :name,
+    type = :type,
+    path = :path,
+    icon = :icon,
+    sort = :sort,
+    updatedAt = :updatedAt
+WHERE id = :id AND protocol = :protocol AND sourceId = :sourceId;
+
+updateSort:
+UPDATE FileBookmark
+SET sort = ?
+WHERE id = ?;
+
+updateScopedSort:
+UPDATE FileBookmark
+SET sort = :sort,
+    updatedAt = :updatedAt
+WHERE id = :id AND protocol = :protocol AND sourceId = :sourceId;

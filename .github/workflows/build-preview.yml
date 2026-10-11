@@ -1,0 +1,361 @@
+name: Build Preview
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-preview-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_releaseVersion: 0.0.${{ github.run_number }}
+  ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
+
+jobs:
+  quality:
+    uses: ./.github/workflows/shared-quality.yml
+
+  android:
+    name: Package Android preview (${{ matrix.edition }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [no-pro]
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon :app:androidApp:assembleDebug --stacktrace
+
+      - name: Upload Android preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-android-${{ matrix.edition }}
+          path: app/androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  web:
+    name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [no-pro]
+        platform:
+          - label: js
+            target: js
+          - label: wasm
+            target: wasmJs
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Web development distribution
+        run: >-
+          ./gradlew --no-daemon
+          :app:webApp:${{ matrix.platform.target }}BrowserDevelopmentExecutableDistribution
+          --stacktrace
+
+      - name: Create Web preview archive
+        shell: bash
+        run: |
+          archive="$GITHUB_WORKSPACE/folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-${GITHUB_SHA:0:7}.zip"
+          cd app/webApp/build/dist/${{ matrix.platform.target }}/developmentExecutable
+          zip -q -r "$archive" .
+
+      - name: Upload Web preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-web-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  headless-runtime:
+    name: Package Headless Runtime preview (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
+    needs: quality
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [no-pro]
+        web_ui: [none, js, wasm]
+        platform:
+          - os: ubuntu-24.04
+            label: linux-x64
+            tasks: :app:headlessRuntime:packageDistributionForCurrentOS :app:headlessRuntime:packageTarGz
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main/deb/*.deb
+              app/headlessRuntime/build/compose/binaries/main/rpm/*.rpm
+              app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            tasks: :app:headlessRuntime:packageDistributionForCurrentOS :app:headlessRuntime:packageTarGz
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main/deb/*.deb
+              app/headlessRuntime/build/compose/binaries/main/rpm/*.rpm
+              app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
+          - os: windows-2025
+            label: windows-x64
+            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main/msi/*.msi
+              app/headlessRuntime/build/compose/binaries/main/exe/*.exe
+          - os: windows-11-arm
+            label: windows-arm64
+            java_distribution: microsoft
+            tasks: :app:headlessRuntime:createDistributable
+            paths: app/headlessRuntime/build/compose/binaries/main/zip/*.zip
+          - os: macos-15-intel
+            label: macos-x64
+            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
+              app/headlessRuntime/build/compose/binaries/main/pkg/*.pkg
+          - os: macos-15
+            label: macos-arm64
+            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
+              app/headlessRuntime/build/compose/binaries/main/pkg/*.pkg
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes fakeroot rpm
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build runtime distribution
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
+          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
+          "-Pkotlin.daemon.jvmargs=-Xmx2g"
+          --stacktrace
+
+      - name: Package Windows ARM64 preview archive
+        if: matrix.platform.label == 'windows-arm64'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion
+          $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
+          $appImage = 'app/headlessRuntime/build/compose/binaries/main/app/FolderSpan-Runtime'
+          $outputDir = 'app/headlessRuntime/build/compose/binaries/main/zip'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-preview-windows-arm64.zip" -Force
+
+      - name: Upload Runtime preview packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 14
+
+  desktop:
+    name: Package Desktop preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    needs: quality
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [no-pro]
+        platform:
+          - os: ubuntu-24.04
+            label: linux-x64
+            tasks: :app:desktopApp:packageDistributionForCurrentOS :app:desktopApp:packageTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main/**/*.deb
+              app/desktopApp/build/compose/binaries/main/**/*.rpm
+              app/desktopApp/build/compose/binaries/main/**/*.tar.gz
+              app/desktopApp/build/compose/binaries/main/**/*.flatpak
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            tasks: :app:desktopApp:packageDistributionForCurrentOS :app:desktopApp:packageTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main/**/*.deb
+              app/desktopApp/build/compose/binaries/main/**/*.rpm
+              app/desktopApp/build/compose/binaries/main/**/*.tar.gz
+              app/desktopApp/build/compose/binaries/main/**/*.flatpak
+          - os: windows-2025
+            label: windows-x64
+            tasks: :app:desktopApp:packageDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main/**/*.msi
+              app/desktopApp/build/compose/binaries/main/**/*.exe
+          - os: windows-11-arm
+            label: windows-arm64
+            java_distribution: microsoft
+            tasks: :app:desktopApp:createDistributable
+            paths: app/desktopApp/build/compose/binaries/main/**/*.zip
+          - os: macos-15-intel
+            label: macos-x64
+            tasks: :app:desktopApp:packageDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main/**/*.dmg
+              app/desktopApp/build/compose/binaries/main/**/*.pkg
+          - os: macos-15
+            label: macos-arm64
+            tasks: :app:desktopApp:packageDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main/**/*.dmg
+              app/desktopApp/build/compose/binaries/main/**/*.pkg
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            appstream \
+            desktop-file-utils \
+            fakeroot \
+            flatpak \
+            flatpak-builder \
+            rpm
+
+      - name: Install Flatpak SDK
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          flatpak remote-add --user --if-not-exists \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub \
+            org.freedesktop.Platform//25.08 \
+            org.freedesktop.Sdk//25.08
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug native installers
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon ${{ matrix.platform.tasks }}
+          "-Dorg.gradle.jvmargs=-Xmx3g"
+          "-Pkotlin.daemon.jvmargs=-Xmx2g"
+          --stacktrace
+
+      - name: Build Flatpak preview bundle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion}"
+          release_date="$(date -u +%F)"
+          manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
+          metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
+          sed -i 's#/main-release/app/#/main/app/#' "$manifest"
+          sed -i -E \
+            's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
+            "$metainfo"
+
+          desktop-file-validate \
+            packaging/flatpak/com.folderspan.FolderSpan.desktop
+          appstreamcli validate --no-net "$metainfo"
+
+          flatpak_builder_dir="$RUNNER_TEMP/folderspan-flatpak-build"
+          flatpak_repo_dir="$RUNNER_TEMP/folderspan-flatpak-repo"
+          flatpak_output_dir="app/desktopApp/build/compose/binaries/main/flatpak"
+          mkdir -p "$flatpak_output_dir"
+
+          flatpak-builder --user --force-clean \
+            --repo="$flatpak_repo_dir" \
+            "$flatpak_builder_dir" \
+            "$manifest"
+
+          flatpak_arch="$(flatpak --default-arch)"
+          flatpak build-bundle \
+            --arch="$flatpak_arch" \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            "$flatpak_repo_dir" \
+            "$flatpak_output_dir/FolderSpan-${version}-preview-${flatpak_arch}.flatpak" \
+            com.folderspan.FolderSpan
+
+      - name: Package Windows ARM64 preview archive
+        if: matrix.platform.label == 'windows-arm64'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion
+          $appImage = 'app/desktopApp/build/compose/binaries/main/app/FolderSpan'
+          $outputDir = 'app/desktopApp/build/compose/binaries/main/zip'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-preview-windows-arm64.zip" -Force
+
+      - name: Upload Desktop preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-desktop-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 14

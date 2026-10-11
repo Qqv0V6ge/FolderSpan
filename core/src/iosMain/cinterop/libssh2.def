@@ -1,0 +1,4 @@
+headers = libssh2.h libssh2_sftp.h
+package = platform.libssh2
+linkerOpts = -lssh2
+noStringConversion = libssh2_sftp_write libssh2_knownhost_checkp

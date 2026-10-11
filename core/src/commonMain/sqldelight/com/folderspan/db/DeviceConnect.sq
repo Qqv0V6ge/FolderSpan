@@ -1,0 +1,111 @@
+-- 导入必要的数据类型
+import com.folderspan.data.main.device.DeviceConnectType;
+import com.folderspan.data.main.device.DeviceCategory;
+
+-- 创建设备连接表
+CREATE TABLE DeviceConnect (
+    id              TEXT                NOT NULL,                   -- 设备ID
+    connectionType  TEXT AS DeviceConnectType NOT NULL,            -- 连接类型
+    firstConnection INTEGER             NOT NULL,                   -- 首次连接时间戳
+    lastConnection  INTEGER             NOT NULL,                   -- 最后连接时间戳
+    category        TEXT AS DeviceCategory NOT NULL,               -- 设备类别
+    roleId          INTEGER             NOT NULL DEFAULT -1,        -- 角色ID，默认为-1
+    CONSTRAINT unique_id_category UNIQUE (id, category)            -- 唯一约束：设备ID和类别组合
+);
+
+-- 插入新的设备连接记录
+insert:
+INSERT INTO DeviceConnect (id, connectionType, firstConnection, lastConnection, category, roleId)
+VALUES (?, ?, strftime('%s', 'now'), strftime('%s', 'now'), ?, COALESCE(?, -1));
+
+insertWithTimes:
+INSERT OR REPLACE INTO DeviceConnect (id, connectionType, firstConnection, lastConnection, category, roleId)
+VALUES (?, ?, ?, ?, ?, COALESCE(?, -1));
+
+-- 插入或更新设备连接记录，保留首次连接时间
+upsert:
+INSERT OR REPLACE INTO DeviceConnect (id, connectionType, firstConnection, lastConnection, category, roleId)
+VALUES (
+    :id,
+    :connectionType,
+    COALESCE(
+        (
+            SELECT firstConnection
+            FROM DeviceConnect
+            WHERE id = :id AND category = :category
+        ),
+        strftime('%s', 'now')
+    ),
+    strftime('%s', 'now'),
+    :category,
+    COALESCE(:roleId, -1)
+);
+
+-- 根据设备ID和类别更新连接类型
+updateConnectionTypeByIdAndCategory:
+UPDATE DeviceConnect
+SET connectionType = ?
+WHERE id = ? AND category = ?;
+
+-- 查询所有设备连接记录
+queryAll:
+SELECT *
+FROM DeviceConnect;
+
+-- 根据设备ID查询设备连接记录，同时获取设备名称和类型
+queryById:
+SELECT
+    dc.*,
+    d.name AS deviceName,
+    d.type AS deviceType
+FROM DeviceConnect dc
+LEFT JOIN Device d ON dc.id = d.id
+WHERE dc.id = ? AND dc.category = ?;
+
+-- 根据设备ID和类别查询设备连接记录
+queryByIdAndCategory:
+SELECT * FROM DeviceConnect
+WHERE id = ? AND category = ?;
+
+-- 根据类别查询设备连接记录
+queryByCategory:
+SELECT *
+FROM DeviceConnect
+WHERE category = ?;
+
+-- 更新指定设备的最后连接时间为当前时间
+updateLastConnectionByCategoryAndId:
+UPDATE DeviceConnect
+SET lastConnection = strftime('%s', 'now')
+WHERE id = ? AND category = ?;
+
+-- 根据设备ID和类别更新连接类型和角色ID
+updateNameConnectTypeRoleIdByIdAndCategory:
+UPDATE DeviceConnect
+SET
+    connectionType = ?,
+    roleId = COALESCE(?, -1)
+WHERE id = ? AND category = ?;
+
+-- 根据设备ID删除设备连接记录
+deleteById:
+DELETE FROM DeviceConnect
+WHERE id = ?;
+
+-- 根据设备ID和类别查询角色ID
+queryRoleIdByIdAndCategory:
+SELECT roleId
+FROM DeviceConnect
+WHERE id = ? AND category = ?;
+
+-- 根据设备名称模糊匹配和类别查询设备连接记录，同时获取角色名称和设备信息
+queryByNameLikeAndCategory:
+SELECT
+    dc.*,
+    dr.name AS roleName,
+    d.name AS deviceName,
+    d.type AS deviceType
+FROM DeviceConnect dc
+LEFT JOIN DeviceRole dr ON dc.roleId = dr.id
+LEFT JOIN Device d ON dc.id = d.id
+WHERE d.name LIKE ? AND dc.category = ?;

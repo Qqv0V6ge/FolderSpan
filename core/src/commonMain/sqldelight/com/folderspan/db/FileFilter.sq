@@ -1,0 +1,106 @@
+import com.folderspan.data.file.FileFilterType;
+import kotlin.String;
+import kotlin.collections.List;
+
+CREATE TABLE FileFilter
+(
+    id         INTEGER NOT NULL CONSTRAINT File_Filter_PK_2 PRIMARY KEY AUTOINCREMENT CONSTRAINT File_Filter_PK UNIQUE,
+    name       TEXT                       NOT NULL,
+    type       TEXT    AS FileFilterType  NOT NULL,
+    extensions TEXT    AS List<String>    NOT NULL,
+    icon       TEXT,
+    sort       INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX file_filter_id_uindex ON FileFilter (id);
+
+-- Built-in `name` values are language-neutral type keys. UI localizes by `type`.
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (1, "Image", "Image", ".jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.avif", 24);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (2, "Audio", "Audio", ".mp3,.aac,.m4a,.flac,.wav,.ogg,.opus,.wma,.ape,.aiff", 23);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (3, "Video", "Video", ".mp4,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4v,.ts,.m2ts", 22);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (4, "Text", "Text", ".txt,.md,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.odt", 21);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (5, "Executable", "Executable", ".exe,.msi,.bat,.cmd,.sh,.apk,.ipa,.appimage,.deb,.rpm", 20);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (6, "Compressed", "Compressed", ".zip,.rar,.7z,.tar,.gz,.bz2,.xz,.tgz,.cab", 19);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (7, "ImageRaw", "ImageRaw", ".raw,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2,.raf,.pef", 18);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (8, "ImageVector", "ImageVector", ".svg,.ai,.eps,.cdr,.wmf,.emf", 17);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (9, "Game", "Game", ".nes,.sfc,.gba,.gb,.gbc,.nds,.cia,.nsp,.xci,.rom", 16);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (10, "Image3D", "Image3D", ".obj,.fbx,.stl,.glb,.gltf,.blend,.dae,.3ds,.ply,.usd", 15);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (11, "Web", "Web", ".html,.htm,.css,.js,.mjs,.ts,.tsx,.jsx,.vue,.svelte", 14);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (12, "PageLayout", "PageLayout", ".pdf,.epub,.mobi,.azw3,.indd,.idml,.pub,.xps", 13);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (13, "CAD", "CAD", ".dwg,.dxf,.step,.stp,.igs,.iges,.skp,.rvt", 12);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (14, "Database", "Database", ".db,.sqlite,.sqlite3,.mdb,.accdb,.db3,.dbf,.sql", 11);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (15, "Plugin", "Plugin", ".jar,.vsix,.xpi,.crx,.asar,.bundle,.plugin", 10);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (16, "Font", "Font", ".ttf,.otf,.ttc,.woff,.woff2,.eot,.fon", 9);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (17, "System", "System", ".dll,.sys,.drv,.so,.dylib,.ko,.efi,.cpl", 8);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (18, "Settings", "Settings", ".ini,.cfg,.conf,.toml,.yaml,.yml,.properties,.plist,.reg", 7);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (19, "Encoded", "Encoded", ".enc,.gpg,.pgp,.asc,.p12,.pfx,.pem,.cer,.crt,.key", 6);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (20, "GIS", "GIS", ".gpx,.geojson,.kml,.kmz,.shp,.gml", 5);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (21, "Disk", "Disk", ".iso,.img,.dmg,.vhd,.vhdx,.vmdk,.qcow2,.toast", 4);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (22, "Developer", "Developer", ".kt,.kts,.java,.py,.go,.rs,.c,.cpp,.h,.hpp,.cs,.swift,.dart,.php,.rb,.xml,.gradle", 3);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (23, "Backup", "Backup", ".bak,.backup,.bk,.bkp,.old,.wbk,.bkf,.tib,.orig", 2);
+
+INSERT INTO FileFilter (id, name, type, extensions, sort)
+VALUES (24, "Misc", "Misc", ".log,.tmp,.dat,.part,.crdownload,.download,.torrent,.lock,.nfo,.sfv", 1);
+
+insert:
+INSERT INTO FileFilter (name, type, extensions, icon, sort)
+VALUES (?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM FileFilter WHERE id = ?;
+
+updateExtensionsById:
+UPDATE FileFilter
+SET extensions = ?
+WHERE id = ?;
+
+queryById:
+SELECT * FROM FileFilter WHERE id = ?;
+
+queryAllByLimit:
+SELECT * FROM FileFilter ORDER BY sort DESC LIMIT :start, :end;

@@ -1,0 +1,49 @@
+import com.folderspan.data.file.FileProtocol;
+import kotlin.Boolean;
+
+CREATE TABLE FileRecent
+(
+    id                  INTEGER                         NOT NULL CONSTRAINT FileRecent_pk PRIMARY KEY AUTOINCREMENT CONSTRAINT FileRecent_pk_2 UNIQUE,
+    name                TEXT                            NOT NULL,
+    isDirectory         INTEGER     AS Boolean          NOT NULL,
+    path                TEXT                            NOT NULL,
+    mineType            TEXT                            NOT NULL,
+    size                INTEGER                         NOT NULL,
+    createdDate         INTEGER                         NOT NULL,
+    updatedDate         INTEGER                         NOT NULL,
+    protocol            TEXT        AS FileProtocol     NOT NULL,
+    protocolId          TEXT                            NOT NULL,
+    lastAccessed        INTEGER                         NOT NULL
+);
+
+CREATE UNIQUE INDEX FileRecent_id_uindex
+    ON FileRecent (id);
+
+CREATE UNIQUE INDEX FileRecent_path_protocol_protocolId_uindex
+    ON FileRecent (path, protocol, protocolId);
+
+upsert:
+INSERT OR REPLACE INTO FileRecent (name, isDirectory, path, mineType, size, createdDate, updatedDate, protocol, protocolId, lastAccessed)
+VALUES (:name, :isDirectory, :path, :mineType, :size, :createdDate, :updatedDate, :protocol, :protocolId, :lastAccessed);
+
+selectLatest:
+SELECT *
+FROM FileRecent
+ORDER BY lastAccessed DESC, id DESC
+LIMIT 1;
+
+selectAll:
+SELECT *
+FROM FileRecent
+ORDER BY lastAccessed DESC, id DESC;
+
+deleteExtras:
+DELETE FROM FileRecent
+WHERE id NOT IN (SELECT id FROM FileRecent ORDER BY lastAccessed DESC, id DESC LIMIT 300);
+
+deleteByIds:
+DELETE FROM FileRecent
+WHERE id IN :ids;
+
+deleteAll:
+DELETE FROM FileRecent;

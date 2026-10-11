@@ -1,0 +1,50 @@
+CREATE TABLE NetworkDrive (
+    id              INTEGER NOT NULL CONSTRAINT NetworkDrive_pk PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL,
+    protocol        TEXT    NOT NULL,
+    host            TEXT    NOT NULL,
+    username        TEXT    NOT NULL,
+    password        TEXT    NOT NULL,
+    pathSeparator   TEXT    NOT NULL,
+    pinned          INTEGER NOT NULL DEFAULT 0,
+    extras          BLOB    NOT NULL
+);
+
+insert:
+INSERT INTO NetworkDrive (
+    name,
+    protocol,
+    host,
+    username,
+    password,
+    pathSeparator,
+    pinned,
+    extras
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAll:
+SELECT *
+FROM NetworkDrive;
+
+deleteById:
+DELETE FROM NetworkDrive
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM NetworkDrive;
+
+updateById:
+UPDATE NetworkDrive
+SET name = ?,
+    protocol = ?,
+    host = ?,
+    username = ?,
+    password = ?,
+    pathSeparator = ?,
+    pinned = ?,
+    extras = ?
+WHERE id = ?;
+
+lastInsertRowId:
+SELECT last_insert_rowid();

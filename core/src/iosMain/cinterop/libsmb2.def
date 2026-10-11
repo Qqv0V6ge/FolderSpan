@@ -1,0 +1,3 @@
+headers = smb2_wrapper.h
+package = platform.smb2
+linkerOpts = -lsmb2

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FolderSpan
+Comment=Cross-platform file manager and file sharing tool
+Exec=folderspan
+Icon=com.folderspan.FolderSpan
+Terminal=false
+Categories=System;FileTools;FileManager;
+StartupWMClass=FolderSpan

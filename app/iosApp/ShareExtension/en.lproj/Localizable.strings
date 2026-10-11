@@ -1,0 +1,15 @@
+"share_importing_title" = "Importing items";
+"share_reading_items" = "Reading the selected items";
+"share_done" = "Done";
+"share_app_icon" = "FolderSpan app icon";
+"share_no_items" = "No items were found to import";
+"share_reading_count" = "Reading %d items";
+"share_group_unavailable" = "Shared storage is unavailable. Check the App Group configuration.";
+"share_staging_failed" = "Failed to stage the items";
+"share_received_count" = "Received %d items";
+"share_partial_failure" = "%d other items could not be read. The remaining items were saved safely.";
+"share_saved" = "The items were saved safely. Open FolderSpan to view them.";
+"share_finish_hint" = "Tap Done to return, then open FolderSpan.";
+"share_import_failed" = "Import failed";
+"share_read_failed" = "Unable to read the selected items";
+"share_retry_hint" = "Return, select the items again, and retry.";

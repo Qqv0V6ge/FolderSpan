@@ -1,0 +1,65 @@
+import com.folderspan.data.file.FileProtocol;
+import kotlin.Boolean;
+
+CREATE TABLE FileFavorite
+(
+    id                  INTEGER                         NOT NULL CONSTRAINT FileFavorite_pk PRIMARY KEY AUTOINCREMENT CONSTRAINT FileFavorite_pk_2 UNIQUE,
+    name                TEXT                            NOT NULL,
+    isDirectory         INTEGER     AS Boolean          NOT NULL,
+    isFixed             INTEGER     AS Boolean          NOT NULL,
+    path                TEXT                            NOT NULL,
+    mineType            TEXT                            NOT NULL,
+    size                INTEGER                         NOT NULL,
+    createdDate         INTEGER                         NOT NULL,
+    updatedDate         INTEGER                         NOT NULL,
+    protocol            TEXT        AS FileProtocol     NOT NULL,
+    protocolId          TEXT
+);
+
+CREATE UNIQUE INDEX FileFavorite_id_uindex
+    ON FileFavorite (id);
+
+insert:
+-- 向 FileFavorite 表中插入一条新记录
+INSERT INTO FileFavorite (name, isDirectory, isFixed, path, mineType, size, createdDate, updatedDate, protocol, protocolId)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+-- 根据 id 删除 FileFavorite 表中的记录
+DELETE FROM FileFavorite WHERE id = ?;
+
+updateIsFixedById:
+-- 根据 id 更新 FileFavorite 表中记录的 isFixed 字段
+UPDATE FileFavorite SET isFixed = ? WHERE id = ?;
+
+queryAllByLimit:
+-- 查询 FileFavorite 表中的所有记录，按照 isFixed 字段降序排列，name 字段升序排列，限制返回的记录条数为从 :start 到 :end
+SELECT * FROM  FileFavorite ORDER BY isFixed DESC, name LIMIT :start, :end;
+
+selectAll:
+SELECT *
+FROM FileFavorite
+ORDER BY isFixed DESC, name;
+
+deleteAll:
+DELETE FROM FileFavorite;
+
+deleteAllExceptProtocol:
+DELETE FROM FileFavorite
+WHERE protocol != :protocol;
+
+queryByPathProtocol:
+-- 根据路径和协议查询 FileFavorite 表中的记录 id
+SELECT id
+FROM FileFavorite
+WHERE path = :path
+  AND protocol = :protocol
+  AND ifnull(protocolId, '') = :protocolId;
+
+queryPathsInList:
+-- 批量查询指定路径列表中被收藏的路径
+SELECT path
+FROM FileFavorite
+WHERE protocol = :protocol
+  AND ifnull(protocolId, '') = :protocolId
+  AND path IN ?;

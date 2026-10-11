@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider 路径表白名单。不要声明 root-path，也不要把 filesDir 整棵树暴露出去。
+    打开/分享用户文件走外部存储与应用外部私有目录；cache-path 仅覆盖远程打开等缓存副本。
+    敏感路径仍由 SensitiveFileAccessPolicy 在 getUriForFile 前拒绝。
+-->
+<paths>
+    <external-path
+            name="external_storage_root"
+            path="."/>
+    <external-files-path
+            name="external_file_path"
+            path="."/>
+    <external-cache-path
+            name="external_cache_path"
+            path="."/>
+    <cache-path
+            name="cache-path"
+            path="."/>
+</paths>
