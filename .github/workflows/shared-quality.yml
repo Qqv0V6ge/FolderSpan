@@ -2,6 +2,10 @@ name: Test Shared Code
 
 on:
   workflow_call:
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN:
+        description: "读取主仓库和私有 proMain 子模块的令牌"
+        required: false
 
 permissions:
   contents: read
@@ -14,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [no-pro]
+        edition: [pro, no-pro]
         platform:
           - os: ubuntu-24.04
             label: linux
@@ -23,11 +27,14 @@ jobs:
           - os: macos-15
             label: macos
     env:
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -59,6 +66,9 @@ jobs:
         shell: bash
         run: |
           tasks=(:core:jvmTest :app:shared:jvmTest :app:desktopApp:test :app:headlessRuntime:compileKotlin :core:verifyNotificationRoutes)
+          if [[ "$ORG_GRADLE_PROJECT_includeProMain" == "true" ]]; then
+            tasks+=(:proMain:jvmTest)
+          fi
           gradle_command=(
             ./gradlew --no-daemon --max-workers=2
             "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
@@ -83,6 +93,9 @@ jobs:
         shell: pwsh
         run: |
           $gradleTasks = @(':core:jvmTest', ':app:shared:jvmTest', ':app:desktopApp:test', ':app:headlessRuntime:compileKotlin', ':core:verifyNotificationRoutes')
+          if ($env:ORG_GRADLE_PROJECT_includeProMain -eq 'true') {
+            $gradleTasks += ':proMain:jvmTest'
+          }
           & .\gradlew.bat --no-daemon --max-workers=2 `
             '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' `
             '-Pkotlin.daemon.jvmargs=-Xmx2g' `
@@ -101,6 +114,8 @@ jobs:
             app/shared/build/test-results/jvmTest/
             app/desktopApp/build/reports/tests/test/
             app/desktopApp/build/test-results/test/
+            proMain/build/reports/tests/jvmTest/
+            proMain/build/test-results/jvmTest/
           if-no-files-found: warn
           retention-days: 14
 

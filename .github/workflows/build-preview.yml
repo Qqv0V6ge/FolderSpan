@@ -24,6 +24,8 @@ env:
 jobs:
   quality:
     uses: ./.github/workflows/shared-quality.yml
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
 
   android:
     name: Package Android preview (${{ matrix.edition }})
@@ -33,12 +35,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [no-pro]
+        edition: [pro, no-pro]
     env:
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -68,17 +73,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [no-pro]
+        edition: [pro, no-pro]
         platform:
           - label: js
             target: js
           - label: wasm
             target: wasmJs
     env:
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -119,7 +127,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [no-pro]
+        edition: [pro, no-pro]
         web_ui: [none, js, wasm]
         platform:
           - os: ubuntu-24.04
@@ -160,13 +168,16 @@ jobs:
               app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
               app/headlessRuntime/build/compose/binaries/main/pkg/*.pkg
     env:
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
       ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -220,7 +231,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [no-pro]
+        edition: [pro, no-pro]
         platform:
           - os: ubuntu-24.04
             label: linux-x64
@@ -262,10 +273,13 @@ jobs:
               app/desktopApp/build/compose/binaries/main/**/*.dmg
               app/desktopApp/build/compose/binaries/main/**/*.pkg
     env:
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
