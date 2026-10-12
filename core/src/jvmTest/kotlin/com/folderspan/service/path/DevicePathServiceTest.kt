@@ -31,6 +31,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.absolutePathString
 import kotlin.test.Test
@@ -148,7 +149,7 @@ class DevicePathServiceTest {
                 val escapedListing = service.list(token, ListRequest(path))
                 assertIs<AuthorityException>(escapedListing.exceptionOrNull(), "必须拒绝链接路径：$path")
             }
-            assertEquals(listOf(shared.absolutePathString()), listedPaths)
+            assertEquals(listOf(shared), listedPaths.map { Path.of(it).toRealPath() })
         } finally {
             Files.deleteIfExists(link)
             parent.toFile().deleteRecursively()
