@@ -35,6 +35,7 @@ import com.folderspan.utils.FileUtils
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.PrivateFileStorage
+import com.folderspan.utils.isPathInsideRootLexically
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -111,8 +112,9 @@ internal suspend fun copyLocalRangeToContinuousDevice(
     }
     return try {
         val hostClient = targetClient as? HostDeviceFileClient
-        val privateRoot = PrivateFileStorage.getAppPath().trimEnd('/')
-        val privateLocalPath = localPath == privateRoot || localPath.startsWith("$privateRoot/")
+        val privateLocalPath = isPathInsideRootLexically(
+            PrivateFileStorage.getAppPath(), localPath, PrivateFileStorage.getPathSeparator(),
+        )
         val hostDirect = hostClient?.hostTransfersAvailable == true && !privateLocalPath
         var segmentStart = startOffset
         while (segmentStart < endOffset) {

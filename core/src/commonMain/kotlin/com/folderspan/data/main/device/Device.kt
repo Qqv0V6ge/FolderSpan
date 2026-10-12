@@ -1,6 +1,7 @@
 package com.folderspan.data.main.device
 
 import com.folderspan.utils.FileAccessPermission
+import com.folderspan.utils.isPathInsideRootLexically
 import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
@@ -546,8 +547,9 @@ data class Device(
                 }
                 val hostClient = (if (sourceDevice != null && targetDevice == null) sourceClient else if (sourceDevice == null) targetClient else null) as? HostDeviceFileClient
                 val localPath = if (sourceDevice != null) targetPath else sourcePath
-                val privateRoot = PrivateFileStorage.getAppPath().trimEnd('/')
-                if (hostClient?.hostTransfersAvailable == true && localPath != privateRoot && !localPath.startsWith("$privateRoot/")) {
+                if (hostClient?.hostTransfersAvailable == true && !isPathInsideRootLexically(
+                    PrivateFileStorage.getAppPath(), localPath, PrivateFileStorage.getPathSeparator(),
+                )) {
                     val receiving = sourceDevice != null
                     val open = DeviceSessionStreamOpen(
                         kind = if (receiving) DEVICE_SESSION_STREAM_READ else DEVICE_SESSION_STREAM_WRITE,

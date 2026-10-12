@@ -22,6 +22,7 @@ import com.folderspan.ui.state.main.TempSyncTaskStore
 import com.folderspan.utils.installAppLogging
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext
@@ -31,6 +32,9 @@ import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.prefs.AbstractPreferences
+import java.util.prefs.Preferences
+import java.util.prefs.PreferencesFactory
 import kotlin.system.exitProcess
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,6 +54,7 @@ class RuntimeLifecycleJvmTest {
             val args = listOf(
                 "-Xmx512m", "-Djava.awt.headless=true", "-Duser.home=$directory/home",
                 "-Djava.util.prefs.userRoot=$directory/prefs", "-Djava.util.prefs.systemRoot=$directory/system-prefs",
+                "-Djava.util.prefs.PreferencesFactory=${RuntimeLifecyclePreferencesFactory::class.java.name}",
                 "-Djava.io.tmpdir=$directory/tmp", "-cp", classpath,
                 RuntimeLifecycleProbe::class.java.name, mode,
             )
@@ -58,6 +63,7 @@ class RuntimeLifecycleJvmTest {
                 "\"" + arg.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
             })
             return ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "@$argsFile")
+                .apply { environment()["APPDATA"] = directory.resolve("home").toString() }
                 .directory(directory.toFile()).redirectErrorStream(true)
                 .redirectOutput(directory.resolve("$name.log").toFile()).start().also(processes::add)
         }
@@ -79,6 +85,7 @@ class RuntimeLifecycleJvmTest {
                     assertEquals(0, seeded.exitValue(), "Seed failed; logs: $directory")
                     Files.deleteIfExists(directory.resolve("ready"))
                     Files.deleteIfExists(directory.resolve("stopped"))
+                    Files.deleteIfExists(directory.resolve("stop-request"))
                     Files.deleteIfExists(directory.resolve("target/payload.txt"))
                     val runtime = start("run", "runtime-$round")
                     awaitFile(directory.resolve("ready"), runtime)
@@ -89,6 +96,9 @@ class RuntimeLifecycleJvmTest {
                     assertEquals(23, duplicate.exitValue())
                     if (round == 0 && !System.getProperty("os.name").startsWith("Windows")) {
                         assertEquals(0, ProcessBuilder("kill", "-INT", runtime.pid().toString()).start().waitFor())
+                    } else if (System.getProperty("os.name").startsWith("Windows")) {
+                        // Windows Process.destroy() terminates the JVM without running shutdown hooks.
+                        Files.writeString(directory.resolve("stop-request"), "stop")
                     } else runtime.destroy()
                     assertTrue(runtime.waitFor(20, TimeUnit.SECONDS), "Runtime did not stop; logs: $directory")
                     assertTrue(Files.exists(directory.resolve("stopped")))
@@ -110,6 +120,27 @@ class RuntimeLifecycleJvmTest {
             }
         }
     }
+}
+
+/** Preferences root properties do not isolate the Windows registry-backed JDK provider. */
+class RuntimeLifecyclePreferencesFactory : PreferencesFactory {
+    private val user = RuntimeLifecyclePreferences(null, "")
+    private val system = RuntimeLifecyclePreferences(null, "")
+    override fun userRoot(): Preferences = user
+    override fun systemRoot(): Preferences = system
+}
+
+private class RuntimeLifecyclePreferences(parent: AbstractPreferences?, name: String) : AbstractPreferences(parent, name) {
+    private val values = mutableMapOf<String, String>()
+    override fun putSpi(key: String, value: String) { values[key] = value }
+    override fun getSpi(key: String): String? = values[key]
+    override fun removeSpi(key: String) { values.remove(key) }
+    override fun removeNodeSpi() { values.clear() }
+    override fun keysSpi(): Array<String> = values.keys.toTypedArray()
+    override fun childrenNamesSpi(): Array<String> = emptyArray()
+    override fun childSpi(name: String): AbstractPreferences = RuntimeLifecyclePreferences(this, name)
+    override fun syncSpi() = Unit
+    override fun flushSpi() = Unit
 }
 
 /** Child JVM uses production DI/lifecycle and isolated working directory, home and preferences. */
@@ -165,6 +196,12 @@ object RuntimeLifecycleProbe {
                 }
                 val hook = installRuntimeShutdownHook(job, lock)
                 try {
+                    if (System.getProperty("os.name").startsWith("Windows")) {
+                        launch(Dispatchers.IO) {
+                            while (!Files.exists(root.resolve("stop-request"))) delay(50)
+                            exitProcess(0)
+                        }
+                    }
                     job.start()
                     job.join()
                 } finally {

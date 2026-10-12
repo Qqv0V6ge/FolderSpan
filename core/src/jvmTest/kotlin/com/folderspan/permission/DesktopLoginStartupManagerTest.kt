@@ -27,7 +27,7 @@ class DesktopLoginStartupManagerTest {
         )
 
         assertNotNull(resolved)
-        assertEquals(Paths.get("/opt/com.folderspan/bin/FolderSpan"), resolved)
+        assertEquals(Paths.get("/opt/com.folderspan/bin/FolderSpan").toAbsolutePath().normalize(), resolved)
     }
 
     @Test
@@ -105,8 +105,9 @@ class DesktopLoginStartupManagerTest {
                 .resolve("autostart")
                 .resolve("${DesktopLoginStartupManager.APP_ID}.desktop")
             val content = Files.readString(entryPath)
-            assertTrue(content.contains("Exec=\"/opt/com.folderspan/bin/FolderSpan\""))
-            assertEquals("\"/opt/com.folderspan/bin/FolderSpan\"", backend.desktopEntryValue(content, "Exec"))
+            val expectedExec = "\"" + executable.toString().replace("\\", "\\\\") + "\""
+            assertTrue(content.contains("Exec=$expectedExec"))
+            assertEquals(expectedExec, backend.desktopEntryValue(content, "Exec"))
             assertFalse(backend.isDisabled(content))
             assertEquals(PermissionStatus.Granted, backend.status(executable))
 

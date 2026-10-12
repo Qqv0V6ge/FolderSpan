@@ -26,7 +26,7 @@ import kotlin.test.assertFailsWith
 
 class TaskCleanupTest {
     private fun fixture(block: suspend (Path, TaskState, TempTaskCleanupStore, Task) -> Unit) = runBlocking {
-        val root = Files.createTempDirectory("folderspan-cleanup-test")
+        val root = Files.createTempDirectory("folderspan-cleanup-test").toRealPath()
         try {
             val store = TempTaskCleanupStore(root.resolve("journal").toString())
             val task = Task(TaskType.Copy, 71001L, StatusEnum.FAILURE)
@@ -161,6 +161,28 @@ class TaskCleanupTest {
         assertEquals("keep", Files.readString(directory.resolve("complete.txt")))
     }
 
+    @Test fun directoryWithTrailingDotUsesTheSameIdentityForCreationAndCleanup() = fixture { root, state, _, task ->
+        val directory = root.resolve("directory.")
+        state.withTaskArtifact(task, "directory", TaskRuntimeEndpointRef(path = directory.toString()),
+            TaskArtifactPurpose.STRUCTURE_DIRECTORY) { Result.success(true) }
+        assertTrue(Files.isDirectory(directory))
+        assertTrue(state.deleteTerminalTask(task.key).succeeded)
+        assertFalse(Files.exists(directory))
+    }
+
+    @Test fun longDirectoryWithTrailingDotUsesTheSameIdentityForCreationAndCleanup() = fixture { root, state, _, task ->
+        var parent = root
+        while (parent.toString().length < 260) {
+            parent = Files.createDirectory(parent.resolve("nested-long-path"))
+        }
+        val directory = parent.resolve("directory.")
+        state.withTaskArtifact(task, "long-directory", TaskRuntimeEndpointRef(path = directory.toString()),
+            TaskArtifactPurpose.STRUCTURE_DIRECTORY) { Result.success(true) }
+        assertTrue(Files.isDirectory(directory))
+        assertTrue(state.deleteTerminalTask(task.key).succeeded)
+        assertFalse(Files.exists(directory))
+    }
+
     @Test fun completedChildMakesItsStructureDirectoryAProtectedResult() = fixture { root, state, _, task ->
         val directory = root.resolve("structure")
         state.withTaskArtifact(task, "structure", TaskRuntimeEndpointRef(path = directory.toString()),
@@ -244,19 +266,24 @@ class TaskCleanupTest {
                 }
             } finally { withContext(NonCancellable) { finish.await() } }
         }
-        entered.await()
-        state.requestCancel(active)
-        val deletion = CoroutineScope(currentCoroutineContext()).async { state.deleteTaskRecordOnly(active.key) }
-        // Direct deletion also requires a terminal record; the actual UI offers it after failure.
-        state.updateStatus(active, StatusEnum.FAILURE)
-        delay(30)
-        assertFalse(deletion.isCompleted)
-        finish.complete(Unit)
-        assertTrue(deletion.await())
-        state.saveRuntimeTransferCheckpoint(TaskRuntimeTransferCheckpoint(taskKey = active.key, entryId = "late",
-            destPath = "/late", fileSize = 100, chunkSize = 10, createdAt = 1))
-        assertTrue(runtime.transferCheckpoints.isEmpty())
-        assertNull(store.load(active.key))
+        try {
+            withTimeout(5_000) { entered.await() }
+            state.requestCancel(active)
+            val deletion = CoroutineScope(currentCoroutineContext()).async { state.deleteTaskRecordOnly(active.key) }
+            // Direct deletion also requires a terminal record; the actual UI offers it after failure.
+            state.updateStatus(active, StatusEnum.FAILURE)
+            delay(30)
+            assertFalse(deletion.isCompleted)
+            finish.complete(Unit)
+            assertTrue(withTimeout(5_000) { deletion.await() })
+            state.saveRuntimeTransferCheckpoint(TaskRuntimeTransferCheckpoint(taskKey = active.key, entryId = "late",
+                destPath = "/late", fileSize = 100, chunkSize = 10, createdAt = 1))
+            assertTrue(runtime.transferCheckpoints.isEmpty())
+            assertNull(store.load(active.key))
+        } finally {
+            finish.complete(Unit)
+            state.requestCancel(active)
+        }
     }
 
     @Test fun journalWriteFailurePreventsCreatingAnyOutput() = fixture { root, _, _, task ->

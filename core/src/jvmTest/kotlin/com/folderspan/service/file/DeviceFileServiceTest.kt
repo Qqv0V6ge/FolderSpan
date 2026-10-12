@@ -176,7 +176,7 @@ class DeviceFileServiceTest {
             },
             folderCreateRuntimeMaxParallelismProvider = { 3 },
             createFolder = { path ->
-                attempted += path.substringAfterLast("/")
+                attempted += Path.of(path).fileName.toString()
                 if (path.endsWith("bad")) {
                     Result.failure(IllegalStateException("cannot create bad"))
                 } else {

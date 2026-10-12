@@ -1,7 +1,5 @@
 package com.folderspan.security
 
-import strings.AppStrings
-
 import com.folderspan.test.ChineseLocalizationTest
 import java.nio.file.Files
 import java.nio.file.Path
@@ -85,7 +83,7 @@ class AndroidViewIntentSecurityTest : ChineseLocalizationTest() {
         )
         val shareListPath = shareHandler
             .substringAfter("fun handleSharedFilesForShare(")
-            .substringBefore(AppStrings.ui_test_android_view_intent_security_process_drag_and_drop_import_across)
+            .substringBefore("fun handleDroppedFiles(")
         assertTrue("getFileInfoFromUri(activity.contentResolver, uri)" in shareListPath)
         assertTrue("publishIncomingShareDesk(fileState, uniqueUris, sharedFiles)" in shareListPath)
         assertFalse("openInputStream" in shareListPath)

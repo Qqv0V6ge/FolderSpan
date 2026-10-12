@@ -14,6 +14,14 @@ import kotlin.test.assertTrue
 
 class FileAccessPermissionJvmTest {
     @Test
+    fun invalidNativeMetadataPathReturnsFailureWithoutThrowing(): Unit = runBlocking {
+        val invalidPath = "invalid\u0000path"
+
+        assertTrue(FileUtils.getFile(FileAccessPermission.Allowed, invalidPath).isFailure)
+        assertIs<AuthorityException>(FileUtils.getFile(FileAccessPermission.Denied, invalidPath).exceptionOrNull())
+    }
+
+    @Test
     fun allowedAccessPreservesReadWriteAndListingBehavior() = runBlocking {
         val root = Files.createTempDirectory("file-access-allowed")
         val target = root.resolve("allowed.bin")

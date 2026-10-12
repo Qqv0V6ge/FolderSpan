@@ -3,6 +3,12 @@ package com.folderspan.ui.state.main
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.NativePathUtils
 import com.folderspan.utils.nativeSensitivePathDeniedException
+import com.sun.jna.Function
+import com.sun.jna.Memory
+import com.sun.jna.NativeLibrary
+import com.sun.jna.Platform
+import com.sun.jna.Pointer
+import com.sun.jna.WString
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Paths
@@ -43,7 +49,7 @@ internal actual object LocalTaskArtifacts {
             Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
         } catch (_: java.nio.file.NoSuchFileException) { return null }
         check(attributes.isRegularFile || attributes.isDirectory) { "ownership_changed" }
-        val key = attributes.fileKey() ?: error("ownership_unverified")
+        val key = fileIdentity(target, attributes)
         val fingerprint = if (attributes.isDirectory) {
             val permissions = runCatching { Files.getPosixFilePermissions(target, LinkOption.NOFOLLOW_LINKS)
                 .map { it.name }.sorted().joinToString(",") }.getOrNull()
@@ -64,12 +70,13 @@ internal actual object LocalTaskArtifacts {
             attributes.lastModifiedTime().toString() + ":" + attributes.creationTime() + ":" +
                 changeTime + ":" + digest.digest().joinToString("") { "%02x".format(it) }
         }
-        return LocalTaskArtifactIdentity(key.toString(), fingerprint)
+        return LocalTaskArtifactIdentity(key, fingerprint)
     }
 
     actual fun deliver(path: String, finalPath: String, identity: String) {
-        val attributes = Files.readAttributes(guarded(path), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
-        check(attributes.isRegularFile && attributes.fileKey()?.toString() == identity) { "ownership_changed" }
+        val target = guarded(path)
+        val attributes = Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        check(attributes.isRegularFile && fileIdentity(target, attributes) == identity) { "ownership_changed" }
         // Preserve existing conflict behavior for a pre-existing destination, without ever claiming it.
         Files.move(guarded(path), guarded(finalPath), StandardCopyOption.REPLACE_EXISTING)
     }
@@ -79,6 +86,60 @@ internal actual object LocalTaskArtifacts {
         check(current.identity == identity && current.fingerprint == fingerprint) { "ownership_changed" }
         // Files.delete is non-recursive and rejects a non-empty directory.
         Files.delete(guarded(path, cacheArtifact))
+    }
+
+    private fun fileIdentity(path: java.nio.file.Path, attributes: BasicFileAttributes): String =
+        attributes.fileKey()?.toString() ?: if (Platform.isWindows()) {
+            WindowsTaskArtifactIdentity.read(path)
+        } else error("ownership_unverified")
+}
+
+private object WindowsTaskArtifactIdentity {
+    private val kernel32 by lazy { NativeLibrary.getInstance("kernel32") }
+
+    fun read(path: java.nio.file.Path): String {
+        // JDK's Windows provider can omit fileKey. FILE_ID_INFO combines the volume
+        // serial number and a 128-bit file ID, including on ReFS:
+        // https://learn.microsoft.com/windows/win32/api/winbase/ns-winbase-file_id_info
+        // Match JDK 17 WindowsPath's normalization before adding a long-path prefix.
+        val pathText = path.toString().let { original ->
+            if (original.length <= 247 || original.startsWith("\\\\?\\")) original else {
+                Memory(32768L * 2).use { buffer ->
+                    val length = kernel32.getFunction("GetFullPathNameW", Function.ALT_CONVENTION)
+                        .invokeInt(arrayOf(WString(original), 32768, buffer, null))
+                    check(length in 1 until 32768) { "ownership_unverified" }
+                    buffer.getWideString(0)
+                }
+            }
+        }
+        val nativePath = pathText.let {
+            when {
+                // Match JDK 17 WindowsPath: adding \\?\ to a short path would
+                // change trailing-dot normalization relative to Java's file IO.
+                it.length <= 247 -> it
+                it.startsWith("\\\\?\\") -> it
+                it.startsWith("\\\\") -> "\\\\?\\UNC\\" + it.drop(2)
+                else -> "\\\\?\\$it"
+            }
+        }
+        val handle = kernel32.getFunction("CreateFileW", Function.ALT_CONVENTION).invokePointer(
+            arrayOf(WString(nativePath), 0x80, 0x7, null, 3, 0x02200000, null),
+        )
+        check(handle != null && Pointer.nativeValue(handle) != -1L) { "ownership_unverified" }
+        try {
+            // OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS and FILE_FLAG_OPEN_REPARSE_POINT
+            // open files/directories without following a leaf reparse point.
+            return Memory(24).use { info ->
+                check(kernel32.getFunction("GetFileInformationByHandleEx", Function.ALT_CONVENTION)
+                    .invokeInt(arrayOf(handle, 18, info, 24)) != 0) { "ownership_unverified" }
+                val fileId = info.getByteArray(8, 16)
+                check(fileId.any { it != 0.toByte() }) { "ownership_unverified" }
+                "windows:${java.lang.Long.toUnsignedString(info.getLong(0), 16)}:" +
+                    fileId.joinToString("") { "%02x".format(it) }
+            }
+        } finally {
+            kernel32.getFunction("CloseHandle", Function.ALT_CONVENTION).invokeInt(arrayOf(handle))
+        }
     }
 }
 
