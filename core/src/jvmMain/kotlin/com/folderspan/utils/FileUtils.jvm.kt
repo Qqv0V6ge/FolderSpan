@@ -82,11 +82,16 @@ internal actual object NativeFileUtils {
 
     actual fun getFile(permission: FileAccessPermission, path: String): Result<FileSimpleInfo> {
         if (!hasFileAccess(permission)) return deniedFileAccessResult()
-        val file = File(path)
-        if (file.exists() || file.isSymbolicLinkNoFollow()) {
-            return File(path).toFileSimpleInfo()
+        return try {
+            val file = File(path)
+            if (file.exists() || file.isSymbolicLinkNoFollow()) {
+                file.toFileSimpleInfo()
+            } else {
+                Result.failure(Exception(AppStrings.ui_not_found_file))
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
         }
-        return Result.failure(Exception(AppStrings.ui_not_found_file))
     }
 
     actual fun getFile(

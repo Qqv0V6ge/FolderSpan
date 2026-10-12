@@ -85,16 +85,13 @@ class DeviceShareConnectionGrantTest {
 
     @Test
     fun sharePathsUseSingleVirtualRootAndRejectPhysicalOrTraversalPaths() {
-        val scope = DeviceShareConnectionGrant(
-            deviceId = "device-1",
-            tlsFingerprintSha256 = "AA:BB:CC",
-            nonce = "nonce-1",
-            expiresAtMillis = 2_000L,
-            allowedPaths = listOf(
+        val scope = DeviceSharePathScope(
+            grants = listOf(
                 DeviceSharePathGrant("/private/report.txt", isDirectory = false),
                 DeviceSharePathGrant("/private/photos", isDirectory = true),
             ),
-        ).pathScope
+            pathSeparator = "/",
+        )
 
         assertEquals(listOf("/report.txt", "/photos"), scope.virtualRoots.map { root -> root.path })
         assertEquals("/private/report.txt", scope.resolveVirtualContentPath("/report.txt"))
@@ -116,6 +113,20 @@ class DeviceShareConnectionGrantTest {
         assertEquals(uri, scope.resolveVirtualContentPath("/42"))
         assertEquals(null, scope.resolveVirtualContentPath("/42/child"))
         assertTrue(scope.allowsContentPath(uri))
+    }
+
+    @Test
+    fun windowsPhysicalPathsKeepVirtualRootAndRejectTraversal() {
+        val scope = DeviceSharePathScope(
+            grants = listOf(DeviceSharePathGrant("C:\\private\\Photos", isDirectory = true)),
+            pathSeparator = "\\",
+        )
+
+        assertEquals(listOf("/Photos"), scope.virtualRoots.map { it.path })
+        assertEquals("c:\\private\\Photos\\2026\\photo.jpg", scope.resolveVirtualContentPath("/photos/2026/photo.jpg"))
+        assertEquals(null, scope.resolveVirtualContentPath("C:\\private\\Photos"))
+        assertEquals(null, scope.resolveVirtualContentPath("/Photos\\secret.txt"))
+        assertEquals(null, scope.resolveVirtualContentPath("/Photos/../secret.txt"))
     }
 
     @Test

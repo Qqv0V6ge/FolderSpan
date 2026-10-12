@@ -6,6 +6,7 @@ import com.folderspan.utils.ProtoBufCodec
 import com.folderspan.utils.PrivateFileStorage
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
+import com.folderspan.utils.isPathInsideRootLexically
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -109,9 +110,10 @@ internal class SmallFileArchiveTransferCoordinator(
             return result
         }
         val hostClient = (if (sourceClient != null && targetClient == null) sourceClient else if (sourceClient == null) targetClient else null) as? HostDeviceFileClient
-        val privateRoot = PrivateFileStorage.getAppPath().trimEnd('/')
         val localPaths = if (sourceClient == null) entries.map { it.sourcePath } else listOf(destinationRootPath)
-        if (hostClient?.hostTransfersAvailable == true && localPaths.none { it == privateRoot || it.startsWith("$privateRoot/") }) {
+        if (hostClient?.hostTransfersAvailable == true && localPaths.none {
+            isPathInsideRootLexically(PrivateFileStorage.getAppPath(), it, PrivateFileStorage.getPathSeparator())
+        }) {
             val read = FolderSpanArchiveReadRequest(entries, options)
             val write = FolderSpanArchiveWriteRequest(destinationRootPath, entries.size, entries.filterNot { it.directory }.sumOf { it.size })
             val receiving = sourceClient != null

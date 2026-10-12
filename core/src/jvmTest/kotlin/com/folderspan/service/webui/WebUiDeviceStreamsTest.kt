@@ -355,7 +355,7 @@ class WebUiDeviceStreamsTest {
     fun directShareRangeIsReadByHostAndRejectsSymbolicLinks(): Unit = runBlocking {
         withTimeout(10_000) {
             val session = WebUiPlatformSession("direct-sharing")
-            val root = Files.createTempDirectory("direct-share-range")
+            val root = Files.createTempDirectory("direct-share-range").toRealPath()
             try {
                 val content = ByteArray(1024 * 1024 + 59) { (it % 229).toByte() }
                 val source = Files.write(root.resolve("source.bin"), content)

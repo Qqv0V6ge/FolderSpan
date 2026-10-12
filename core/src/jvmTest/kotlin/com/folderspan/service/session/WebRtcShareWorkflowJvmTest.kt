@@ -82,7 +82,9 @@ class WebRtcShareWorkflowJvmTest {
                     })
                     processes += ProcessBuilder(
                         Path.of(System.getProperty("java.home"), "bin", "java").toString(), "@$argumentsFile",
-                    ).redirectErrorStream(true).redirectOutput(directory.resolve("$role.log").toFile()).start()
+                    ).apply {
+                        environment()["APPDATA"] = home.toString()
+                    }.redirectErrorStream(true).redirectOutput(directory.resolve("$role.log").toFile()).start()
                 }
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(100)
                 while (processes.any(Process::isAlive) && processes.none { !it.isAlive && it.exitValue() != 0 }) {
@@ -217,6 +219,7 @@ object WebRtcShareWorkflowEndpoint {
             publish(directory.resolve("$role.signal"), relay.port.toString())
             waitUntil { Files.exists(directory.resolve("$other.signal")) }
             val remote = Json.decodeFromString<SocketDevice>(Files.readString(directory.resolve("$other.device")))
+            assertNotEquals(self.id, remote.id, "Workflow children must have isolated device identities")
             relay.remotePort = Files.readString(directory.resolve("$other.signal")).toInt()
             withContext(Dispatchers.Main) {
                 deliver(controller, SignalingMessage(type = "joined", peers = listOf(remote.toSignalingDevice())))
