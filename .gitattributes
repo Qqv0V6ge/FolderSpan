@@ -1,0 +1,2 @@
+# 保持通知路由目录在所有平台使用 LF，以便逐字节验证生成结果。
+notification-routes.json text eol=lf
