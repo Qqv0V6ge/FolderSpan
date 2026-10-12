@@ -204,7 +204,7 @@ jobs:
 
   headless-runtime:
     name: Package Headless Runtime (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
-    needs: quality
+    needs: [quality, web]
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 120
     strategy:
@@ -278,6 +278,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Download selected production Web UI
+        if: matrix.web_ui != 'none'
+        uses: actions/download-artifact@v8
+        with:
+          name: release-web-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: runtime-web-ui
+
+      - name: Select Web UI archive for runtime packaging
+        if: matrix.web_ui != 'none'
+        shell: bash
+        run: |
+          archives=(runtime-web-ui/*.zip)
+          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
+            echo "::error::Expected exactly one production Web UI archive."
+            exit 1
+          fi
+          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
+
       - name: Build runtime distribution
         shell: bash
         run: >-
@@ -304,6 +322,17 @@ jobs:
           path: ${{ matrix.platform.paths }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload runtime packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: |
+            app/headlessRuntime/build/compose/logs/
+            app/headlessRuntime/build/compose/tmp/*.args.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   desktop:
     name: Package Desktop (${{ matrix.platform.label }}, ${{ matrix.edition }})

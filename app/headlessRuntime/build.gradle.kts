@@ -2,6 +2,7 @@ import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.tasks.bundling.Jar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -22,6 +23,8 @@ val runtimeWebTarget = when (runtimeWebUi) {
     else -> null
 }
 val runtimeWebUiDirectory = layout.buildDirectory.dir("generated/web-ui/$runtimeWebUi")
+// CI reuses the matching Web job's ZIP; local packaging can still build its own UI.
+val runtimeWebUiArchive = providers.gradleProperty("runtimeWebUiArchive").orNull?.let(rootProject::file)
 val runtimePackageVersion = providers.gradleProperty("releaseVersion")
     .map { item -> item.removePrefix("v") }
     .orElse("1.0.0")
@@ -49,6 +52,12 @@ val runtimeJavaHome = listOf(
     providers.gradleProperty("org.gradle.java.home").orNull,
     System.getProperty("java.home")
 ).firstNotNullOfOrNull(::resolveJdkHome)
+val runtimeJdkMajorVersion = runtimeJavaHome?.let { home ->
+    providers.fileContents(layout.file(providers.provider { File(home, "release") })).asText.map { release ->
+        Regex("""(?m)^JAVA_VERSION="(?:1\.)?(\d+)""").find(release)?.groupValues?.get(1)?.toInt()
+            ?: error("Cannot read the packaging JDK version from $home/release.")
+    }.get()
+}
 
 kotlin {
     compilerOptions {
@@ -74,10 +83,27 @@ val embedWebUi = tasks.register<Sync>("embedWebUiDistribution") {
     group = "distribution"
     description = "Embed the selected production Web UI into the headless runtime classpath."
     if (runtimeWebTarget != null) {
-        dependsOn(":app:webApp:${runtimeWebTarget}BrowserDistribution")
-        from(project(":app:webApp").layout.buildDirectory.dir("dist/$runtimeWebTarget/productionExecutable"))
+        if (runtimeWebUiArchive != null) {
+            from(zipTree(runtimeWebUiArchive))
+        } else {
+            dependsOn(":app:webApp:${runtimeWebTarget}BrowserDistribution")
+            from(project(":app:webApp").layout.buildDirectory.dir("dist/$runtimeWebTarget/productionExecutable"))
+        }
     }
     into(runtimeWebUiDirectory)
+}
+
+if (System.getProperty("os.name").lowercase().contains("mac") &&
+    runtimeJdkMajorVersion != null && runtimeJdkMajorVersion < 18) {
+    afterEvaluate {
+        // JDK 17's PKG bundler needs the actual .app, not its containing directory.
+        tasks.named<AbstractJPackageTask>("packagePkg") {
+            appImage.set(layout.buildDirectory.dir("compose/binaries/main/app/$runtimeAppName.app"))
+        }
+        tasks.named<AbstractJPackageTask>("packageReleasePkg") {
+            appImage.set(layout.buildDirectory.dir("compose/binaries/main-release/app/$runtimeAppName.app"))
+        }
+    }
 }
 
 // Embed production assets only when packaging; IDE hot runs also consume processResources.
