@@ -22,9 +22,19 @@ require(Regex("""\d+\.\d+\.\d+""").matches(desktopPackageVersion)) {
     "releaseVersion must use MAJOR.MINOR.PATCH format, but was '$desktopPackageVersion'."
 }
 
-val macLocalNetworkUsagePlist = """
+val macPermissionUsagePlist = """
     <key>NSLocalNetworkUsageDescription</key>
     <string>FolderSpan scans and connects to devices on your local network for file sharing.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>FolderSpan accesses your Desktop to manage files and folders at your request.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>FolderSpan accesses your Documents to manage files and folders at your request.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>FolderSpan accesses your Downloads to save received files and manage downloads.</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>FolderSpan accesses network volumes to browse and transfer files at your request.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>FolderSpan accesses removable drives to browse and transfer files at your request.</string>
 """.trimIndent()
 val desktopNoProxyJvmArgs = listOf(
     "-Djava.net.useSystemProxies=false",
@@ -129,7 +139,7 @@ compose.desktop {
                 bundleID = desktopPackageName
                 appCategory = "public.app-category.utilities"
                 infoPlist {
-                    extraKeysRawXml = macLocalNetworkUsagePlist
+                    extraKeysRawXml = macPermissionUsagePlist
                 }
 
                 signing {

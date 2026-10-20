@@ -1,8 +1,6 @@
 package com.folderspan.notification
 
 import com.mmk.kmpnotifier.notification.NotificationAction
-import dev.nucleusframework.notification.AuthorizationOption
-import dev.nucleusframework.notification.NotificationCenter
 import dev.nucleusframework.notification.common.NotificationManager
 import dev.nucleusframework.notification.common.NotificationResult
 import dev.nucleusframework.notification.common.notification
@@ -102,29 +100,13 @@ internal class DesktopLocalNotificationBackend(
     }
 }
 
-private class NucleusDesktopSystemNotificationGateway(
-    private val isMacOs: Boolean = System.getProperty("os.name", "").contains("mac", ignoreCase = true),
-) : DesktopSystemNotificationGateway {
-    @Volatile
-    private var macAuthorizationDenied = false
-
+private class NucleusDesktopSystemNotificationGateway : DesktopSystemNotificationGateway {
     override fun initialize() {
         runCatching { NotificationManager.initialize() }
-        if (isMacOs) {
-            runCatching {
-                if (NotificationCenter.isAvailable) {
-                    NotificationCenter.requestAuthorization(setOf(AuthorizationOption.ALERT)) { granted, _ ->
-                        macAuthorizationDenied = !granted
-                    }
-                }
-            }.onFailure {
-                macAuthorizationDenied = true
-            }
-        }
     }
 
     override fun isAvailable(): Boolean {
-        return !macAuthorizationDenied && runCatching { NotificationManager.isAvailable() }.getOrDefault(false)
+        return runCatching { NotificationManager.isAvailable() }.getOrDefault(false)
     }
 
     override fun post(notification: DesktopSystemNotification): DesktopSystemNotificationHandle? {
