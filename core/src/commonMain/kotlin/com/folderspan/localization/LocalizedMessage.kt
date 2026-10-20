@@ -253,6 +253,10 @@ data class LocalizedMessage(
                 PermissionIds.ReadExternalStorage -> AppStrings.permission_storage_title
                 PermissionIds.AllFilesAccess -> AppStrings.permission_all_files_title
                 PermissionIds.Notifications -> AppStrings.permission_notifications_title
+                PermissionIds.LocalNetwork -> AppStrings.permission_local_network_title
+                PermissionIds.FilesAndFolders -> AppStrings.permission_files_and_folders_title
+                PermissionIds.FullDiskAccess -> AppStrings.permission_full_disk_access_title
+                PermissionIds.AppManagement -> AppStrings.permission_app_management_title
                 PermissionIds.BatteryOptimization -> AppStrings.permission_battery_title
                 PermissionIds.Shizuku -> AppStrings.permission_shizuku_title
                 PermissionIds.Root -> AppStrings.permission_root_title
