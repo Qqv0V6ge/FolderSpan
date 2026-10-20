@@ -760,6 +760,7 @@ kotlin {
             implementation(libs.sqldelight.driver.adapters)
             implementation(libs.sqldelight.driver.sqlite)
             implementation(libs.nucleus.notification.common)
+            implementation(libs.nucleus.core.runtime)
             // Select the native classifier explicitly; Windows ARM64 has no upstream JNI artifact.
             implementation("dev.onvoid.webrtc:webrtc-java:$webrtcJavaVersion") {
                 isTransitive = false
