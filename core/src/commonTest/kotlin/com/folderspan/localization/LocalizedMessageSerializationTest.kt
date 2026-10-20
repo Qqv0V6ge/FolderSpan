@@ -207,17 +207,33 @@ class LocalizedMessageSerializationTest {
         val message = LocalizedMessage(
             key = LocalizedMessageKeys.NOTIFICATION_PERMISSION_BODY_WITH_ITEMS,
             args = mapOf(
-                "permissionIds" to "all_files_access,notifications",
+                "permissionIds" to "all_files_access,notifications,local_network",
             ),
         )
 
         LibresSettings.languageCode = "en"
         assertTrue(message.render().contains("All files access"))
         assertTrue(message.render().contains("Notification permission"))
+        assertTrue(message.render().contains("Local network access"))
 
         LibresSettings.languageCode = "zhHans"
         assertTrue(message.render().contains(AppStrings.permission_all_files_title))
         assertTrue(message.render().contains(AppStrings.permission_notifications_title))
+        assertTrue(message.render().contains(AppStrings.permission_local_network_title))
+    }
+
+    @Test
+    fun macFilePermissionArgumentsRenderInCurrentLanguage() {
+        val message = LocalizedMessage(
+            key = LocalizedMessageKeys.NOTIFICATION_PERMISSION_BODY_WITH_ITEMS,
+            args = mapOf("permissionIds" to "files_and_folders,full_disk_access,app_management"),
+        )
+        listOf("en", "zhHans").forEach { language ->
+            LibresSettings.languageCode = language
+            assertTrue(message.render().contains(AppStrings.permission_files_and_folders_title))
+            assertTrue(message.render().contains(AppStrings.permission_full_disk_access_title))
+            assertTrue(message.render().contains(AppStrings.permission_app_management_title))
+        }
     }
 
     @Test

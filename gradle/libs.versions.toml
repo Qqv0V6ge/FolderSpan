@@ -9,7 +9,7 @@ androidx-activity = "1.13.0"
 androidx-core = "1.19.1"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.11.0"
-androidx-paging = "3.5.1"
+androidx-paging = "3.5.3"
 androidx-testExt = "1.3.0"
 androidx-testRunner = "1.7.0"
 datastore = "1.2.1"
@@ -17,7 +17,7 @@ shizuku = "13.1.5"
 libsu = "6.0.0"
 
 # Kotlin 基础
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
 kotlinx-datetime = "0.8.0"
 kotlinx-html = "0.12.0"
@@ -75,7 +75,7 @@ korlibsCrypto = "6.0.1"
 multiplatform-settings = "1.3.0"
 
 # 工具库
-build-config = "6.1.1"
+build-config = "6.1.2"
 qrcoder = "4.5.0"
 kmpnotifier = "2.0.1"
 nucleus = "2.5.18"
@@ -206,6 +206,7 @@ qrcoder = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcoder" }
 kmpnotifier-core = { module = "io.github.mirzemehdi:kmpnotifier-core", version.ref = "kmpnotifier" }
 kmpnotifier-local = { module = "io.github.mirzemehdi:kmpnotifier-local", version.ref = "kmpnotifier" }
 nucleus-notification-common = { module = "dev.nucleusframework:nucleus.notification-common", version.ref = "nucleus" }
+nucleus-core-runtime = { module = "dev.nucleusframework:nucleus.core-runtime", version.ref = "nucleus" }
 
 [plugins]
 # Android 平台
