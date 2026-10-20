@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.folderspan.androidContext
 import com.folderspan.root.RootManager
@@ -21,7 +22,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import strings.AppStrings
 
 private const val PERMISSION_READ_EXTERNAL_STORAGE = "android.permission.READ_EXTERNAL_STORAGE"
 private const val PERMISSION_WRITE_EXTERNAL_STORAGE = "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -34,70 +34,7 @@ actual object PlatformPermissionProvider {
         requester = AndroidPermissionRequester(activity)
     }
 
-    actual fun permissions(): List<PlatformPermission> = buildList {
-        add(
-            PlatformPermission(
-                PermissionIds.ReadExternalStorage,
-                PermissionAction.Request,
-                title = AppStrings.permission_storage_title,
-                description = AppStrings.permission_storage_description,
-            )
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            add(
-                PlatformPermission(
-                    PermissionIds.AllFilesAccess,
-                    PermissionAction.OpenSettings,
-                    title = AppStrings.permission_all_files_title,
-                    description = AppStrings.permission_all_files_description,
-                )
-            )
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(
-                PlatformPermission(
-                    PermissionIds.Notifications,
-                    PermissionAction.Request,
-                    title = AppStrings.permission_notifications_title,
-                    description = AppStrings.permission_notifications_description,
-                )
-            )
-        }
-        if (Build.VERSION.SDK_INT >= 37) {
-            add(
-                PlatformPermission(
-                    PermissionIds.LocalNetwork,
-                    PermissionAction.Request,
-                    title = AppStrings.permission_local_network_title,
-                    description = AppStrings.permission_local_network_description,
-                )
-            )
-        }
-        add(
-            PlatformPermission(
-                PermissionIds.BatteryOptimization,
-                PermissionAction.OpenSettings,
-                title = AppStrings.permission_battery_title,
-                description = AppStrings.permission_battery_description,
-            )
-        )
-        add(
-            PlatformPermission(
-                PermissionIds.Shizuku,
-                PermissionAction.Request,
-                title = AppStrings.permission_shizuku_title,
-                description = AppStrings.permission_shizuku_description,
-            )
-        )
-        add(
-            PlatformPermission(
-                PermissionIds.Root,
-                PermissionAction.Request,
-                title = AppStrings.permission_root_title,
-                description = AppStrings.permission_root_description,
-            )
-        )
-    }
+    actual fun permissions(): List<PlatformPermission> = androidPlatformPermissions(Build.VERSION.SDK_INT)
 
     actual suspend fun status(permission: PlatformPermission): PermissionStatus {
         val context = androidContext()
@@ -158,6 +95,7 @@ actual object PlatformPermissionProvider {
     }
 
     actual fun openSettings(permission: PlatformPermission) {
+        if (!permission.settingsInstructions.isNullOrBlank()) return
         val context = androidContext()
         val intent = when (permission.id) {
             PermissionIds.AllFilesAccess -> buildAllFilesAccessIntent(context)
@@ -193,11 +131,13 @@ private fun requestRootPermission(onResult: (PermissionStatus) -> Unit) {
 }
 
 private class AndroidPermissionRequester(private val activity: ComponentActivity) {
+    private val denialHistory = activity.getSharedPreferences("folderspan.permission.denials", Context.MODE_PRIVATE)
     private var storageCallback: (() -> Unit)? = null
     private var notificationCallback: (() -> Unit)? = null
     private var localNetworkCallback: (() -> Unit)? = null
     private var allFilesCallback: (() -> Unit)? = null
     private var batteryOptimizationCallback: (() -> Unit)? = null
+    private var settingsCallback: (() -> Unit)? = null
 
     private val storagePermissionLauncher =
         activity.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -209,13 +149,15 @@ private class AndroidPermissionRequester(private val activity: ComponentActivity
         }
 
     private val notificationPermissionLauncher =
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            rememberRuntimePermissionResult(Manifest.permission.POST_NOTIFICATIONS, granted)
             notificationCallback?.invoke()
             notificationCallback = null
         }
 
     private val localNetworkPermissionLauncher =
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            rememberRuntimePermissionResult(PERMISSION_ACCESS_LOCAL_NETWORK, granted)
             localNetworkCallback?.invoke()
             localNetworkCallback = null
         }
@@ -232,14 +174,30 @@ private class AndroidPermissionRequester(private val activity: ComponentActivity
             batteryOptimizationCallback = null
         }
 
+    private val permissionSettingsLauncher =
+        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            settingsCallback?.invoke()
+            settingsCallback = null
+        }
+
     fun requestStorage(onResult: () -> Unit) {
         storageCallback = onResult
         storagePermissionLauncher.launch(buildStoragePermissions())
     }
 
     fun requestNotifications(onResult: () -> Unit) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            onResult()
+        val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        val needsNotificationSettings = shouldOpenAndroidNotificationSettings(
+            sdkInt = Build.VERSION.SDK_INT,
+            runtimePermissionGranted = runtimeGranted,
+            notificationsEnabled = NotificationManagerCompat.from(activity).areNotificationsEnabled(),
+        )
+        if (needsNotificationSettings ||
+            shouldOpenRuntimePermissionSettings(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            openRuntimePermissionSettings(notificationSettingsIntent(activity), onResult)
             return
         }
         notificationCallback = onResult
@@ -249,6 +207,10 @@ private class AndroidPermissionRequester(private val activity: ComponentActivity
     fun requestLocalNetwork(onResult: () -> Unit) {
         if (Build.VERSION.SDK_INT < 37) {
             onResult()
+            return
+        }
+        if (shouldOpenRuntimePermissionSettings(PERMISSION_ACCESS_LOCAL_NETWORK)) {
+            openRuntimePermissionSettings(appDetailsIntent(activity), onResult)
             return
         }
         localNetworkCallback = onResult
@@ -297,6 +259,37 @@ private class AndroidPermissionRequester(private val activity: ComponentActivity
         }
         batteryOptimizationCallback = onResult
         batteryOptimizationPermissionLauncher.launch(intentToLaunch)
+    }
+
+    private fun rememberRuntimePermissionResult(permission: String, granted: Boolean) {
+        when {
+            granted -> denialHistory.edit().remove(permission).apply()
+            activity.shouldShowRequestPermissionRationale(permission) ->
+                denialHistory.edit().putBoolean(permission, true).apply()
+        }
+    }
+
+    private fun shouldOpenRuntimePermissionSettings(permission: String): Boolean {
+        val granted = ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED
+        val showRationale = activity.shouldShowRequestPermissionRationale(permission)
+        // A dismissed notification prompt also returns false. Only a rationale confirms a prior denial.
+        rememberRuntimePermissionResult(permission, granted)
+        return shouldOpenAndroidRuntimePermissionSettings(
+            granted = granted,
+            previouslyDenied = denialHistory.getBoolean(permission, false),
+            shouldShowRationale = showRationale,
+        )
+    }
+
+    private fun openRuntimePermissionSettings(intent: Intent, onResult: () -> Unit) {
+        val target = intent.takeIf { it.resolveActivity(activity.packageManager) != null }
+            ?: appDetailsIntent(activity).takeIf { it.resolveActivity(activity.packageManager) != null }
+        if (target == null) {
+            onResult()
+            return
+        }
+        settingsCallback = onResult
+        permissionSettingsLauncher.launch(target)
     }
 
     private fun shouldOpenAppSettings(permissions: Map<String, Boolean>): Boolean {
@@ -353,11 +346,11 @@ private fun buildAllFilesAccessIntent(context: Context): Intent? {
 }
 
 private fun notificationSettingsIntent(context: Context): Intent {
-    val intent =
-        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        }
-    return intent
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return appDetailsIntent(context)
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    }
+    return intent.takeIf { it.resolveActivity(context.packageManager) != null } ?: appDetailsIntent(context)
 }
 
 private fun batteryOptimizationSettingsIntent(context: Context): Intent {
@@ -377,14 +370,14 @@ private fun storageStatus(context: Context): PermissionStatus {
 }
 
 private fun notificationStatus(context: Context): PermissionStatus {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        return PermissionStatus.Granted
-    }
-    val granted = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS
-    ) == PackageManager.PERMISSION_GRANTED
-    return if (granted) PermissionStatus.Granted else PermissionStatus.Denied
+    val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+    return androidNotificationPermissionStatus(
+        sdkInt = Build.VERSION.SDK_INT,
+        runtimePermissionGranted = runtimeGranted,
+        notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled(),
+    )
 }
 
 private fun localNetworkStatus(context: Context): PermissionStatus {
