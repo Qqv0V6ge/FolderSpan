@@ -4,6 +4,8 @@ import com.folderspan.exception.AuthorityException
 import com.folderspan.extensions.randomString
 import com.folderspan.getSocketDevice
 import com.folderspan.routes.RawHttpApiDispatcher
+import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
+import com.folderspan.service.webrtc.models.WebRtcIceObservationSource
 import com.folderspan.routes.evaluateDeviceConnect
 import com.folderspan.service.data.AppendToFileRequest
 import com.folderspan.service.data.CopyPathControlRequest
@@ -71,6 +73,7 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
@@ -103,7 +106,8 @@ internal object DeviceSessionServerRuntimeLauncher {
         remoteHost: String?,
         scope: CoroutineScope,
         approvalContext: DeviceSessionServerApprovalContext,
-        onAuthenticated: suspend () -> Unit = {},
+        onAuthenticated: suspend (DeviceSessionConnectivityProbe) -> Unit = {},
+        iceSnapshot: () -> WebRtcIceSnapshot? = { null },
     ) {
         DeviceSessionServer(
             dispatcher = dispatcher,
@@ -112,12 +116,13 @@ internal object DeviceSessionServerRuntimeLauncher {
             scope = scope,
             approvalContext = approvalContext,
             onAuthenticated = onAuthenticated,
+            iceSnapshot = iceSnapshot,
         ).run()
     }
 }
 
 internal actual fun createWebRtcDeviceSessionServerLauncher(): WebRtcDeviceSessionServerLauncher? =
-    WebRtcDeviceSessionServerLauncher { channel, remoteDeviceId, connectionAttemptId, scope, onAuthenticated ->
+    WebRtcDeviceSessionServerLauncher { channel, remoteDeviceId, connectionAttemptId, scope, iceSnapshot, onAuthenticated ->
         val dispatcher = RawHttpApiDispatcher()
         DeviceSessionServerRuntimeLauncher.run(
             dispatcher = dispatcher,
@@ -133,6 +138,10 @@ internal actual fun createWebRtcDeviceSessionServerLauncher(): WebRtcDeviceSessi
                 )
             },
             onAuthenticated = onAuthenticated,
+            iceSnapshot = { iceSnapshot()?.takeIf {
+                it.source == WebRtcIceObservationSource.Local && it.remoteDeviceId == remoteDeviceId && it.connectionAttemptId == connectionAttemptId &&
+                    it.observerDeviceId == getSocketDevice().id
+            } },
         )
     }
 
@@ -196,7 +205,8 @@ internal class DeviceSessionServer(
     private val remoteHost: String?,
     private val scope: CoroutineScope,
     private val approvalContext: DeviceSessionServerApprovalContext,
-    private val onAuthenticated: suspend () -> Unit,
+    private val onAuthenticated: suspend (DeviceSessionConnectivityProbe) -> Unit,
+    private val iceSnapshot: () -> WebRtcIceSnapshot? = { null },
 ) {
     private val sessionPlan = DeviceSessionWindowPlan.fromMemory()
     private val writeLocks = HashMap<String, Mutex>()
@@ -235,6 +245,7 @@ internal class DeviceSessionServer(
     private var boundToken: String? = null
     @Volatile
     private var boundDeviceId: String? = null
+    private var authorizationJob: Job? = null
 
     suspend fun run() {
         LogKit.i(AppStrings.ui_device_session_server_start_remote_arg0.format(arg0 = (remoteHost).toString()))
@@ -249,6 +260,7 @@ internal class DeviceSessionServer(
             LogKit.e("device session server failed: ${error.message}", error)
             runCatching { transport.connection.goAway() }
         } finally {
+            authorizationJob?.cancel()
             LogKit.i(AppStrings.ui_device_session_server_ends_remote_arg0_device_arg1.format(arg0 = (remoteHost).toString(), arg1 = (boundDeviceId).toString()))
             cleanupMessageEndpoint()
             boundToken?.let(dispatcher.deviceCertificateState::removeToken)
@@ -351,6 +363,15 @@ internal class DeviceSessionServer(
             DEVICE_SESSION_RPC_IDENTIFY -> ok(request, ProtoBufCodec.encode(getSocketDevice()))
             DEVICE_SESSION_RPC_CONNECT -> handleConnect(request)
             DEVICE_SESSION_RPC_THEME -> ok(request, ProtoBufCodec.encode(handleTheme(request.payload)))
+            DEVICE_SESSION_RPC_WEBRTC_ICE -> {
+                val query = ProtoBufCodec.decode<DeviceSessionIceQuery>(request.payload)
+                val snapshot = iceSnapshot()?.takeIf {
+                    it.remoteDeviceId == boundDeviceId && it.connectionAttemptId == query.connectionAttemptId &&
+                        it.negotiation == query.negotiation
+                }
+                if (snapshot == null) DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_NOT_FOUND)
+                else ok(request, ProtoBufCodec.encode(snapshot))
+            }
             DEVICE_SESSION_RPC_LIST_PATH -> result(request, dispatcher.pathService.list(requireToken(), ProtoBufCodec.decode(request.payload)))
             DEVICE_SESSION_RPC_ROOT_PATHS -> result(request, dispatcher.pathService.rootPaths(requireToken()))
             DEVICE_SESSION_RPC_PATH_EXISTS -> result(request, dispatcher.pathService.exists(requireToken(), ProtoBufCodec.decode(request.payload)))
@@ -419,10 +440,21 @@ internal class DeviceSessionServer(
         if (response.token.isNotBlank()) {
             boundToken = response.token
             boundDeviceId = body.device.id
+            authorizationJob?.cancel()
+            authorizationJob = scope.launch {
+                dispatcher.deviceCertificateState.observeTokenValidity(response.token).first { valid -> !valid }
+                channel.close()
+                transport.close()
+            }
             if (dispatcher.deviceCertificateState.getDeviceSharePathScope(response.token) == null) {
                 registerMessageEndpoint(body.device.id, response.token)
             }
-            onAuthenticated()
+            onAuthenticated {
+                val nonce = newDeviceMessageId().encodeToByteArray()
+                dispatcher.deviceCertificateState.isTokenValid(response.token) &&
+                    transport.connection.ping(nonce).contentEquals(nonce) &&
+                    dispatcher.deviceCertificateState.isTokenValid(response.token)
+            }
             LogKit.i(AppStrings.ui_device_is_bound_to_token_device_arg0_remote_arg1.format(arg0 = (body.device.id), arg1 = (remoteHost).toString()))
         } else {
             LogKit.w(AppStrings.ui_device_session_connect_token_missing_device_arg0_type_arg1.format(arg0 = (body.device.id), arg1 = (response.connectType).toString()))

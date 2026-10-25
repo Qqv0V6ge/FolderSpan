@@ -7,6 +7,7 @@ internal actual object LocalTaskArtifacts {
     actual val supported: Boolean = false
     actual fun create(path: String, directory: Boolean, cacheArtifact: Boolean): LocalTaskArtifactIdentity = error("ownership_unverified")
     actual fun inspect(path: String, cacheArtifact: Boolean): LocalTaskArtifactIdentity? = error("ownership_unverified")
+    actual fun describe(path: String, cacheArtifact: Boolean): LocalTaskArtifactDescription? = error("ownership_unverified")
     actual fun deliver(path: String, finalPath: String, identity: String): Unit = error("ownership_unverified")
     actual fun delete(path: String, identity: String, fingerprint: String, directory: Boolean, cacheArtifact: Boolean): Unit = error("ownership_unverified")
 }

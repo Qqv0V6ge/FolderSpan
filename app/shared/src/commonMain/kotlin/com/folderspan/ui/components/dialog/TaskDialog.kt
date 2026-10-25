@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.data.StatusEnum
 import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.main.Task
+import com.folderspan.ui.state.main.TaskResidualSummary
 import com.folderspan.ui.state.main.TaskState
 import com.folderspan.ui.state.main.formatTaskResultDisplay
 import com.folderspan.ui.state.main.normalizeTaskResultDisplay
@@ -31,6 +32,7 @@ data class TaskInfoDialogUiState(
     val failureCount: Int,
     val failureSummary: Pair<String, String>?,
     val queueResults: List<Pair<String, String>>,
+    val residualSummary: TaskResidualSummary? = null,
 )
 
 @Composable
@@ -41,6 +43,7 @@ fun TaskInfoDialogContainer(
 ) {
     val taskState = koinInject<TaskState>()
     val fileState = koinInject<FileState>()
+    val residuals by taskState.residuals.collectAsState()
     val latestTask = rememberRefreshingTask(
         task = task,
         taskState = taskState,
@@ -81,6 +84,7 @@ fun TaskInfoDialogContainer(
             failureCount = failureCount,
             failureSummary = failureSummary,
             queueResults = queueResults,
+            residualSummary = residuals[latestTask.key],
         ),
         onDismiss = onDismiss,
         onToResult = onToResult,
@@ -116,7 +120,7 @@ fun TaskInfoDialog(
             latestTask.ToTitle(style = MaterialTheme.typography.titleLarge)
         },
         text = {
-            FileOperation(uiState)
+            FileOperation(uiState, onCleanup = onDelete)
         },
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -125,7 +129,7 @@ fun TaskInfoDialog(
             }
         },
         dismissButton = {
-            Row {
+            FlowRow {
                 if (latestTask.status == StatusEnum.FAILURE && uiState.canContinueTask) {
                     TextButton(onClick = onContinue) {
                         Text(AppStrings.ui_continue_task)
@@ -140,8 +144,10 @@ fun TaskInfoDialog(
 
                 when (latestTask.status) {
                     StatusEnum.SUCCESS -> Unit
-                    StatusEnum.FAILURE -> TextButton(onClick = onDelete) {
-                        Text(AppStrings.ui_delete_task)
+                    StatusEnum.FAILURE -> if (uiState.residualSummary == null) {
+                        TextButton(onClick = onDelete) {
+                            Text(AppStrings.ui_delete_task)
+                        }
                     }
 
                     StatusEnum.LOADING -> {
@@ -203,7 +209,7 @@ private fun StatusEnum.isTaskDialogSuccessfulStatus(): Boolean =
     this == StatusEnum.SUCCESS
 
 @Composable
-private fun FileOperation(uiState: TaskInfoDialogUiState) {
+private fun FileOperation(uiState: TaskInfoDialogUiState, onCleanup: () -> Unit) {
     val task = uiState.task
     val scrollState = rememberScrollState()
 
@@ -236,7 +242,16 @@ private fun FileOperation(uiState: TaskInfoDialogUiState) {
     val isActiveTask = task.status == StatusEnum.LOADING || task.status == StatusEnum.PAUSE
     val shouldShowTransientMessage = !transientMessage.isNullOrBlank() &&
         (queueResults.isEmpty() || !isActiveTask)
-    Column {
+    Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+        uiState.residualSummary?.let { summary ->
+            TaskResidualFiles(summary)
+            Spacer(Modifier.height(8.dp))
+            Text(AppStrings.ui_task_residual_details_notice, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            Text(AppStrings.ui_task_residual_cleanup_notice, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = onCleanup) { Text(AppStrings.ui_task_residual_delete) }
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+        }
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier

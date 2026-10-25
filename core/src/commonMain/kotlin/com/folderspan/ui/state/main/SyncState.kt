@@ -478,6 +478,7 @@ class SyncState(
             }
 
             operationTask = createOperationTask(current)
+            taskState.beginTaskOutputs(operationTask)
             runningOperationTasks[current.id] = operationTask
             taskState.addOrUpdate(operationTask)
 
@@ -489,6 +490,7 @@ class SyncState(
             operationTask?.let { item ->
                 runningOperationTasks.remove(task.id)
                 taskState.clearSignals(item.key)
+                taskState.taskOutputsFinished(item, interrupted = !currentCoroutineContext().isActive)
             }
             lock.unlock()
         }
@@ -528,7 +530,7 @@ class SyncState(
     private fun finalizeOperationTask(operationTask: Task, record: SyncRunRecord) {
         when (record.status) {
             SyncRunStatus.Success -> {
-                taskState.delete(operationTask)
+                taskState.completeTask(operationTask)
             }
 
             SyncRunStatus.PartialSuccess,

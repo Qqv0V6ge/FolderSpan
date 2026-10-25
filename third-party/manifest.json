@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "prepared_date": "2026-10-21",
-  "scope": "Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.",
+  "scope": "This inventory was captured for the 2026-10-21 dependency snapshot. Source-code synchronization from FileManager e71042a0 updates dependency declarations, including webrtc-java 0.20.0; the component table and native correspondence have NOT been refreshed or revalidated for those new versions. Refresh the affected inventory, upstream terms and actual binary correspondence before a new distribution. Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.",
   "maven_inventory_source": "third-party/maven/components.csv",
   "maven_components": 555,
   "texts": [
@@ -1180,5 +1180,59 @@
     "Zstandard: BSD option selected.",
     "Bundled JRE legal/source obligations remain independent.",
     "Adobe DNG SDK terms apply to the corresponding Skia native component; not relicensed as Apache-2.0."
-  ]
+  ],
+  "unresolved_dependency_sync": {
+    "date": "2026-10-25",
+    "source_commit": "e71042a0e59315ad0f85895b1bbf73a14e1b2038",
+    "catalog_version_changes": [
+      {
+        "key": "datastore",
+        "before": "1.2.1",
+        "after": "1.3.0"
+      },
+      {
+        "key": "kotlinx-serialization",
+        "before": "1.11.0",
+        "after": "1.12.0"
+      },
+      {
+        "key": "composeMultiplatform",
+        "before": "1.12.1",
+        "after": "1.12.2"
+      },
+      {
+        "key": "jetbrains-navigation3",
+        "before": "1.1.2",
+        "after": "1.2.0"
+      },
+      {
+        "key": "tink",
+        "before": "1.23.0",
+        "after": "1.24.0"
+      },
+      {
+        "key": "bcprov",
+        "before": "1.85",
+        "after": "1.85.2"
+      },
+      {
+        "key": "bcpkix",
+        "before": null,
+        "after": "1.85"
+      },
+      {
+        "key": "webrtc-java",
+        "before": "0.18.0",
+        "after": "0.20.0"
+      },
+      {
+        "key": "kmpnotifier",
+        "before": "2.0.1",
+        "after": "2.0.2"
+      }
+    ],
+    "dependency_resolution_run": false,
+    "application_build_run": false,
+    "inventory_refreshed_for_new_graph": false
+  }
 }

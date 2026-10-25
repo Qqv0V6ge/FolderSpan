@@ -1,6 +1,5 @@
 package com.folderspan.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
@@ -89,7 +88,7 @@ private val darkScheme = darkColorScheme(
 
 @Composable
 fun FolderSpanTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = isPlatformInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     overrideColorScheme: ColorScheme? = null,
@@ -112,6 +111,9 @@ fun FolderSpanTheme(
         content = content,
     )
 }
+
+@Composable
+expect fun isPlatformInDarkTheme(): Boolean
 
 @Composable
 expect fun SystemAppearance(isDark: Boolean, colorScheme: ColorScheme)

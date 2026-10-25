@@ -19,6 +19,7 @@ import kotlinx.serialization.protobuf.ProtoNumber
 internal const val DEVICE_SESSION_RPC_CONNECT = "Connect"
 internal const val DEVICE_SESSION_RPC_IDENTIFY = "Identify"
 internal const val DEVICE_SESSION_RPC_THEME = "Theme"
+internal const val DEVICE_SESSION_RPC_WEBRTC_ICE = "WebRtcIce"
 internal const val DEVICE_SESSION_RPC_LIST_PATH = "ListPath"
 internal const val DEVICE_SESSION_RPC_ROOT_PATHS = "RootPaths"
 internal const val DEVICE_SESSION_RPC_PATH_EXISTS = "PathExists"
@@ -64,6 +65,9 @@ internal const val DEVICE_SESSION_RPC_NOT_FOUND = 4
 internal const val DEVICE_SESSION_RPC_INTERNAL = 5
 internal const val DEVICE_SESSION_RPC_RATE_LIMITED = 6
 internal const val DEVICE_SESSION_RPC_CONFLICT = 7
+
+@Serializable
+internal data class DeviceSessionIceQuery(val connectionAttemptId: String, val negotiation: Int)
 
 internal fun isDeviceSessionRpcAllowedBeforeAuthorization(method: String): Boolean {
     return method == DEVICE_SESSION_RPC_CONNECT || method == DEVICE_SESSION_RPC_IDENTIFY

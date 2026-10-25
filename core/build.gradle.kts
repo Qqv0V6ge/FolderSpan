@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.testing.AbstractTestTask
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -10,6 +11,10 @@ plugins {
     alias(libs.plugins.sqldelight)
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.build.config)
+}
+
+if (providers.gradleProperty("webrtcInterop").isPresent) {
+    tasks.withType<AbstractTestTask>().configureEach { outputs.upToDateWhen { false } }
 }
 
 val appReleaseVersion = providers.gradleProperty("releaseVersion")
@@ -561,12 +566,15 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     sourceSets {
-        getByName("jvmTest").kotlin.srcDir("src/udpSocketTest/kotlin")
+        getByName("jvmTest").kotlin.srcDirs("src/udpSocketTest/kotlin", "src/jvmAndroidTest/kotlin")
         getByName("androidDeviceTest").kotlin.srcDir("src/udpSocketTest/kotlin")
         // The two interop endpoints must run together; keep them out of standalone suites.
         if (providers.gradleProperty("webrtcInterop").isPresent) {
-            getByName("jvmTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropJvmTest/kotlin")
-            getByName("jsTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropJsTest/kotlin")
+            getByName("jvmTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropJvmTest/kotlin", "src/webrtcInteropHostTest/kotlin")
+            getByName("androidDeviceTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropAndroidTest/kotlin", "src/webrtcInteropHostTest/kotlin", "src/jvmAndroidTest/kotlin")
+            getByName("jsTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropJsTest/kotlin")
+            getByName("wasmJsTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropWasmJsTest/kotlin")
+            getByName("iosSimulatorArm64Test").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropIosTest/kotlin")
         }
         val commonMain = getByName("commonMain")
         val androidMain = getByName("androidMain")
@@ -937,6 +945,10 @@ tasks.matching { item -> item.name == "libresGenerateStrings" || item.name == "c
         dependsOn(auditUserVisibleStrings)
         dependsOn(verifyNotificationRoutes)
     }
+}
+
+tasks.matching { it.name == "libresGenerateResources" }.configureEach {
+    outputs.doNotCacheIf("Libres aggregate output overlaps string and image generator outputs.") { true }
 }
 
 tasks.matching { item -> item.name.startsWith("copyTestComposeResourcesFor") }.configureEach {

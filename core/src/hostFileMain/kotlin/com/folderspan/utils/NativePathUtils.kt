@@ -32,6 +32,9 @@ internal expect object NativePathUtils {
     fun getAppPath(): String
 
 
+    fun getApplicationDataPath(): String
+
+
     fun getHomePath(): String
 
 

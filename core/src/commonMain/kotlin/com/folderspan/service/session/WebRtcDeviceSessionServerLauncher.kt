@@ -1,6 +1,9 @@
 package com.folderspan.service.session
 
+import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
 import kotlinx.coroutines.CoroutineScope
+
+internal typealias DeviceSessionConnectivityProbe = suspend () -> Boolean
 
 internal fun interface WebRtcDeviceSessionServerLauncher {
     suspend fun run(
@@ -8,7 +11,8 @@ internal fun interface WebRtcDeviceSessionServerLauncher {
         remoteDeviceId: String,
         connectionAttemptId: String,
         scope: CoroutineScope,
-        onAuthenticated: suspend () -> Unit,
+        iceSnapshot: () -> WebRtcIceSnapshot?,
+        onAuthenticated: suspend (DeviceSessionConnectivityProbe) -> Unit,
     )
 }
 

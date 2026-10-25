@@ -36,14 +36,29 @@ fun TaskCleanupFailureDialogContainer() {
     val tasks = koinInject<TaskState>()
     val failures by tasks.cleanupFailures.collectAsState()
     val busy by tasks.deletionBusy.collectAsState()
-    if (failures.isNotEmpty()) TaskCleanupFailureDialog(failures, busy,
-        tasks::dismissTaskCleanupFailure, tasks::retryTaskCleanup, tasks::directlyDeleteFailedTaskRecords)
-    else if (busy) AlertDialog(
-        onDismissRequest = {},
-        title = { Text(AppStrings.ui_task_cleanup_busy) },
-        text = { LinearProgressIndicator() },
-        confirmButton = {},
-    )
+    val residuals by tasks.residuals.collectAsState()
+    val noticeKeys by tasks.residualNoticeKeys.collectAsState()
+    val summary = noticeKeys.firstNotNullOfOrNull { residuals[it] }
+    when (taskCleanupDialogKind(failures.isNotEmpty(), busy, summary != null)) {
+        TaskCleanupDialogKind.Failure -> TaskCleanupFailureDialog(failures, busy,
+            tasks::dismissTaskCleanupFailure, tasks::retryTaskCleanup, tasks::directlyDeleteFailedTaskRecords)
+        TaskCleanupDialogKind.Busy -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text(AppStrings.ui_task_cleanup_busy) },
+            text = { LinearProgressIndicator() },
+            confirmButton = {},
+        )
+        TaskCleanupDialogKind.Residual -> summary?.let { residual ->
+            TaskResidualNoticeDialog(
+                summary = residual,
+                onKeep = { tasks.dismissResidualNotice(residual.taskKey) },
+                onCleanup = { tasks.requestDeleteTasks(listOf(residual.taskKey)) },
+                canContinueTask = tasks.tasks.firstOrNull { it.key == residual.taskKey }
+                    ?.let(tasks::canContinueTask) == true,
+            )
+        }
+        TaskCleanupDialogKind.None -> Unit
+    }
 }
 
 @Composable

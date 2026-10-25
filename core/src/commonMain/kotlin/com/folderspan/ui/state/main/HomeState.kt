@@ -267,7 +267,7 @@ class HomeState : KoinComponent {
                 try {
                     val result = fileState.executeCopyTask(task, src, dest)
                     if (result.isSuccess && result.getOrDefault(false)) {
-                        taskState.delete(task)
+                        taskState.completeTask(task)
                         fileState.updateFileAndFolder()
                     } else {
                         val message = taskState.resolveTaskFailureMessage(
