@@ -25,12 +25,12 @@ class WebRtcSignalingTransportTest {
     }
 
     @Test
-    fun browserHttpConfigUsesHttpSignalingUrl() {
+    fun browserHttpConfigUsesHttpSignalingUrlWithoutBundledIceServers() {
         val config = buildBrowserWebRtcConfig(" http://127.0.0.1:12040 ")
 
         assertEquals("http://127.0.0.1:12040", config.wssUrl)
         assertEquals(BROWSER_WEBRTC_ROOM_ID, config.roomId)
-        assertTrue(config.iceServers.isNotEmpty())
+        assertTrue(config.iceServers.isEmpty())
     }
 
     @Test
