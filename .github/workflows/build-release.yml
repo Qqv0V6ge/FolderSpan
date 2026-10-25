@@ -445,6 +445,12 @@ jobs:
           release_date="$(date -u +%F)"
           metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
           manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
+          # The public metadata describes no-pro; retain Pro's previous license scope.
+          if [[ "$ORG_GRADLE_PROJECT_includeProMain" == "true" ]]; then
+            sed -i -E \
+              's#<project_license>[^<]+</project_license>#<project_license>LicenseRef-proprietary</project_license>#' \
+              "$metainfo"
+          fi
           sed -i -E \
             's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
             "$metainfo"

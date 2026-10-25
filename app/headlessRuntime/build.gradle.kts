@@ -1,4 +1,5 @@
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.bundling.Jar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
@@ -79,6 +80,13 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 }
 
+val isStandardEdition = rootProject.findProject(":proMain") == null
+if (isStandardEdition) {
+    sourceSets.named("main") {
+        resources.srcDir(rootProject.tasks.named("prepareLicenseBundle"))
+    }
+}
+
 val embedWebUi = tasks.register<Sync>("embedWebUiDistribution") {
     group = "distribution"
     description = "Embed the selected production Web UI into the headless runtime classpath."
@@ -136,6 +144,10 @@ compose.desktop {
             description = "FolderSpan headless runtime"
             vendor = "FolderSpan"
             packageName = runtimeAppName
+            if (isStandardEdition) {
+                licenseFile.set(rootProject.file("LICENSE"))
+                appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
+            }
             modules("java.sql")
         }
         buildTypes {
@@ -187,6 +199,19 @@ fun registerTarGzTask(taskName: String, appImageTaskName: String, binaryDirector
 
 registerTarGzTask("packageTarGz", "packageAppImage", "main")
 registerTarGzTask("packageReleaseTarGz", "packageReleaseAppImage", "main-release")
+
+if (isStandardEdition) {
+    tasks.matching { it.name == "prepareAppResources" }.configureEach {
+        dependsOn(rootProject.tasks.named("prepareDesktopLicenseResources"))
+    }
+    // Compose marks appResourcesDir as internal; include it in packaging fingerprints.
+    tasks.withType<AbstractJPackageTask>().configureEach {
+        inputs.dir(appResourcesDir)
+            .withPropertyName("applicationResources")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+            .optional()
+    }
+}
 
 tasks.withType<AbstractJLinkTask>().configureEach {
     freeArgs.add("--compress=1")

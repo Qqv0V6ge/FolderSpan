@@ -4,7 +4,7 @@
   <name>FolderSpan</name>
   <summary>Cross-platform file manager and file sharing tool</summary>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>LicenseRef-proprietary</project_license>
+  <project_license>Apache-2.0</project_license>
   <developer id="com.folderspan">
     <name>FolderSpan</name>
   </developer>
