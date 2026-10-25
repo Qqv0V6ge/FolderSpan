@@ -6,11 +6,30 @@ import kotlin.test.assertEquals
 
 class WebRtcIceConfigTest {
     @Test
-    fun buildWebRtcIceServersUsesStunOnlyByDefault() {
+    fun buildWebRtcIceServersUsesNoServersByDefault() {
         val servers = buildWebRtcIceServers()
 
+        assertEquals(emptyList(), servers)
+    }
+
+    @Test
+    fun buildWebRtcIceServersKeepsExplicitStunAndTurnConfiguration() {
+        val servers = buildWebRtcIceServers(
+            stunUrl = " stun:ice.example.test:3478 ",
+            turnUrl = " turns:relay.example.test:5349 ",
+            turnUsername = " user ",
+            turnPassword = " password "
+        )
+
         assertEquals(
-            listOf(WebRtcIceServerConfig(urls = listOf(DEFAULT_WEBRTC_STUN_URL))),
+            listOf(
+                WebRtcIceServerConfig(urls = listOf("stun:ice.example.test:3478")),
+                WebRtcIceServerConfig(
+                    urls = listOf("turns:relay.example.test:5349"),
+                    username = "user",
+                    password = " password "
+                )
+            ),
             servers
         )
     }
@@ -19,7 +38,7 @@ class WebRtcIceConfigTest {
     fun buildWebRtcIceServersSkipsBlankUrlsAndKeepsTurnCredentials() {
         val servers = buildWebRtcIceServers(
             stunUrl = " ",
-            turnUrl = "turn:119.91.209.238:3478",
+            turnUrl = "turn:relay.example.test:3478",
             turnUsername = "user",
             turnPassword = "secret"
         )
@@ -27,7 +46,7 @@ class WebRtcIceConfigTest {
         assertEquals(
             listOf(
                 WebRtcIceServerConfig(
-                    urls = listOf("turn:119.91.209.238:3478"),
+                    urls = listOf("turn:relay.example.test:3478"),
                     username = "user",
                     password = "secret"
                 )
@@ -39,8 +58,8 @@ class WebRtcIceConfigTest {
     @Test
     fun buildWebRtcIceServerAttemptsRemovesCredentiallessTurnBeforeStunOnlyFallback() {
         val servers = listOf(
-            WebRtcIceServerConfig(urls = listOf("stun:119.91.209.238:3478")),
-            WebRtcIceServerConfig(urls = listOf("turn:119.91.209.238:3478"))
+            WebRtcIceServerConfig(urls = listOf("stun:ice.example.test:3478")),
+            WebRtcIceServerConfig(urls = listOf("turn:relay.example.test:3478"))
         )
 
         assertEquals(
@@ -52,7 +71,7 @@ class WebRtcIceConfigTest {
                 WebRtcIceServerAttempt(
                     label = "without-credentialless-turn",
                     iceServers = listOf(
-                        WebRtcIceServerConfig(urls = listOf("stun:119.91.209.238:3478"))
+                        WebRtcIceServerConfig(urls = listOf("stun:ice.example.test:3478"))
                     )
                 ),
                 WebRtcIceServerAttempt(
@@ -68,7 +87,7 @@ class WebRtcIceConfigTest {
     fun buildWebRtcIceServersKeepsBlankTurnCredentialsBlank() {
         val servers = buildWebRtcIceServers(
             stunUrl = " ",
-            turnUrl = "turn:119.91.209.238:3478",
+            turnUrl = "turn:relay.example.test:3478",
             turnUsername = " ",
             turnPassword = ""
         )
@@ -76,7 +95,7 @@ class WebRtcIceConfigTest {
         assertEquals(
             listOf(
                 WebRtcIceServerConfig(
-                    urls = listOf("turn:119.91.209.238:3478"),
+                    urls = listOf("turn:relay.example.test:3478"),
                     username = "",
                     password = ""
                 )
