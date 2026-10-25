@@ -3,12 +3,37 @@ package com.folderspan.data.main.webrtc
 import strings.AppStrings
 
 import com.folderspan.service.webrtc.signaling.generateRoomId
+import com.folderspan.service.webrtc.models.WebRtcIceServerConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class WebRtcRoomConfigTest {
+    @Test
+    fun savedRoomKeepsExplicitIceServersAndCredentials() {
+        val room = webRtcRoomProfile(source = WebRtcRoomSource.Other).copy(
+            stunUrl = "stun:ice.example.test:3478",
+            turnUrl = "turns:relay.example.test:5349",
+            turnUsername = "saved-user",
+            turnPassword = "saved-password",
+        )
+
+        val config = room.toWebRtcConfigResult().getOrThrow()
+
+        assertEquals(
+            listOf(
+                WebRtcIceServerConfig(urls = listOf(room.stunUrl)),
+                WebRtcIceServerConfig(
+                    urls = listOf(room.turnUrl),
+                    username = room.turnUsername,
+                    password = room.turnPassword,
+                ),
+            ),
+            config.iceServers,
+        )
+    }
+
     @Test
     fun officialRoomBuildsConfigWithOfficialUrlAndHeaders() {
         val previousProvider = WebRtcOfficialGateway.provider
