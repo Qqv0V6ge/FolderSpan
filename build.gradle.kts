@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     // this is necessary to avoid the plugins to be loaded multiple times
     // in each subproject's classloader
@@ -42,4 +44,43 @@ tasks.register<Sync>("prepareDesktopLicenseResources") {
     description = "Prepare readable license files outside desktop application JARs."
     from(prepareLicenseBundle)
     into(layout.buildDirectory.dir("generated/desktop-license-resources/common"))
+}
+
+// Concurrent Test tasks run in separate JVMs; their in-memory staging locks are not shared.
+subprojects {
+    tasks.withType<Test>().configureEach {
+        val stateRoot = layout.buildDirectory.dir("test-user-data/$name").get().asFile
+        val home = stateRoot.resolve("home")
+        val dataHome = home.resolve(".local/share")
+        val cacheHome = home.resolve(".cache")
+        val appData = home.resolve("AppData/Roaming")
+        val localAppData = home.resolve("AppData/Local")
+        val temporary = stateRoot.resolve("tmp")
+        val preferences = stateRoot.resolve("prefs")
+        val systemPreferences = stateRoot.resolve("system-prefs")
+        val requiredDirectories = listOf(
+            home, dataHome, cacheHome, appData, localAppData, temporary, preferences, systemPreferences,
+        )
+
+        systemProperty("user.home", home.absolutePath)
+        systemProperty("java.io.tmpdir", temporary.absolutePath)
+        systemProperty("java.util.prefs.userRoot", preferences.absolutePath)
+        systemProperty("java.util.prefs.systemRoot", systemPreferences.absolutePath)
+        environment("HOME", home.absolutePath)
+        environment("USERPROFILE", home.absolutePath)
+        environment("APPDATA", appData.absolutePath)
+        environment("LOCALAPPDATA", localAppData.absolutePath)
+        environment("XDG_DATA_HOME", dataHome.absolutePath)
+        environment("XDG_CACHE_HOME", cacheHome.absolutePath)
+        environment("TMPDIR", temporary.absolutePath)
+        environment("TMP", temporary.absolutePath)
+        environment("TEMP", temporary.absolutePath)
+        doFirst {
+            requiredDirectories.forEach { directory ->
+                check(directory.isDirectory || directory.mkdirs()) {
+                    "Cannot create isolated test directory: ${directory.absolutePath}"
+                }
+            }
+        }
+    }
 }
