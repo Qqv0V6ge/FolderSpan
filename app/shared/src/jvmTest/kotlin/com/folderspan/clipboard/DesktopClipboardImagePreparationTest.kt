@@ -3,6 +3,9 @@ package com.folderspan.clipboard
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.folderspan.ui.state.file.ExternalFileResourceLeaseRegistry
+import com.folderspan.ui.state.file.ExternalFileSkipReason
+import com.folderspan.ui.state.file.externalFileStagingRootPath
+import com.folderspan.ui.state.file.newExternalFileLeaseId
 import java.awt.Color
 import java.awt.KeyboardFocusManager
 import java.awt.Toolkit
@@ -24,6 +27,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopClipboardImagePreparationTest {
@@ -64,6 +68,55 @@ class DesktopClipboardImagePreparationTest {
         ExternalFileResourceLeaseRegistry.releaseProducer(lease.id)
         leaseId = null
         assertTrue(!File(source.path).exists())
+    }
+
+    @Test
+    fun recoveryKeepsAnImageBeingEncodedAndItsLiveLeaseButRemovesOrphans() = runBlocking {
+        val image = BufferedImage(2, 3, BufferedImage.TYPE_INT_ARGB)
+        val orphanDirectory = File(externalFileStagingRootPath(newExternalFileLeaseId()))
+        val taskKey = -123L
+        try {
+            val batch = prepareDesktopClipboardImage(image, epochMillis = 123L) { buffered, output ->
+                assertTrue(orphanDirectory.mkdirs())
+                // Deterministically reproduce recovery between staging-directory creation and writing.
+                ExternalFileResourceLeaseRegistry.restoreTaskBindings(emptyList())
+                assertTrue(output.parentFile.isDirectory)
+                assertFalse(orphanDirectory.exists())
+                ImageIO.write(buffered, "png", output)
+            }
+            val lease = assertNotNull(batch.lease)
+            leaseId = lease.id
+            val output = File(batch.files.single().path)
+            assertEquals(2, assertNotNull(ImageIO.read(output)).width)
+
+            ExternalFileResourceLeaseRegistry.restoreTaskBindings(emptyList())
+            assertTrue(output.isFile, "recovery must retain a producer-owned image")
+            ExternalFileResourceLeaseRegistry.bindTasks(lease, listOf(taskKey))
+            ExternalFileResourceLeaseRegistry.restoreTaskBindings(emptyList())
+            assertTrue(output.isFile, "recovery must retain an image held by another live task")
+
+            ExternalFileResourceLeaseRegistry.releaseTask(taskKey)
+            leaseId = null
+            assertFalse(output.exists(), "the final task release must still clean up the image")
+        } finally {
+            ExternalFileResourceLeaseRegistry.releaseTask(taskKey)
+            orphanDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun failedImageEncodingReleasesItsStagingDirectory() = runBlocking {
+        var stagingDirectory: File? = null
+        val batch = prepareDesktopClipboardImage(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)) { _, output ->
+            stagingDirectory = output.parentFile
+            assertTrue(output.parentFile.isDirectory)
+            false
+        }
+
+        assertTrue(batch.files.isEmpty())
+        assertNull(batch.lease)
+        assertEquals(ExternalFileSkipReason.Unreadable, batch.skipped.single().reason)
+        assertFalse(assertNotNull(stagingDirectory).exists())
     }
 
     @Test
