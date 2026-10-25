@@ -1,11 +1,5 @@
 package com.folderspan.service.webrtc.models
 
-private const val DEFAULT_WEBRTC_ICE_HOST = "119.91.209.238"
-
-const val DEFAULT_WEBRTC_STUN_URL = "stun:$DEFAULT_WEBRTC_ICE_HOST:3478"
-const val DEFAULT_WEBRTC_TURN_URL = "turn:$DEFAULT_WEBRTC_ICE_HOST:3478"
-const val DEFAULT_WEBRTC_TURN_USERNAME = "folderspan"
-
 data class WebRtcIceServerConfig(
     val urls: List<String>,
     val username: String = "",
@@ -18,7 +12,7 @@ internal data class WebRtcIceServerAttempt(
 )
 
 fun buildWebRtcIceServers(
-    stunUrl: String = DEFAULT_WEBRTC_STUN_URL,
+    stunUrl: String = "",
     turnUrl: String = "",
     turnUsername: String = "",
     turnPassword: String = "",
