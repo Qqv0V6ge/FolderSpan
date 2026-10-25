@@ -66,6 +66,7 @@ internal suspend fun prepareDesktopClipboardTransferable(transferable: Transfera
 internal suspend fun prepareDesktopClipboardImage(
     image: Image,
     epochMillis: Long = Clock.System.now().toEpochMilliseconds(),
+    encodePng: (BufferedImage, File) -> Boolean = { buffered, output -> ImageIO.write(buffered, "png", output) },
 ): PreparedExternalFileBatch {
     val bufferedImage = image.toBufferedImage() ?: return PreparedExternalFileBatch(
         skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable)),
@@ -76,36 +77,47 @@ internal suspend fun prepareDesktopClipboardImage(
     val rootDirectory = File(rootPath)
     val fileName = clipboardImageFileName(epochMillis) ?: return PreparedExternalFileBatch()
     val outputFile = File(rootDirectory, fileName)
-    val written = runCatching {
-        (rootDirectory.mkdirs() || rootDirectory.isDirectory) &&
-            restrictOwnerOnlyDirectory(rootDirectory) &&
-            ImageIO.write(bufferedImage, "png", outputFile) &&
-            restrictOwnerOnlyFile(outputFile)
-    }.getOrDefault(false)
-    if (!written) {
-        rootDirectory.deleteRecursively()
-        return PreparedExternalFileBatch(
-            skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable, fileName)),
-            representedItemCount = 1,
-        )
-    }
-    val source = FileUtils.getFile(FileAccessPermission.Allowed, outputFile.absolutePath)
-        .getOrNull()
-        ?.withCopy(protocol = FileProtocol.Local, protocolId = "")
-    if (source == null) {
-        rootDirectory.deleteRecursively()
-        return PreparedExternalFileBatch(
-            skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable, fileName)),
-            representedItemCount = 1,
-        )
-    }
     val lease = ExternalFileResourceLease(leaseId, rootPath)
-    ExternalFileResourceLeaseRegistry.register(lease)
-    return buildPreparedExternalFileBatch(
-        files = listOf(source),
-        lease = lease,
-        representedItemCount = 1,
-    )
+    // Recovery may run while ImageIO is encoding. Reserve the root before it becomes visible on disk.
+    if (!ExternalFileResourceLeaseRegistry.register(lease)) {
+        return PreparedExternalFileBatch(
+            skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable, fileName)),
+            representedItemCount = 1,
+        )
+    }
+    var prepared = false
+    try {
+        val written = runCatching {
+            (rootDirectory.mkdirs() || rootDirectory.isDirectory) &&
+                restrictOwnerOnlyDirectory(rootDirectory) &&
+                encodePng(bufferedImage, outputFile) &&
+                restrictOwnerOnlyFile(outputFile)
+        }.getOrDefault(false)
+        if (!written) {
+            return PreparedExternalFileBatch(
+                skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable, fileName)),
+                representedItemCount = 1,
+            )
+        }
+        val source = FileUtils.getFile(FileAccessPermission.Allowed, outputFile.absolutePath)
+            .getOrNull()
+            ?.withCopy(protocol = FileProtocol.Local, protocolId = "")
+        if (source == null) {
+            return PreparedExternalFileBatch(
+                skipped = listOf(ExternalFileSkip(ExternalFileSkipReason.Unreadable, fileName)),
+                representedItemCount = 1,
+            )
+        }
+        val batch = buildPreparedExternalFileBatch(
+            files = listOf(source),
+            lease = lease,
+            representedItemCount = 1,
+        )
+        prepared = true
+        return batch
+    } finally {
+        if (!prepared) ExternalFileResourceLeaseRegistry.releaseProducer(leaseId)
+    }
 }
 
 private fun restrictOwnerOnlyDirectory(directory: File): Boolean {
