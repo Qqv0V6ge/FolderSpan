@@ -29,6 +29,9 @@ kotlin {
         val webMain = getByName("webMain")
 
         webMain.resources.srcDir(rootProject.file("core/src/commonMain/composeResources/files/share-file"))
+        if (rootProject.findProject(":proMain") == null) {
+            webMain.resources.srcDir(rootProject.tasks.named("prepareLicenseBundle"))
+        }
 
         commonMain.dependencies {
             implementation(projects.app.shared)
@@ -87,8 +90,8 @@ tasks.register<Copy>("copySqlJsRuntimeToJsResources") {
 
 tasks.register<Copy>("copySqlJsRuntimeToWasmJsResources") {
     description = "Copies the SQL.js runtime into the WasmJS processed resources."
-    dependsOn(":kotlinWasmNpmInstall")
-    from(rootProject.layout.buildDirectory.dir("wasm/node_modules/sql.js/dist")) {
+    // Use the checked-in 1.8.0 runtime, matching this target's worker and license source.
+    from(rootProject.file("app/shared/src/wasmJsMain/resources")) {
         include(sqlJsRuntimeFiles)
     }
     into(layout.buildDirectory.dir("processedResources/wasmJs/main"))

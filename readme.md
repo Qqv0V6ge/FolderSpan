@@ -140,6 +140,10 @@ Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
 | `app/webApp/` | JavaScript 与 WebAssembly 浏览器入口。 |
 | `app/headlessRuntime/` | 无窗口运行时，为 Web 界面提供宿主文件与连接能力。 |
 
+## 开源许可
+
+普通版（`no-pro`）的自有代码采用 [Apache-2.0](LICENSE)。第三方组件保留各自许可，详见 [许可范围](LICENSING.md) 和 [第三方声明](THIRD_PARTY_NOTICES.txt)。独立的 `proMain` 子模块不在普通版授权范围内。
+
 ## 问题反馈
 
 遇到问题或有改进建议，请提交 [GitHub Issue](https://github.com/Qqv0V6ge/FolderSpan/issues)。建议提供应用版本、操作系统、使用的平台或安装包类型、复现步骤，以及必要的截图或日志。

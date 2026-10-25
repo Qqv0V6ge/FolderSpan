@@ -1,0 +1,45 @@
+// ------------------------------------------------------------------
+// Transitive dependencies of this project determined from the
+// maven pom organized by organization.
+// ------------------------------------------------------------------
+
+Apache MINA SSHD
+
+
+From: 'an unknown organization'
+
+  - Bouncy Castle OpenPGP APIs (https://www.bouncycastle.org/download/bouncy-castle-java/) org.bouncycastle:bcpg-jdk18on:jar:1.84
+    License: Bouncy Castle Licence  (https://www.bouncycastle.org/licence.html)
+    License: Apache Software License, Version 2.0  (https://www.apache.org/licenses/LICENSE-2.0)
+
+  - Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs (https://www.bouncycastle.org/download/bouncy-castle-java/) org.bouncycastle:bcpkix-jdk18on:jar:1.84
+    License: Bouncy Castle Licence  (https://www.bouncycastle.org/licence.html)
+
+  - Bouncy Castle Provider (https://www.bouncycastle.org/download/bouncy-castle-java/) org.bouncycastle:bcprov-jdk18on:jar:1.84
+    License: Bouncy Castle Licence  (https://www.bouncycastle.org/licence.html)
+
+  - Bouncy Castle ASN.1 Extension and Utility APIs (https://www.bouncycastle.org/download/bouncy-castle-java/) org.bouncycastle:bcutil-jdk18on:jar:1.84
+    License: Bouncy Castle Licence  (https://www.bouncycastle.org/licence.html)
+
+
+From: 'QOS.ch' (http://www.qos.ch)
+
+  - JCL 1.2 implemented over SLF4J (http://www.slf4j.org) org.slf4j:jcl-over-slf4j:jar:1.7.36
+    License: Apache License, Version 2.0  (https://www.apache.org/licenses/LICENSE-2.0.txt)
+
+
+From: 'Simple Logging Facade for Java' (https://www.slf4j.org/)
+
+  - SLF4J API Module (http://www.slf4j.org/slf4j-api) org.slf4j:slf4j-api:jar:1.7.36:compile
+    License: MIT style  (http://www.slf4j.org/license.html)
+
+
+From: 'str4d' (https://github.com/str4d/ed25519-java)
+
+  - ed25519-java (https://github.com/str4d/ed25519-java/eddsa) net.i2p.crypto:eddsa:jar:0.3.0:compile
+    License: Creative Commons  (https://github.com/str4d/ed25519-java/blob/master/LICENSE.txt)
+
+
+
+
+

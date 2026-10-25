@@ -1,0 +1,1184 @@
+{
+  "schema_version": 1,
+  "prepared_date": "2026-10-21",
+  "scope": "Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.",
+  "maven_inventory_source": "third-party/maven/components.csv",
+  "maven_components": 555,
+  "texts": [
+    {
+      "file": "LICENSE",
+      "name": "Apache License 2.0 official text",
+      "source_url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "applies_to": "FolderSpan standard-edition original code and components distributed under Apache-2.0"
+    },
+    {
+      "file": "third-party/maven/notice-texts/07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1.txt",
+      "name": "net.java.dev.jna:jna:5.19.0 — META-INF/LICENSE",
+      "source_url": "Maven runtime archive jna-5.19.0.jar (SHA-256 f05122f39e2fd8aa1bfbdb2b0306034e2b20dc92817eba119f8c0c2f3399bf3a)",
+      "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/0e01f1549c9022f406392ac2947d32223b7c2e977d21ea2f8c182fdeb4dae5fd.txt",
+      "name": "org.bouncycastle:bcpkix-jdk18on:1.85 / org.bouncycastle:bcprov-jdk18on:1.85.2 / org.bouncycastle:bcutil-jdk18on:1.85 — META-INF/LICENSE.md",
+      "source_url": "Maven runtime archive bcpkix-jdk18on-1.85.jar (SHA-256 c9f82b2d4e99c4bbdfccf684e52cc06ea06a0b567bfd0d08f9c5a3f417055996)",
+      "sha256": "0e01f1549c9022f406392ac2947d32223b7c2e977d21ea2f8c182fdeb4dae5fd",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/12c1b285f7169af1def766f15eb7acb132fb964db65ae21cd4253dc598b2de1a.txt",
+      "name": "org.apache.sshd:sshd-core:2.19.0 — META-INF/NOTICE",
+      "source_url": "Maven runtime archive sshd-core-2.19.0.jar (SHA-256 7215350bf71d95a34494f823a7451f966a2995b59e99fdf8ee9cbd63ef78cdb3)",
+      "sha256": "12c1b285f7169af1def766f15eb7acb132fb964db65ae21cd4253dc598b2de1a",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/26c782d6fa32fa92bd4d0f81b0520c8d26664bb69f62394c3ad5ed0d344dcdad.txt",
+      "name": "org.apache.sshd:sshd-sftp:2.19.0 — META-INF/DEPENDENCIES",
+      "source_url": "Maven runtime archive sshd-sftp-2.19.0.jar (SHA-256 a3ad30d2feba9fad589c7ad9117fcd9d332823697d59eb424fe2902f4d805575)",
+      "sha256": "26c782d6fa32fa92bd4d0f81b0520c8d26664bb69f62394c3ad5ed0d344dcdad",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5.txt",
+      "name": "org.xerial:sqlite-jdbc:3.53.4.0 — META-INF/maven/org.xerial/sqlite-jdbc/LICENSE",
+      "source_url": "Maven runtime archive sqlite-jdbc-3.53.4.0.jar (SHA-256 bcb1f51e36f940867e83342f9efbf5968ac44a6bef4d397bb4af7b17b45cd2fb)",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "applies_to": ":app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/4e971d2bed7ee16d312dc7b4e91ebb2522ceb7d3c96c4352f937aeddbd8d650f.txt",
+      "name": "org.apache.sshd:sshd-core:2.19.0 — META-INF/DEPENDENCIES",
+      "source_url": "Maven runtime archive sshd-core-2.19.0.jar (SHA-256 7215350bf71d95a34494f823a7451f966a2995b59e99fdf8ee9cbd63ef78cdb3)",
+      "sha256": "4e971d2bed7ee16d312dc7b4e91ebb2522ceb7d3c96c4352f937aeddbd8d650f",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/521bb271ac56e0e29a1b1b688b94af17d00d378fc8e63478d8c8b2a7c4a229d0.txt",
+      "name": "net.java.dev.jna:jna-platform:5.14.0 — META-INF/LICENSE",
+      "source_url": "Maven runtime archive jna-platform-5.14.0.jar (SHA-256 ae4caceb3840730c2537f9b7fb55a01baba580286b4122951488bcee558c2449)",
+      "sha256": "521bb271ac56e0e29a1b1b688b94af17d00d378fc8e63478d8c8b2a7c4a229d0",
+      "applies_to": ":app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/6632f550c207be8d7d6b5e87f5d7b905bee218d18392d531df457bf60bec1447.txt",
+      "name": "org.slf4j:slf4j-api:2.0.19 — META-INF/LICENSE.txt",
+      "source_url": "Maven runtime archive slf4j-api-2.0.19.jar (SHA-256 e91ff6d720609e7a194ffe758c3ed5c84e798617ae07b0a0f6a4fe229741b4bb)",
+      "sha256": "6632f550c207be8d7d6b5e87f5d7b905bee218d18392d531df457bf60bec1447",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/7a7ea809a1a58b1128c005f73b96345da119533d2c17d80b36d9f40fa1c7a9f9.txt",
+      "name": "org.apache.sshd:sshd-common:2.19.0 / org.apache.sshd:sshd-sftp:2.19.0 — META-INF/NOTICE",
+      "source_url": "Maven runtime archive sshd-common-2.19.0.jar (SHA-256 41cef234f894e435ae2141e24baa25baf238a273cd28c6bbadcf830b1b2d68cb)",
+      "sha256": "7a7ea809a1a58b1128c005f73b96345da119533d2c17d80b36d9f40fa1c7a9f9",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/809fa1ed21450f59827d1e9aec720bbc4b687434fa22283c6cb5dd82a47ab9c0.txt",
+      "name": "androidx.activity:activity-compose:1.13.0 / androidx.activity:activity-ktx:1.13.0 / androidx.activity:activity:1.13.0 / androidx.annotation:annotation-jvm:1.10.0 / androidx.annotation:annotation-jvm:1.9.1 / androidx.collection:collection-jvm:1.5.0 / androidx.collection:collection-ktx:1.5.0 / androidx.compose.animation:animation-android:1.12.1 / androidx.compose.animation:animation-core-android:1.12.1 / androidx.compose.foundation:foundation-android:1.12.1 / androidx.compose.foundation:foundation-layout-android:1.12.1 / androidx.compose.material3:material3-android:1.5.0-alpha22 / androidx.compose.material3:material3-window-size-class-android:1.5.0-alpha22 / androidx.compose.material:material-ripple-android:1.12.0-beta01 / androidx.compose.runtime:runtime-android:1.12.1 / androidx.compose.runtime:runtime-annotation-android:1.12.1 / androidx.compose.runtime:runtime-annotation-jvm:1.12.1 / androidx.compose.runtime:runtime-desktop:1.12.1 / androidx.compose.runtime:runtime-retain-android:1.12.1 / androidx.compose.runtime:runtime-retain-desktop:1.12.1 / androidx.compose.runtime:runtime-saveable-android:1.12.1 / androidx.compose.runtime:runtime-saveable-desktop:1.12.1 / androidx.compose.ui:ui-android:1.12.1 / androidx.compose.ui:ui-geometry-android:1.12.1 / androidx.compose.ui:ui-graphics-android:1.12.1 / androidx.compose.ui:ui-text-android:1.12.1 / androidx.compose.ui:ui-tooling-preview-android:1.12.1 / androidx.compose.ui:ui-unit-android:1.12.1 / androidx.compose.ui:ui-util-android:1.12.1 / androidx.constraintlayout:constraintlayout-core:1.1.1 / androidx.constraintlayout:constraintlayout:2.2.1 / androidx.core:core-ktx:1.19.1 / androidx.core:core-viewtree:1.0.0 / androidx.core:core:1.19.1 / androidx.customview:customview:1.2.0 / androidx.datastore:datastore-android:1.2.1 / androidx.datastore:datastore-core-android:1.2.1 / androidx.datastore:datastore-core-okio-jvm:1.2.1 / androidx.datastore:datastore-preferences-android:1.2.1 / androidx.datastore:datastore-preferences-core-android:1.2.1 / androidx.datastore:datastore-preferences-proto:1.2.1 / androidx.dynamicanimation:dynamicanimation:1.1.0 / androidx.graphics:graphics-shapes-android:1.1.0 / androidx.graphics:graphics-shapes-desktop:1.1.0 / androidx.lifecycle:lifecycle-common-java8:2.11.0 / androidx.lifecycle:lifecycle-common-jvm:2.11.0 / androidx.lifecycle:lifecycle-livedata-core-ktx:2.11.0 / androidx.lifecycle:lifecycle-livedata-core:2.11.0 / androidx.lifecycle:lifecycle-livedata:2.11.0 / androidx.lifecycle:lifecycle-process:2.11.0 / androidx.lifecycle:lifecycle-runtime-android:2.11.0 / androidx.lifecycle:lifecycle-runtime-compose-android:2.11.0 / androidx.lifecycle:lifecycle-runtime-compose-desktop:2.11.0 / androidx.lifecycle:lifecycle-runtime-desktop:2.11.0 / androidx.lifecycle:lifecycle-runtime-ktx-android:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-android:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-compose-android:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-compose-desktop:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-desktop:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.11.0 / androidx.lifecycle:lifecycle-viewmodel-savedstate-desktop:2.11.0 / androidx.lifecycle:lifecycle-viewmodel:2.11.0 / androidx.navigation3:navigation3-runtime-android:1.2.0 / androidx.navigation3:navigation3-runtime-desktop:1.2.0 / androidx.navigation3:navigation3-ui-android:1.2.0 / androidx.navigationevent:navigationevent-android:1.1.1 / androidx.navigationevent:navigationevent-compose-android:1.1.1 / androidx.navigationevent:navigationevent-compose-desktop:1.1.1 / androidx.navigationevent:navigationevent-desktop:1.1.1 / androidx.paging:paging-common-android:3.5.3 / androidx.paging:paging-common-desktop:3.5.3 / androidx.paging:paging-compose-android:3.5.3 / androidx.paging:paging-compose-desktop:3.5.3 / androidx.profileinstaller:profileinstaller:1.4.0 / androidx.savedstate:savedstate-android:1.4.0 / androidx.savedstate:savedstate-compose-android:1.4.0 / androidx.savedstate:savedstate-compose-desktop:1.4.0 / androidx.savedstate:savedstate-desktop:1.4.0 / androidx.savedstate:savedstate-ktx:1.4.0 / androidx.sqlite:sqlite-android:2.7.1 / androidx.sqlite:sqlite-framework-android:2.7.1 / androidx.startup:startup-runtime:1.2.0 / androidx.window:window-core-android:1.5.0 / androidx.window:window:1.5.0 / org.jetbrains.androidx.lifecycle:lifecycle-common-jvm:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-runtime-android:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose-android:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose-desktop:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-runtime-desktop:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-android:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose-android:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose-desktop:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-desktop:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.11.0 / org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate-desktop:2.11.0 / org.jetbrains.androidx.navigation3:navigation3-ui-android:1.1.2 / org.jetbrains.androidx.navigation3:navigation3-ui-desktop:1.1.2 / org.jetbrains.androidx.navigationevent:navigationevent-compose-desktop:1.1.0 / org.jetbrains.compose.animation:animation-android:1.12.1 / org.jetbrains.compose.animation:animation-core-android:1.12.1 / org.jetbrains.compose.animation:animation-core-desktop:1.12.1 / org.jetbrains.compose.animation:animation-desktop:1.12.1 / org.jetbrains.compose.desktop:desktop-jvm:1.12.1 / org.jetbrains.compose.foundation:foundation-android:1.12.1 / org.jetbrains.compose.foundation:foundation-desktop:1.12.1 / org.jetbrains.compose.foundation:foundation-layout-android:1.12.1 / org.jetbrains.compose.foundation:foundation-layout-desktop:1.12.1 / org.jetbrains.compose.material3:material3-android:1.12.0-alpha03 / org.jetbrains.compose.material3:material3-desktop:1.12.0-alpha03 / org.jetbrains.compose.material3:material3-window-size-class-android:1.12.0-alpha03 / org.jetbrains.compose.material3:material3-window-size-class-desktop:1.12.0-alpha03 / org.jetbrains.compose.material:material-desktop:1.12.1 / org.jetbrains.compose.material:material-ripple-android:1.12.0-beta01 / org.jetbrains.compose.material:material-ripple-desktop:1.12.1 / org.jetbrains.compose.runtime:runtime-android:1.12.1 / org.jetbrains.compose.runtime:runtime-desktop:1.12.1 / org.jetbrains.compose.runtime:runtime-saveable-android:1.12.1 / org.jetbrains.compose.runtime:runtime-saveable-desktop:1.12.1 / org.jetbrains.compose.ui:ui-android:1.12.1 / org.jetbrains.compose.ui:ui-backhandler-desktop:1.12.1 / org.jetbrains.compose.ui:ui-desktop:1.12.1 / org.jetbrains.compose.ui:ui-geometry-android:1.12.1 / org.jetbrains.compose.ui:ui-geometry-desktop:1.12.1 / org.jetbrains.compose.ui:ui-graphics-android:1.12.1 / org.jetbrains.compose.ui:ui-graphics-desktop:1.12.1 / org.jetbrains.compose.ui:ui-text-android:1.12.1 / org.jetbrains.compose.ui:ui-text-desktop:1.12.1 / org.jetbrains.compose.ui:ui-tooling-preview-android:1.12.1 / org.jetbrains.compose.ui:ui-tooling-preview-desktop:1.12.1 / org.jetbrains.compose.ui:ui-unit-android:1.12.1 / org.jetbrains.compose.ui:ui-unit-desktop:1.12.1 / org.jetbrains.compose.ui:ui-util-android:1.12.1 / org.jetbrains.compose.ui:ui-util-desktop:1.12.1 — META-INF/androidx/annotation/annotation/LICENSE.txt",
+      "source_url": "Maven runtime archive annotation-jvm-1.9.1.jar (SHA-256 1e343917ebf27ba96fe4dc52b1cad7fd32b738fbc6355bb6cd5b3b305d7212d0)",
+      "sha256": "809fa1ed21450f59827d1e9aec720bbc4b687434fa22283c6cb5dd82a47ab9c0",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/89167dab92289c7e5e2b65b044f0856b703d05e5d5e35c3548e73d9c7d2f5048.txt",
+      "name": "org.xerial:sqlite-jdbc:3.53.4.0 — META-INF/maven/org.xerial/sqlite-jdbc/LICENSE.zentus",
+      "source_url": "Maven runtime archive sqlite-jdbc-3.53.4.0.jar (SHA-256 bcb1f51e36f940867e83342f9efbf5968ac44a6bef4d397bb4af7b17b45cd2fb)",
+      "sha256": "89167dab92289c7e5e2b65b044f0856b703d05e5d5e35c3548e73d9c7d2f5048",
+      "applies_to": ":app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/8a9c58fbded5ea3474315e4a9824ca8b1486098a1a03e897e0b19419d5e1876a.txt",
+      "name": "com.squareup.okhttp3:okhttp:4.12.0 — okhttp3/internal/publicsuffix/NOTICE",
+      "source_url": "Maven runtime archive okhttp-4.12.0.jar (SHA-256 b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0)",
+      "sha256": "8a9c58fbded5ea3474315e4a9824ca8b1486098a1a03e897e0b19419d5e1876a",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/a01b712fbb30f80b86851468b6fa58e80eab68f69f325e88bbc7ddf47cf1b063.txt",
+      "name": "androidx.datastore:datastore-preferences-external-protobuf:1.2.1 — META-INF/androidx/datastore/datastore-preferences-external-protobuf/LICENSE.txt",
+      "source_url": "Maven runtime archive datastore-preferences-external-protobuf-1.2.1.jar (SHA-256 4f09ba7fca2a073a5c5527a9b637582b93e262c2b6a89977c584d28cea838ebc)",
+      "sha256": "a01b712fbb30f80b86851468b6fa58e80eab68f69f325e88bbc7ddf47cf1b063",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7.txt",
+      "name": "commons-net:commons-net:3.13.0 — META-INF/LICENSE.txt",
+      "source_url": "Maven runtime archive commons-net-3.13.0.jar (SHA-256 9e88444afadc9467f0bf3d328f93b9538da35a9be05cdee430766e64fddbd6c5)",
+      "sha256": "b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/b54b0db6c617273efff79ba193bb01b05eadcddfff55c24063b38b2acef714c3.txt",
+      "name": "commons-io:commons-io:2.21.0 — META-INF/NOTICE.txt",
+      "source_url": "Maven runtime archive commons-io-2.21.0.jar (SHA-256 7d643a2afea8b058b762aa6fb90e5b256f6c729739f8b3784c3370ddc609e88d)",
+      "sha256": "b54b0db6c617273efff79ba193bb01b05eadcddfff55c24063b38b2acef714c3",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/c1d1a38c99c48ccad170890ade6066e2e240bb6ce59861d4eb7f672eddd2a4c6.txt",
+      "name": "commons-io:commons-io:2.21.0 — META-INF/LICENSE.txt",
+      "source_url": "Maven runtime archive commons-io-2.21.0.jar (SHA-256 7d643a2afea8b058b762aa6fb90e5b256f6c729739f8b3784c3370ddc609e88d)",
+      "sha256": "c1d1a38c99c48ccad170890ade6066e2e240bb6ce59861d4eb7f672eddd2a4c6",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30.txt",
+      "name": "org.apache.sshd:sshd-common:2.19.0 / org.apache.sshd:sshd-core:2.19.0 / org.apache.sshd:sshd-sftp:2.19.0 — META-INF/LICENSE",
+      "source_url": "Maven runtime archive sshd-common-2.19.0.jar (SHA-256 41cef234f894e435ae2141e24baa25baf238a273cd28c6bbadcf830b1b2d68cb)",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/e9908dc2340f297721b2152dd9439d124f386c77b83f2abc527973d6c4a2d5e9.txt",
+      "name": "org.apache.sshd:sshd-common:2.19.0 — META-INF/DEPENDENCIES",
+      "source_url": "Maven runtime archive sshd-common-2.19.0.jar (SHA-256 41cef234f894e435ae2141e24baa25baf238a273cd28c6bbadcf830b1b2d68cb)",
+      "sha256": "e9908dc2340f297721b2152dd9439d124f386c77b83f2abc527973d6c4a2d5e9",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/notice-texts/edc84ec4795f0a14adc26133c0481bb50bc1ca9517252bf19afa8265da2432ba.txt",
+      "name": "commons-net:commons-net:3.13.0 — META-INF/NOTICE.txt",
+      "source_url": "Maven runtime archive commons-net-3.13.0.jar (SHA-256 9e88444afadc9467f0bf3d328f93b9538da35a9be05cdee430766e64fddbd6c5)",
+      "sha256": "edc84ec4795f0a14adc26133c0481bb50bc1ca9517252bf19afa8265da2432ba",
+      "applies_to": ":app:androidApp:releaseRuntimeClasspath; :app:desktopApp:runtimeClasspath"
+    },
+    {
+      "file": "third-party/maven/licenses/colormath.txt",
+      "name": "colormath",
+      "source_url": "https://raw.githubusercontent.com/ajalt/colormath/3.6.1/LICENSE",
+      "sha256": "ab1cd8a3d0e92e1f69e95e8ca839127c52d4bd32fa2824d683d0dc66cc8fe21f",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/compose-settings.txt",
+      "name": "compose-settings",
+      "source_url": "https://raw.githubusercontent.com/alorma/Compose-Settings/3.2.0/LICENSE",
+      "sha256": "9e6819350907d4fcd319d99e1e82819788706647b6b882f926681eef5ea63d0d",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/materialkolor.txt",
+      "name": "materialkolor",
+      "source_url": "https://raw.githubusercontent.com/jordond/MaterialKolor/5.0.1/LICENSE",
+      "sha256": "8c6e9406804f46a424c033510a28d02c64a0d94862a27c71af231a91cc1504d3",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/nucleus-2.5.18.txt",
+      "name": "nucleus-2.5.18",
+      "source_url": "https://raw.githubusercontent.com/NucleusFramework/Nucleus/v2.5.18/LICENSE",
+      "sha256": "4d4ebaa732afbe7f9d1c9e932db0ed75662471f53786c8c2bf38353927f62a54",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/nucleus-1.12.0.txt",
+      "name": "nucleus-1.12.0",
+      "source_url": "https://raw.githubusercontent.com/kdroidFilter/Nucleus/v1.12.0/LICENSE",
+      "sha256": "6381573681eaf927c04185acf8a3fd73399f4e3bdd7e827ddd5adda5fc12d541",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/qrcode-kotlin.txt",
+      "name": "qrcode-kotlin",
+      "source_url": "https://raw.githubusercontent.com/g0dkar/qrcode-kotlin/v4.5.0/LICENSE",
+      "sha256": "b13b37465b05419dc9cfa79b78cd24dff358ef164f46accf61b5c585a6ceae95",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/compose-native-tray.txt",
+      "name": "compose-native-tray",
+      "source_url": "https://raw.githubusercontent.com/kdroidFilter/ComposeNativeTray/v1.3.3/LICENSE",
+      "sha256": "b32a717d33722ec615137570a5c90f63cb4a75ef9b9a789f48796f8982566a92",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/image-loader.txt",
+      "name": "image-loader",
+      "source_url": "https://raw.githubusercontent.com/qdsfdhvh/compose-imageLoader/1.10.0/LICENSE",
+      "sha256": "e3b160ea3356571f628bd50509e28c25016c20c5fcaf6784c5d77bbb35a4a422",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/icu4j.txt",
+      "name": "icu4j",
+      "source_url": "https://raw.githubusercontent.com/unicode-org/icu/release-77-1/LICENSE",
+      "sha256": "451167c55c0fa447cc2d5632714f5e3c567fe4f1e1badefab2c1333852198aca",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/bouncycastle-bcprov-1.85.2.txt",
+      "name": "bouncycastle-bcprov-1.85.2",
+      "source_url": "https://repo.maven.apache.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2-sources.jar",
+      "sha256": "0e01f1549c9022f406392ac2947d32223b7c2e977d21ea2f8c182fdeb4dae5fd",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/MPL-2.0.txt",
+      "name": "okhttp-publicsuffix-mpl",
+      "source_url": "https://www.mozilla.org/media/MPL/2.0/index.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+      "applies_to": "Exact declared upstream version or license standard"
+    },
+    {
+      "file": "third-party/maven/licenses/korlibs-upstream.txt",
+      "name": "korlibs-upstream",
+      "source_url": "https://raw.githubusercontent.com/korlibs/korge-korlibs/94e645c59f3c54a268cba01d566e0a0b4654207a/LICENSE",
+      "sha256": "1c09bbf5115c4ec6859952af5271628e813f1a04e4bb16de63dbbc44c279ea3a",
+      "applies_to": "exact-version POM explicitly links to upstream main/LICENSE; retrieved pinned upstream snapshot, not an invented release tag"
+    },
+    {
+      "file": "third-party/maven/licenses/shizuku-api.txt",
+      "name": "shizuku-api",
+      "source_url": "https://raw.githubusercontent.com/RikkaApps/Shizuku-API/a27f6e4151ba7b39965ca47edb2bf0aeed7102e5/LICENSE",
+      "sha256": "64870037f294b6f2b75c8ebe77cc0702acb3b64f86b4b0e58bf8558525303686",
+      "applies_to": "exact-version POM explicitly links to upstream master/LICENSE; retrieved pinned upstream snapshot; no 13.1.5 tag exists"
+    },
+    {
+      "file": "third-party/maven/licenses/platformtools.txt",
+      "name": "platformtools",
+      "source_url": "https://raw.githubusercontent.com/kdroidFilter/Platform-Tools/v0.7.5/LICENSE",
+      "sha256": "9a941439f4e21198b695da7bea628541f52e754a6400c27ab5466dbd2351b159",
+      "applies_to": "exact official v0.7.5 tag; old POM repository name lacks hyphen"
+    },
+    {
+      "file": "third-party/maven/licenses/mbassador.txt",
+      "name": "mbassador",
+      "source_url": "https://raw.githubusercontent.com/bennidi/mbassador/bbe428ffe42ee06a104b3b349a78c8fd309bd420/LICENSE",
+      "sha256": "ab2654d8c44f6816b82afa9c45bd79a5b203b7b08634a67a95d02b26aa9a7fec",
+      "applies_to": "POM declares MIT; official repository root license, pinned snapshot; POM SCM tag is stale and no 1.3.2 tag exists"
+    },
+    {
+      "file": "third-party/maven/external-texts/streamsaver-2.0.5/LICENSE",
+      "name": "StreamSaver 2.0.5",
+      "source_url": "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz",
+      "sha256": "798a0512f56a1ea0b3c2e7cb0c25ab703f90e0417e4ecad88014e4b1fd1b2b16",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/StreamSaver.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/sw.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/mitm.html"
+    },
+    {
+      "file": "third-party/maven/external-texts/fflate-0.8.1/LICENSE",
+      "name": "fflate 0.8.1",
+      "source_url": "https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz",
+      "sha256": "805f6cb28bb8b6d3a0badd83c93bccd9671fa01a3b4b92b7042b0743325ac243",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/workers/fflate.min.js"
+    },
+    {
+      "file": "third-party/maven/external-texts/sql.js-1.8.0/LICENSE",
+      "name": "sql.js 1.8.0",
+      "source_url": "https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz",
+      "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+      "applies_to": "app/shared/src/jsMain/resources/sql-wasm.js | app/shared/src/jsMain/resources/sql-wasm.wasm | app/shared/src/wasmJsMain/resources/sql-wasm.js | app/shared/src/wasmJsMain/resources/sql-wasm.wasm；另见app/webApp/build.gradle.kts复制任务"
+    },
+    {
+      "file": "third-party/maven/external-texts/crypto-js-4.2.0/LICENSE",
+      "name": "crypto-js 4.2.0",
+      "source_url": "https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz",
+      "sha256": "f729d14b7e1bf8adca0dcc38b93b929d14d53fcd5db56c3d1c9b2daa7aa69396",
+      "applies_to": "app/shared/build.gradle.kts的jsMain/wasmJsMain npm声明 | core/build.gradle.kts的npm声明及最终Web bundle（待核）"
+    },
+    {
+      "file": "third-party/maven/external-texts/sqldelight-sqljs-worker-2.4.0/LICENSE.txt",
+      "name": "SQLDelight sqljs worker 2.4.0",
+      "source_url": "https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "applies_to": "app/shared/build.gradle.kts | core/build.gradle.kts的npm声明；app/shared/src/jsMain/resources/sqljs.worker.js及app/shared/src/wasmJsMain/resources/sqljs.worker.js精确来源待核"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-5.19.0/LICENSE",
+      "name": "JNA 5.19.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/LICENSE",
+      "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1",
+      "applies_to": "Android JNA依赖与libjnidispatch.so（native版本仍待包映射） | WindowsARM64 app/jna-5.19.0-*.jar"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-5.19.0/AL2.0",
+      "name": "JNA Apache全文 5.19.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/AL2.0",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "applies_to": "JNA5.19.0选择Apache路线时采用"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-5.19.0/LGPL2.1",
+      "name": "JNA LGPL全文 5.19.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/LGPL2.1",
+      "sha256": "eea173a556abac0370461e57e12aab266894ea6be3874c2be05fd87871f75449",
+      "applies_to": "JNA5.19.0选择LGPL路线时采用"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-platform-5.14.0/LICENSE",
+      "name": "JNA-platform 5.14.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.14.0/LICENSE",
+      "sha256": "521bb271ac56e0e29a1b1b688b94af17d00d378fc8e63478d8c8b2a7c4a229d0",
+      "applies_to": "公开WindowsARM64 app/jna-platform-5.14.0-*.jar"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-libffi-from-5.19.0/LICENSE",
+      "name": "libffi（JNA上游内嵌） JNA5.19.0源码内版本；libffi精确提交未确认",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/native/libffi/LICENSE",
+      "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+      "applies_to": "JNA5.19.0内嵌native/libffi；实际libjnidispatch构建仍待映射"
+    },
+    {
+      "file": "third-party/maven/external-texts/skiko-0.150.1/LICENSE",
+      "name": "Skiko 0.150.1",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skiko/v0.150.1/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "applies_to": "公开WindowsARM64 app/skiko-awt-0.150.1-*.jar | skiko-windows-arm64.dll"
+    },
+    {
+      "file": "third-party/maven/external-texts/skiko-0.150.1/NOTICE",
+      "name": "Skiko NOTICE 0.150.1",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skiko/v0.150.1/NOTICE",
+      "sha256": "35dd077c24768b53625101cfcc0ad853ae7e2abc08bd2a111a0267760d1406d8",
+      "applies_to": "公开WindowsARM64 Skiko0.150.1对应内容"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-platform-5.14.0/AL2.0",
+      "name": "JNA-platform AL2.0 5.14.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.14.0/AL2.0",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "applies_to": "公开WindowsARM64 app/jna-platform-5.14.0-*.jar"
+    },
+    {
+      "file": "third-party/maven/external-texts/jna-platform-5.14.0/LGPL2.1",
+      "name": "JNA-platform LGPL2.1 5.14.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.14.0/LGPL2.1",
+      "sha256": "eea173a556abac0370461e57e12aab266894ea6be3874c2be05fd87871f75449",
+      "applies_to": "公开WindowsARM64 app/jna-platform-5.14.0-*.jar"
+    },
+    {
+      "file": "third-party/maven/external-texts/webrtc-java-0.18.0/LICENSE",
+      "name": "webrtc-java主LICENSE 0.18.0",
+      "source_url": "https://raw.githubusercontent.com/devopvoid/webrtc-java/v0.18.0/LICENSE",
+      "sha256": "79eff09fec0be5d711b69223523250fb11f666a7983e986f52c60f47e897e1ac",
+      "applies_to": "core/build.gradle.kts的webrtc-java声明 | 公开WindowsARM64 app/webrtc-java-0.18.0-*.jar；其他桌面native classifier逐包待核"
+    },
+    {
+      "file": "third-party/maven/external-texts/okio-zstd-parent-0.4.0/LICENSE",
+      "name": "okio-zstd封装主LICENSE parent-0.4.0（发布模块0.4.0）",
+      "source_url": "https://raw.githubusercontent.com/square/okio-zstd/parent-0.4.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "applies_to": "APK lib/arm64-v8a/libzstd-kmp.so | 公开WindowsARM64 app/zstd-kmp-jvm-0.4.0-*.jar及zstd-kmp-okio-jvm-0.4.0-*.jar"
+    },
+    {
+      "file": "third-party/maven/external-texts/zstd-1.5.8-1dbc2e09084e843f6c0dcc2d0791610015c50979/LICENSE",
+      "name": "Zstandard固定提交BSD LICENSE 1.5.8；commit1dbc2e09084e843f6c0dcc2d0791610015c50979",
+      "source_url": "https://raw.githubusercontent.com/facebook/zstd/1dbc2e09084e843f6c0dcc2d0791610015c50979/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+      "applies_to": "zstd-kmp0.4.0的上游固定zstd子模块；APK和WindowsARM64 JAR内native的精确源码对应待核"
+    },
+    {
+      "file": "third-party/maven/external-texts/skia-m150-1f14f1166a/LICENSE",
+      "name": "Skia主LICENSE m150-1f14f1166a",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/LICENSE",
+      "sha256": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd",
+      "applies_to": "Skiko0.150.1默认Skia依赖；公开WindowsARM64 app/skiko-windows-arm64.dll内部精确构建映射待核"
+    },
+    {
+      "file": "third-party/maven/licenses/okhttp-publicsuffix-source-availability.txt",
+      "name": "OkHttp public suffix data — source availability",
+      "source_url": "https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0-sources.jar",
+      "sha256": "fd0539c86031ec547c8e98cef9fc4f09121222ef0868e107dcdbd85b4c9dffb6",
+      "applies_to": "OkHttp 4.12.0 MPL-2.0-covered public suffix data"
+    },
+    {
+      "file": "third-party/resources/licenses/streamsaver-2.0.5.LICENSE.txt",
+      "name": "streamsaver — license",
+      "source_url": "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz#package/LICENSE",
+      "sha256": "798a0512f56a1ea0b3c2e7cb0c25ab703f90e0417e4ecad88014e4b1fd1b2b16",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/StreamSaver.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/sw.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/mitm.html"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/streamsaver-2.0.5.LICENSE.txt",
+      "name": "streamsaver — license",
+      "source_url": "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz#package/LICENSE",
+      "sha256": "798a0512f56a1ea0b3c2e7cb0c25ab703f90e0417e4ecad88014e4b1fd1b2b16",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/StreamSaver.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/sw.js | core/src/commonMain/composeResources/files/share-file/static/streamsaver/mitm.html"
+    },
+    {
+      "file": "third-party/resources/licenses/fflate-0.8.1.LICENSE.txt",
+      "name": "fflate — license",
+      "source_url": "https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz#package/LICENSE",
+      "sha256": "805f6cb28bb8b6d3a0badd83c93bccd9671fa01a3b4b92b7042b0743325ac243",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/workers/fflate.min.js"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/fflate-0.8.1.LICENSE.txt",
+      "name": "fflate — license",
+      "source_url": "https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz#package/LICENSE",
+      "sha256": "805f6cb28bb8b6d3a0badd83c93bccd9671fa01a3b4b92b7042b0743325ac243",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/workers/fflate.min.js"
+    },
+    {
+      "file": "third-party/resources/licenses/sql.js-1.8.0.LICENSE.txt",
+      "name": "sqljs — license",
+      "source_url": "https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz#package/LICENSE",
+      "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+      "applies_to": "app/shared/src/jsMain/resources/sql-wasm.js | app/shared/src/jsMain/resources/sql-wasm.wasm | app/shared/src/wasmJsMain/resources/sql-wasm.js | app/shared/src/wasmJsMain/resources/sql-wasm.wasm"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/sql.js-1.8.0.LICENSE.txt",
+      "name": "sqljs — license",
+      "source_url": "https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz#package/LICENSE",
+      "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+      "applies_to": "app/shared/src/jsMain/resources/sql-wasm.js | app/shared/src/jsMain/resources/sql-wasm.wasm | app/shared/src/wasmJsMain/resources/sql-wasm.js | app/shared/src/wasmJsMain/resources/sql-wasm.wasm"
+    },
+    {
+      "file": "third-party/resources/licenses/crypto-js-4.2.0.LICENSE.txt",
+      "name": "crypto-js — license",
+      "source_url": "https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz#package/LICENSE",
+      "sha256": "f729d14b7e1bf8adca0dcc38b93b929d14d53fcd5db56c3d1c9b2daa7aa69396",
+      "applies_to": "app/shared/build.gradle.kts | core/build.gradle.kts"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/crypto-js-4.2.0.LICENSE.txt",
+      "name": "crypto-js — license",
+      "source_url": "https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz#package/LICENSE",
+      "sha256": "f729d14b7e1bf8adca0dcc38b93b929d14d53fcd5db56c3d1c9b2daa7aa69396",
+      "applies_to": "app/shared/build.gradle.kts | core/build.gradle.kts"
+    },
+    {
+      "file": "third-party/resources/licenses/sqldelight-sqljs-worker-2.4.0.LICENSE.txt",
+      "name": "sqldelight-worker — license",
+      "source_url": "https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz#package/LICENSE.txt",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "applies_to": "app/shared/build.gradle.kts | core/build.gradle.kts"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/sqldelight-sqljs-worker-2.4.0.LICENSE.txt",
+      "name": "sqldelight-worker — license",
+      "source_url": "https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz#package/LICENSE.txt",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "applies_to": "app/shared/build.gradle.kts | core/build.gradle.kts"
+    },
+    {
+      "file": "third-party/resources/licenses/material-design-icons.LICENSE.txt",
+      "name": "material-icons — license",
+      "source_url": "https://raw.githubusercontent.com/google/material-design-icons/49d4db35df873165d6bd6ba09b063c7dafbac2f4/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "applies_to": "icon.svg | app/webApp/src/webMain/resources/icon.svg | app/shared/src/commonMain/composeResources/files/icon.svg"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/material-design-icons.LICENSE.txt",
+      "name": "material-icons — license",
+      "source_url": "https://raw.githubusercontent.com/google/material-design-icons/49d4db35df873165d6bd6ba09b063c7dafbac2f4/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "applies_to": "icon.svg | app/webApp/src/webMain/resources/icon.svg | app/shared/src/commonMain/composeResources/files/icon.svg"
+    },
+    {
+      "file": "third-party/resources/licenses/Unicode-3.0.LICENSE.txt",
+      "name": "gbk-cp936 — license",
+      "source_url": "https://www.unicode.org/license.txt",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "applies_to": "core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/editor/UNICODE-LICENSE.txt",
+      "name": "gbk-cp936 — license",
+      "source_url": "https://www.unicode.org/license.txt",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "applies_to": "core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin"
+    },
+    {
+      "file": "third-party/resources/RESOURCE-NOTICES.txt",
+      "name": "identified-web-resources — local_attribution_and_change_note",
+      "source_url": "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz | https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz | https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz | https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz | https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz | https://raw.githubusercontent.com/google/material-design-icons/49d4db35df873165d6bd6ba09b063c7dafbac2f4/LICENSE | https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz",
+      "sha256": "86c0eb4238710221619cbb6b6ced6ca6a5da47947beb40e70e5a8bddae04dfe1",
+      "applies_to": "identified StreamSaver/fflate/sql.js/crypto-js/SQLDelight npm content | Google folder24/hub20 paths | core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/RESOURCE-NOTICES.txt",
+      "name": "identified-web-resources — local_attribution_and_change_note",
+      "source_url": "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz | https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz | https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz | https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz | https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz | https://raw.githubusercontent.com/google/material-design-icons/49d4db35df873165d6bd6ba09b063c7dafbac2f4/LICENSE | https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz",
+      "sha256": "86c0eb4238710221619cbb6b6ced6ca6a5da47947beb40e70e5a8bddae04dfe1",
+      "applies_to": "identified StreamSaver/fflate/sql.js/crypto-js/SQLDelight npm content | Google folder24/hub20 paths | core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/editor/GBK-MAPPING-NOTICE.txt",
+      "name": "gbk-cp936 — local_provenance_and_conversion_note",
+      "source_url": "https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP936.TXT | https://www.unicode.org/copyright.html | https://www.unicode.org/license.txt",
+      "sha256": "018d3eb8bc5b1cfa9f1123cc47b13fa13d7722a25f96a31eb477839a7c9fe2ab",
+      "applies_to": "core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin"
+    },
+    {
+      "file": "third-party/resources/licenses/web-streams-polyfill-2.0.2.LICENSE.txt",
+      "name": "web-streams-polyfill — license",
+      "source_url": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz#package/LICENSE",
+      "sha256": "eab1b4694f42bebfdb5ccc9c4eacc8e5b78d6bad136e48af57010b2b9fdab545",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/web-streams-polyfill-2.0.2.LICENSE.txt",
+      "name": "web-streams-polyfill — license",
+      "source_url": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz#package/LICENSE",
+      "sha256": "eab1b4694f42bebfdb5ccc9c4eacc8e5b78d6bad136e48af57010b2b9fdab545",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js"
+    },
+    {
+      "file": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill-SOURCE.txt",
+      "name": "web-streams-polyfill — local_provenance_and_replacement_note",
+      "source_url": "https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz",
+      "sha256": "280a065a62f04ee92e6b49c6a72d0c9f1e8091647d5dd5d7a9c699b7c51bd764",
+      "applies_to": "core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js"
+    },
+    {
+      "file": "third-party/workers/licenses/sqldelight-sqljs-worker-2.4.0.LICENSE.txt",
+      "name": "SQLDelight SQL.js worker 2.4.0 — upstream Apache-2.0",
+      "source_url": "https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "applies_to": "SQLDelight official reference implementation / separate sql.js runtime; see WORKER-NOTICES for the local worker provenance limits"
+    },
+    {
+      "file": "third-party/workers/licenses/sql.js-1.8.0.LICENSE.txt",
+      "name": "sql.js 1.8.0 — complete upstream MIT text",
+      "source_url": "https://raw.githubusercontent.com/sql-js/sql.js/v1.8.0/LICENSE",
+      "sha256": "60a3f6e4d7b29b4321359e683b36cf198d24f58e24582070f56e6fa89d5ee2be",
+      "applies_to": "SQLDelight official reference implementation / separate sql.js runtime; see WORKER-NOTICES for the local worker provenance limits"
+    },
+    {
+      "file": "third-party/workers/upstream/sql.js-1.8.0/AUTHORS",
+      "name": "sql.js 1.8.0 AUTHORS — referenced by upstream MIT copyright notice",
+      "source_url": "https://raw.githubusercontent.com/sql-js/sql.js/12d3603038879442c7e376eb35b631d68c16d14d/AUTHORS",
+      "sha256": "2bb11c65286bd0f2919022e119671036ff8d85c6cd1522b6ebcc1362e67f2ce5",
+      "applies_to": "Separate sql.js runtime author collection; does not assign authorship of the entire custom FolderSpan worker"
+    },
+    {
+      "file": "third-party/workers/WORKER-NOTICES.txt",
+      "name": "Local SQL.js worker provenance and compatibility note",
+      "source_url": "FolderSpan local source review; official source URLs are included in the notice",
+      "sha256": "9cb3ebba68de85c5a9fbb51105d12833bc7a0142baf13333c1d8bf8f4b2beb22",
+      "applies_to": "JS/WasmJS local worker and separately distributed SQL.js runtime"
+    },
+    {
+      "file": "third-party/native/NATIVE-NOTICE.txt",
+      "name": "Native — NATIVE-NOTICE.txt",
+      "source_url": "See third-party/native/index.csv and bundle-map.json",
+      "sha256": "3ee544d74218201fd8f857ca5fc0138287ba0b442219d87a21358b8cab3cd760",
+      "applies_to": "android; macos-desktop; ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/jna/LICENSE",
+      "name": "Native — licenses/jna/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/LICENSE",
+      "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/jna/AL2.0",
+      "name": "Native — licenses/jna/AL2.0",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/AL2.0",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/jna/native/libffi/LICENSE",
+      "name": "Native — licenses/jna/native/libffi/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/java-native-access/jna/5.19.0/native/libffi/LICENSE",
+      "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/okio-zstd/LICENSE",
+      "name": "Native — licenses/okio-zstd/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/square/okio-zstd/parent-0.4.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/zstd/LICENSE",
+      "name": "Native — licenses/zstd/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/facebook/zstd/1dbc2e09084e843f6c0dcc2d0791610015c50979/LICENSE",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/zstd/xxhash-license-header.txt",
+      "name": "Native — licenses/zstd/xxhash-license-header.txt",
+      "source_url": "https://raw.githubusercontent.com/facebook/zstd/1dbc2e09084e843f6c0dcc2d0791610015c50979/lib/common/xxhash.h",
+      "sha256": "c2840bd10d1cd7a5f5fcff83b1317f18ce45f6f6df243d575a27048ee3aaf190",
+      "applies_to": "android; macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-android/LICENSE",
+      "name": "Native — licenses/webrtc-android/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/webrtc-sdk/android/v125.6422.06.1/LICENSE",
+      "sha256": "e6b282fe6c0fb353928923470457f31b44cbab203effd60c0cde4a5bb96c8aec",
+      "applies_to": "android"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-android/WEBRTC.md",
+      "name": "Native — licenses/webrtc-android/WEBRTC.md",
+      "source_url": "https://raw.githubusercontent.com/webrtc-sdk/android/v125.6422.06.1/Licenses/WEBRTC.md",
+      "sha256": "d1f9382c6878ac024155fd6d44a5977329108bb8b0a01cea40e4a2f1d7de252e",
+      "applies_to": "android"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-java/LICENSE",
+      "name": "Native — licenses/webrtc-java/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/devopvoid/webrtc-java/v0.18.0/LICENSE",
+      "sha256": "79eff09fec0be5d711b69223523250fb11f666a7983e986f52c60f47e897e1ac",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-java/NOTICE",
+      "name": "Native — licenses/webrtc-java/NOTICE",
+      "source_url": "https://raw.githubusercontent.com/devopvoid/webrtc-java/v0.18.0/NOTICE",
+      "sha256": "c406726a379062b5c3b338f684f3adf1a9822797998ccbac5e3c5de6d3363e14",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-java/webrtc-jni/src/main/cpp/dependencies/jni-voithos/LICENSE",
+      "name": "Native — licenses/webrtc-java/webrtc-jni/src/main/cpp/dependencies/jni-voithos/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/devopvoid/webrtc-java/v0.18.0/webrtc-jni/src/main/cpp/dependencies/jni-voithos/LICENSE",
+      "sha256": "862bac38618bb26bf199c18ce1f2a62ba3de6cc60d5fada482ebe44a4e3d7450",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skiko/LICENSE",
+      "name": "Native — licenses/skiko/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skiko/v0.150.1/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skiko/NOTICE",
+      "name": "Native — licenses/skiko/NOTICE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skiko/v0.150.1/NOTICE",
+      "sha256": "35dd077c24768b53625101cfcc0ad853ae7e2abc08bd2a111a0267760d1406d8",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/LICENSE",
+      "name": "Native — licenses/skia/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/LICENSE",
+      "sha256": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/bazel/rbe/gce_linux/LICENSE",
+      "name": "Native — licenses/skia/bazel/rbe/gce_linux/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/bazel/rbe/gce_linux/LICENSE",
+      "sha256": "fd112c80352fc42a60f051012c6b9adef055123e395dece30fa8f44880f39e96",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/include/third_party/vulkan/LICENSE",
+      "name": "Native — licenses/skia/include/third_party/vulkan/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/include/third_party/vulkan/LICENSE",
+      "sha256": "e59bb5c5c6ba426a9ac4ba9fe667ad14c5166b12aa25be8af1d122b14fbe2e36",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/modules/canvaskit/npm_build/LICENSE",
+      "name": "Native — licenses/skia/modules/canvaskit/npm_build/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/modules/canvaskit/npm_build/LICENSE",
+      "sha256": "d27678cba0d529e77201e2d2a053628143e986aad8f1e77f7039ad4366c8f978",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/third_party/etc1/LICENSE",
+      "name": "Native — licenses/skia/third_party/etc1/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/third_party/etc1/LICENSE",
+      "sha256": "5366e97b4478f15a1e2fd7e6094337426597df28de50cd9fed3f2e7e87f1229e",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/third_party/expat/LICENSE",
+      "name": "Native — licenses/skia/third_party/expat/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/third_party/expat/LICENSE",
+      "sha256": "cca48bacd6e7ed63f00b42a346bcc8549a460b41efe75d93db350fc882f54dca",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/third_party/harfbuzz/LICENSE",
+      "name": "Native — licenses/skia/third_party/harfbuzz/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/third_party/harfbuzz/LICENSE",
+      "sha256": "cca48bacd6e7ed63f00b42a346bcc8549a460b41efe75d93db350fc882f54dca",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia/third_party/wuffs/LICENSE",
+      "name": "Native — licenses/skia/third_party/wuffs/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/JetBrains/skia/m150-1f14f1166a/third_party/wuffs/LICENSE",
+      "sha256": "e59bb5c5c6ba426a9ac4ba9fe667ad14c5166b12aa25be8af1d122b14fbe2e36",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/dng_sdk/LICENSE",
+      "name": "Native — licenses/skia-external/dng_sdk/LICENSE",
+      "source_url": "https://android.googlesource.com/platform/external/dng_sdk.git/+/dbe0a676450d9b8c71bf00688bb306409b779e90/LICENSE?format=TEXT",
+      "sha256": "012e875468ac2f9a2070ee25a950588afa2735b4b2d961f491e3d72c8f572306",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/dng_sdk/LICENSE.source_code",
+      "name": "Native — licenses/skia-external/dng_sdk/LICENSE.source_code",
+      "source_url": "https://android.googlesource.com/platform/external/dng_sdk.git/+/dbe0a676450d9b8c71bf00688bb306409b779e90/LICENSE.source_code?format=TEXT",
+      "sha256": "0c993758dd78dbb15ce6aae8aee79639b428d8ebeca6d416019939dc90fdc08f",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/dng_sdk/LICENSE.technology",
+      "name": "Native — licenses/skia-external/dng_sdk/LICENSE.technology",
+      "source_url": "https://android.googlesource.com/platform/external/dng_sdk.git/+/dbe0a676450d9b8c71bf00688bb306409b779e90/LICENSE.technology?format=TEXT",
+      "sha256": "4731d85e841e1d8b5dbf7e0ba07e0b524c012f9371db3508551f996cb40c8fe6",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/dng_sdk/NOTICE",
+      "name": "Native — licenses/skia-external/dng_sdk/NOTICE",
+      "source_url": "https://android.googlesource.com/platform/external/dng_sdk.git/+/dbe0a676450d9b8c71bf00688bb306409b779e90/NOTICE?format=TEXT",
+      "sha256": "b60660d2a5a3ee1a49366400e7e9b01c1872356d6f08942f095d356a44deb5f6",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/dng_sdk/PATENTS",
+      "name": "Native — licenses/skia-external/dng_sdk/PATENTS",
+      "source_url": "https://android.googlesource.com/platform/external/dng_sdk.git/+/dbe0a676450d9b8c71bf00688bb306409b779e90/PATENTS?format=TEXT",
+      "sha256": "bd958835863f42d8479457503a7ed716424d35b6e76ef76db06b72b109696ec4",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/expat/COPYING",
+      "name": "Native — licenses/skia-external/expat/COPYING",
+      "source_url": "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git/+/6154446fccefbf3ca644894f598969113b0c7bcd/COPYING?format=TEXT",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/expat/expat/COPYING",
+      "name": "Native — licenses/skia-external/expat/expat/COPYING",
+      "source_url": "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git/+/6154446fccefbf3ca644894f598969113b0c7bcd/expat/COPYING?format=TEXT",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/harfbuzz/COPYING",
+      "name": "Native — licenses/skia-external/harfbuzz/COPYING",
+      "source_url": "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git/+/9cb1fee51069b206effb4736e443b038d230789d/COPYING?format=TEXT",
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/icu/LICENSE",
+      "name": "Native — licenses/skia-external/icu/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/icu.git/+/364118a1d9da24bb5b770ac3d762ac144d6da5a4/LICENSE?format=TEXT",
+      "sha256": "17510cf7a58b4879b887ec05a45d72cf1b73544dd9ec7e72f20110ed104229ee",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/icu/license.html",
+      "name": "Native — licenses/skia-external/icu/license.html",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/icu.git/+/364118a1d9da24bb5b770ac3d762ac144d6da5a4/license.html?format=TEXT",
+      "sha256": "c62d7697c03979f5056d28b338fafc7a1152820f7b379adf4a9d88cd37160f96",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/libjpeg-turbo/LICENSE.md",
+      "name": "Native — licenses/skia-external/libjpeg-turbo/LICENSE.md",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/e14cbfaa85529d47f9f55b0f104a579c1061f9ad/LICENSE.md?format=TEXT",
+      "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/libjpeg-turbo/README.ijg",
+      "name": "Native — licenses/skia-external/libjpeg-turbo/README.ijg",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/e14cbfaa85529d47f9f55b0f104a579c1061f9ad/README.ijg?format=TEXT",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/libpng/LICENSE",
+      "name": "Native — licenses/skia-external/libpng/LICENSE",
+      "source_url": "https://skia.googlesource.com/third_party/libpng.git/+/d5515b5b8be3901aac04e5bd8bd5c89f287bcd33/LICENSE?format=TEXT",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/libwebp/COPYING",
+      "name": "Native — licenses/skia-external/libwebp/COPYING",
+      "source_url": "https://chromium.googlesource.com/webm/libwebp.git/+/845d5476a866141ba35ac133f856fa62f0b7445f/COPYING?format=TEXT",
+      "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/libwebp/PATENTS",
+      "name": "Native — licenses/skia-external/libwebp/PATENTS",
+      "source_url": "https://chromium.googlesource.com/webm/libwebp.git/+/845d5476a866141ba35ac133f856fa62f0b7445f/PATENTS?format=TEXT",
+      "sha256": "cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/piex/LICENSE",
+      "name": "Native — licenses/skia-external/piex/LICENSE",
+      "source_url": "https://android.googlesource.com/platform/external/piex.git/+/bb217acdca1cc0c16b704669dd6f91a1b509c406/LICENSE?format=TEXT",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/piex/NOTICE",
+      "name": "Native — licenses/skia-external/piex/NOTICE",
+      "source_url": "https://android.googlesource.com/platform/external/piex.git/+/bb217acdca1cc0c16b704669dd6f91a1b509c406/NOTICE?format=TEXT",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/skia-external/zlib/LICENSE",
+      "name": "Native — licenses/skia-external/zlib/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+/646b7f569718921d7d4b5b8e22572ff6c76f2596/LICENSE?format=TEXT",
+      "sha256": "e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/sqlite-jdbc/LICENSE",
+      "name": "Native — licenses/sqlite-jdbc/LICENSE",
+      "source_url": "https://raw.githubusercontent.com/xerial/sqlite-jdbc/3.53.4.0/LICENSE",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/sqlite-jdbc/LICENSE.zentus",
+      "name": "Native — licenses/sqlite-jdbc/LICENSE.zentus",
+      "source_url": "https://raw.githubusercontent.com/xerial/sqlite-jdbc/3.53.4.0/LICENSE.zentus",
+      "sha256": "89167dab92289c7e5e2b65b044f0856b703d05e5d5e35c3548e73d9c7d2f5048",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/sqlite-jdbc/NOTICE",
+      "name": "Native — licenses/sqlite-jdbc/NOTICE",
+      "source_url": "https://raw.githubusercontent.com/xerial/sqlite-jdbc/3.53.4.0/NOTICE",
+      "sha256": "a0670cf020edf700524c43c85321c2ba027a8bace5682001db60875d4a9fe52b",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/sqlite-jdbc/SQLite-public-domain-header.txt",
+      "name": "Native — licenses/sqlite-jdbc/SQLite-public-domain-header.txt",
+      "source_url": "https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip#sqlite-amalgamation-3530400/sqlite3.c",
+      "sha256": "f1a2f738cfea5f67a919ff305add9d29fb28c1018596d4beaecbd7d25648c26c",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/LICENSE?format=TEXT",
+      "sha256": "ab00a482b6a3902e40211b43c5d0441962ea99b6cc7c25c0f243fa270b78d482",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/PATENTS",
+      "name": "Native — licenses/webrtc-desktop-branch7977/PATENTS",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/PATENTS?format=TEXT",
+      "sha256": "01462e2068d1a04c2274f3389773014c14ed9bc3446b28303543bd3e3c064145",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/common_audio/third_party/ooura/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/common_audio/third_party/ooura/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/common_audio/third_party/ooura/LICENSE?format=TEXT",
+      "sha256": "25b7731b70c77ecd5f3bb19303fbaa99be18860f81d44f71da670fdcd04829db",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/common_audio/third_party/spl_sqrt_floor/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/common_audio/third_party/spl_sqrt_floor/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/common_audio/third_party/spl_sqrt_floor/LICENSE?format=TEXT",
+      "sha256": "41d791701e3e1c1073470403de7e342442d1e6a2af72681023b13a2f45f2125c",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/modules/third_party/fft/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/modules/third_party/fft/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/modules/third_party/fft/LICENSE?format=TEXT",
+      "sha256": "6fdbabd2c95c5efc6f1e46175278239afb9343120a3022ed0e0cb04267a6aeb3",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/modules/third_party/g711/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/modules/third_party/g711/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/modules/third_party/g711/LICENSE?format=TEXT",
+      "sha256": "b29c8f13f91feb2dab7d6655444369fa9f29c0d7121a52dab90ff97e40343a85",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/modules/third_party/g722/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/modules/third_party/g722/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/modules/third_party/g722/LICENSE?format=TEXT",
+      "sha256": "61862327fd00d6a4deb2c1276577782c2500f4fe103e072018fc369d8e37e876",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/modules/third_party/portaudio/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/modules/third_party/portaudio/LICENSE",
+      "source_url": "https://webrtc.googlesource.com/src/+/e1991d7f7bd00eaa701dcdd8d6786b746c623c30/modules/third_party/portaudio/LICENSE?format=TEXT",
+      "sha256": "641007ea2810c4cfc10a5d1a44db33983ec1409305e953c7119cc2457ec5c536",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/abseil-cpp/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/abseil-cpp/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/abseil-cpp/LICENSE?format=TEXT",
+      "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/android_sdk/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/android_sdk/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/android_sdk/LICENSE?format=TEXT",
+      "sha256": "85a84a92acffa105f51233e05d5fdc28eab76d1a8d180c924d9d3b2ea0389b55",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/android_toolchain/NOTICE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/android_toolchain/NOTICE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/android_toolchain/NOTICE?format=TEXT",
+      "sha256": "31b13387e6bde5c7e7006b63ea762020ce583be32e4d62417584c03ac3d3f19a",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/boringssl/src/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/boringssl/src/LICENSE",
+      "source_url": "https://boringssl.googlesource.com/boringssl.git/+/8daf854545e60454740b3c2286de391bcf8b1685/LICENSE?format=TEXT",
+      "sha256": "827c8d8fc207c2392794eef9e00fe246f9f61fdcc132556c275be3dd8c3cd97f",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/boringssl/src/third_party/fiat/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/boringssl/src/third_party/fiat/LICENSE",
+      "source_url": "https://boringssl.googlesource.com/boringssl.git/+/8daf854545e60454740b3c2286de391bcf8b1685/third_party/fiat/LICENSE?format=TEXT",
+      "sha256": "9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/compiler-rt/src/LICENSE.TXT",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/compiler-rt/src/LICENSE.TXT",
+      "source_url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/compiler-rt.git/+/65b1f193f33193b0321493965edbb7acb7170a09/LICENSE.TXT?format=TEXT",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/cpu_features/src/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/cpu_features/src/LICENSE",
+      "source_url": "https://chromium.googlesource.com/external/github.com/google/cpu_features.git/+/81d13c49649f0714dd41fb56bb246398b6584085/LICENSE?format=TEXT",
+      "sha256": "af272c1b4dd08dd61d43e001d3134119d03ca7a2b057a64f7355fdf27fbea3dd",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/crc32c/src/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/crc32c/src/LICENSE",
+      "source_url": "https://chromium.googlesource.com/external/github.com/google/crc32c.git/+/2bbb3be42e20a0e6c0f7b39dc07dc863d9ffbc07/LICENSE?format=TEXT",
+      "sha256": "a1f30b77c01e0995fa32a00119e00749e8731ee8a3c4c3549bce74083c72b0b6",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/dav1d/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/dav1d/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/dav1d/LICENSE?format=TEXT",
+      "sha256": "2da4494d2a8b5c742afbb905b10621e40129284c977ac138e3081ed0d9d83aed",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/ijar/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/ijar/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/ijar/LICENSE?format=TEXT",
+      "sha256": "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/jni_zero/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/jni_zero/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/jni_zero/LICENSE?format=TEXT",
+      "sha256": "57faf03e216d5628169a779df31a842347e55c8e6567e1107b6cb8fb90175b59",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/jsoncpp/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/jsoncpp/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/jsoncpp/LICENSE?format=TEXT",
+      "sha256": "76c45ece83a26117f86f4e349e7df118708e061e87225328fb478ce1e8b3eb86",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/kotlin_stdlib/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/kotlin_stdlib/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/kotlin_stdlib/LICENSE?format=TEXT",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libaom/source/libaom/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libaom/source/libaom/LICENSE",
+      "source_url": "https://aomedia.googlesource.com/aom.git/+/43f2b6a99000057184332c8c2dd4bedc19fdec6f/LICENSE?format=TEXT",
+      "sha256": "4764a286d8b2faeaf42f4418e7d7a28d58fc8fd4d00a3d0a7f44b0a4099de7f2",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libc++/src/LICENSE.TXT",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libc++/src/LICENSE.TXT",
+      "source_url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx.git/+/5abc7f839700f0f17338434e1c1c6a8c87c00c11/LICENSE.TXT?format=TEXT",
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libc++abi/src/LICENSE.TXT",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libc++abi/src/LICENSE.TXT",
+      "source_url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi.git/+/8f11bb1d4438d0239d0dfc1bd9456a9f31629dda/LICENSE.TXT?format=TEXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libjpeg_turbo/LICENSE.md",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libjpeg_turbo/LICENSE.md",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/640f254ad0fa03f6b1f29f89b7dd9366f2f6e533/LICENSE.md?format=TEXT",
+      "sha256": "96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libjpeg_turbo/README.ijg",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libjpeg_turbo/README.ijg",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/640f254ad0fa03f6b1f29f89b7dd9366f2f6e533/README.ijg?format=TEXT",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libsrtp/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libsrtp/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/libsrtp.git/+/cd5d177bf1fde755ddb4c7f0d9ff7693f8b49e5e/LICENSE?format=TEXT",
+      "sha256": "8e19d42a1eec9561f3f347253ddf2e385c55f392f025bb0fd41b88dbf38db5ae",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libunwind/src/LICENSE.TXT",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libunwind/src/LICENSE.TXT",
+      "source_url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libunwind.git/+/7ccfbebd65a02a0a3a2f86a61139c5f306678dfb/LICENSE.TXT?format=TEXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libvpx/source/libvpx/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libvpx/source/libvpx/LICENSE",
+      "source_url": "https://chromium.googlesource.com/webm/libvpx.git/+/8592391cdb3ef142c56d835788d71d6d4de36a63/LICENSE?format=TEXT",
+      "sha256": "8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/libyuv/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/libyuv/LICENSE",
+      "source_url": "https://chromium.googlesource.com/libyuv/libyuv.git/+/5d03bf9bab5693ccf692f18b538d8d9c00387c73/LICENSE?format=TEXT",
+      "sha256": "2b2cc1180c7e6988328ad2033b04b80117419db9c4c584918bbb3cfec7e9364f",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/llvm-libc/src/LICENSE.TXT",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/llvm-libc/src/LICENSE.TXT",
+      "source_url": "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc.git/+/6acdd35440c04fc8b4664a59425de82aa5a800bb/LICENSE.TXT?format=TEXT",
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/nasm/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/nasm/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/deps/nasm.git/+/525a09a813be0f75b646ee93fc2a31c27b87d722/LICENSE?format=TEXT",
+      "sha256": "7436a7c46b6e4d969b41e1ce387885ae4ced25710662189ff2983665253729ac",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/opus/src/COPYING",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/opus/src/COPYING",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/opus/src/COPYING?format=TEXT",
+      "sha256": "01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/pffft/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/pffft/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/pffft/LICENSE?format=TEXT",
+      "sha256": "a46200592eb193853527250da098e6bb0c75424e7a2c7db8da526c4f301c3d88",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/protobuf-javascript/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/protobuf-javascript/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/protobuf-javascript/LICENSE?format=TEXT",
+      "sha256": "103441a2584cb720426c60320bcba53807024aab3080b00e0da841c305757a34",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/protobuf/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/protobuf/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/protobuf/LICENSE?format=TEXT",
+      "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/rnnoise/COPYING",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/rnnoise/COPYING",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/rnnoise/COPYING?format=TEXT",
+      "sha256": "e2f59ff41d9d03adc3dcf3deff170f8c8cf4a6eb4a9b174762a7656d23200ffa",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-desktop-branch7977/third_party/zlib/LICENSE",
+      "name": "Native — licenses/webrtc-desktop-branch7977/third_party/zlib/LICENSE",
+      "source_url": "https://chromium.googlesource.com/chromium/src/third_party/+/6282fd7d3e9a766f8ff80018867f13825b3305ab/zlib/LICENSE?format=TEXT",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "applies_to": "macos-desktop"
+    },
+    {
+      "file": "third-party/native/IOS-RELINK-REQUIREMENTS.md",
+      "name": "Native — IOS-RELINK-REQUIREMENTS.md",
+      "source_url": "See third-party/native/index.csv and bundle-map.json",
+      "sha256": "7c700df07acbce9bf22e0eb4c7a561405572292241c1fc20669d77d4b4631adb",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/libsmb2/COPYING",
+      "name": "Native — licenses/libsmb2/COPYING",
+      "source_url": "https://raw.githubusercontent.com/sahlberg/libsmb2/libsmb2-6.2/COPYING",
+      "sha256": "749c710c2b3d5c95906c785f28af9abbe4ce909311e72eb72eee5c6873e2fa6f",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/openssl/LICENSE.txt",
+      "name": "Native — licenses/openssl/LICENSE.txt",
+      "source_url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.3.2/LICENSE.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/libssh2/COPYING",
+      "name": "Native — licenses/libssh2/COPYING",
+      "source_url": "https://raw.githubusercontent.com/libssh2/libssh2/libssh2-1.11.1/COPYING",
+      "sha256": "f7f9633cf9ff2f1333f3d7ce46973a8716a4d2a2815ad56f30d437d5fea7bafe",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/curl/COPYING",
+      "name": "Native — licenses/curl/COPYING",
+      "source_url": "https://raw.githubusercontent.com/curl/curl/curl-8_12_1/COPYING",
+      "sha256": "e18f1989333b70044b2adfb7dc2f905d0119dbdcac3bc9f4bc9d540e3a29de5b",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/webrtc-ios/LICENSE",
+      "name": "Native — licenses/webrtc-ios/LICENSE",
+      "source_url": "https://github.com/webrtc-sdk/Specs/releases/download/125.6422.05/WebRTC.xcframework.zip#WebRTC.xcframework/LICENSE",
+      "sha256": "ab00a482b6a3902e40211b43c5d0441962ea99b6cc7c25c0f243fa270b78d482",
+      "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/native/licenses/libsmb2/LICENCE-LGPL-2.1.txt",
+      "name": "Native — licenses/libsmb2/LICENCE-LGPL-2.1.txt",
+      "source_url": "https://raw.githubusercontent.com/sahlberg/libsmb2/libsmb2-6.2/LICENCE-LGPL-2.1.txt",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+      "applies_to": "ios-future"
+    }
+  ],
+  "selection_notes": [
+    "JNA: Apache-2.0 option selected; upstream dual-license texts preserved.",
+    "Zstandard: BSD option selected.",
+    "Bundled JRE legal/source obligations remain independent.",
+    "Adobe DNG SDK terms apply to the corresponding Skia native component; not relicensed as Apache-2.0."
+  ]
+}
