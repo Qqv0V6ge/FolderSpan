@@ -20,7 +20,7 @@ internal actual object PrivateFileStorage {
 
     actual fun getFileAndFolder(permission: FileAccessPermission, path: String): Result<List<FileSimpleInfo>> = NativePathUtils.getFileAndFolder(permission, path)
 
-    actual fun getAppPath(): String = NativePathUtils.getAppPath()
+    actual fun getAppPath(): String = NativePathUtils.getApplicationDataPath()
 
     actual fun getCachePath(): String = NativePathUtils.getCachePath()
 

@@ -2,7 +2,6 @@ package com.folderspan.ui.tray
 
 import strings.AppStrings
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.window.ApplicationScope
 import com.folderspan.data.file.FileProtocol
@@ -25,6 +24,7 @@ import com.folderspan.ui.state.settings.SettingsState
 import com.folderspan.ui.state.settings.ThemeMode
 import com.folderspan.ui.theme.CustomColorScheme
 import com.folderspan.ui.theme.getDefaultColorScheme
+import com.folderspan.ui.theme.isPlatformInDarkTheme
 import com.folderspan.ui.theme.parseHexColor
 import com.folderspan.ui.theme.withCustomColors
 import com.folderspan.utils.SettingsUtils
@@ -53,9 +53,8 @@ fun ApplicationScope.FolderSpanTray(
     val customColorEnabled by settingsState.customColorEnabled.collectAsState()
     val customSeedHex by settingsState.customSeedColor.collectAsState()
     val remoteColorScheme by mainState.remoteColorScheme.collectAsState()
-    val systemDarkTheme = isSystemInDarkTheme()
     val currentDarkTheme = when (themeMode) {
-        ThemeMode.System -> systemDarkTheme
+        ThemeMode.System -> isPlatformInDarkTheme()
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }
@@ -71,7 +70,10 @@ fun ApplicationScope.FolderSpanTray(
             baseColorScheme.primary
         }
     }
-    val trayIconColor = remoteColorScheme?.primary ?: localTrayIconColor
+    val matchingRemoteColorScheme = remoteColorScheme?.let {
+        mainState.remoteColorSchemeFor(currentDarkTheme)
+    }
+    val trayIconColor = matchingRemoteColorScheme?.primary ?: localTrayIconColor
     val trayIconFiles = remember(trayIconColor) { renderFolderSpanTrayIconFiles(trayIconColor) }
     val httpShareFileServer = fileShareState.httpServer
     val isServerRunning by fileShareState.isHttpServerRunning.collectAsState()

@@ -130,8 +130,10 @@ internal actual object NativePathUtils {
         target.toRealPath().toString()
     }.getOrNull()
 
-    // 获取用户目录
+    // 获取启动工作目录
     actual fun getAppPath(): String = System.getProperty("user.dir")
+
+    actual fun getApplicationDataPath(): String = resolveDesktopApplicationDataDirectory().toString()
 
     // 获取用户目录
     actual fun getHomePath(): String = System.getProperty("user.home")

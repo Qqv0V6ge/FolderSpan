@@ -116,6 +116,18 @@ class WebRtcRoomConfigTest {
         assertTrue(official.copy(name = "x".repeat(OfficialRoomNameMaxLength)).canSave())
         assertFalse(official.copy(name = "x".repeat(OfficialRoomNameMaxLength + 1)).canSave())
     }
+
+    @Test
+    fun roomFormRejectsInvalidIceAndConfigReturnsFailure() {
+        val input = webRtcRoomProfile(WebRtcRoomSource.Other).toInput()
+        assertTrue(input.copy(turnUrl = "turn:relay.example;turns:[2001:db8::1]:443?transport=tcp").canSave())
+        for (invalid in listOf("turn:bad:0", "turn:relay.example;", "turn:[::zz]")) {
+            val room = input.copy(turnUrl = invalid)
+            assertFalse(room.canSave())
+            assertTrue(room.toWebRtcConfigResult().isFailure)
+            assertFalse(room.copy(source = WebRtcRoomSource.Official).canSave())
+        }
+    }
 }
 
 private fun webRtcRoomProfile(source: WebRtcRoomSource): WebRtcRoomProfile =

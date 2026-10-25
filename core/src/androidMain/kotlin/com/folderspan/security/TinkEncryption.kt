@@ -2,8 +2,10 @@ package com.folderspan.security
 
 import android.content.Context
 import com.google.crypto.tink.Aead
+import com.google.crypto.tink.KeyTemplate
 import com.google.crypto.tink.aead.AeadConfig
-import com.google.crypto.tink.aead.AesGcmKeyManager
+import com.google.crypto.tink.aead.AeadConfig2026
+import com.google.crypto.tink.aead.PredefinedAeadParameters
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 
 /**
@@ -35,13 +37,13 @@ object TinkEncryption {
             // 创建或加载密钥集
             val keysetHandle = AndroidKeysetManager.Builder()
                 .withSharedPref(context, "tink_keyset", "tink_prefs") // 密钥集存储位置
-                .withKeyTemplate(AesGcmKeyManager.aes256GcmTemplate()) // 使用 AES-256-GCM
+                .withKeyTemplate(KeyTemplate.createFrom(PredefinedAeadParameters.AES256_GCM)) // 使用 AES-256-GCM
                 .withMasterKeyUri("android-keystore://tink_master_key") // 主密钥存储在 Android Keystore
                 .build()
                 .keysetHandle
 
             // 获取 AEAD 加密原语
-            aead = keysetHandle.getPrimitive(Aead::class.java)
+            aead = keysetHandle.getPrimitive(AeadConfig2026.get(), Aead::class.java)
         }
     }
 
