@@ -90,7 +90,7 @@ class WebRtcShareSaveJvmTest {
                 var authenticated = 0
                 val server = launch {
                     checkNotNull(createWebRtcDeviceSessionServerLauncher()).run(
-                        WebRtcDeviceSessionByteChannel(incoming, this), receiver.id, attempt, this,
+                        WebRtcDeviceSessionByteChannel(incoming, this), receiver.id, attempt, this, { null },
                     ) { authenticated++ }
                 }
                 var runtime: DeviceSessionClientRuntime? = null
@@ -109,6 +109,9 @@ class WebRtcShareSaveJvmTest {
                     assertEquals(0, fixture.devices.deviceSessionBootstrapAuthorizationRegistry.pendingCount())
                     assertTrue(fixture.devices.connectionRequest.isEmpty(), "Scoped authentication must not ask for a second approval")
                     assertTrue(fixture.certificates.getDeviceSharePathScope(client.connectResponse.connection.token) != null)
+                    assertEquals(DEVICE_SESSION_RPC_FORBIDDEN, client.peer.rpc(
+                        DEVICE_SESSION_RPC_WEBRTC_ICE, ProtoBufCodec.encode(DeviceSessionIceQuery(attempt, 0)),
+                    ).status)
                     val roots = client.clients.listPath(ListRequest("/")).getOrThrow()
                     assertEquals(listOf("/payload.bin"), roots.map { it.path })
                     assertTrue(client.clients.readBytes(fixture.outside.toString(), 0L, 1L).isFailure)
@@ -204,97 +207,5 @@ class WebRtcShareSaveJvmTest {
     }
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
-private class ShareSaveFixture : AutoCloseable {
-    val directory = Files.createTempDirectory("webrtc-share-save").toRealPath()
-    val bytes = ByteArray(1024 * 1024) { (it * 31 + 17).toByte() }
-    val input = Files.write(directory.resolve("payload.bin"), bytes)
-    val outside = Files.write(directory.resolve("private.bin"), byteArrayOf(9))
-    val output = directory.resolve("saved.bin")
-    private val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-    private lateinit var database: FolderSpanDatabase
-    val tasks = TaskState(TestTaskFailureResultStore(), TestTaskRuntimePersistenceStore())
-    lateinit var certificates: DeviceCertificateState
-    lateinit var devices: DeviceState
-    val dispatcher = RawHttpApiDispatcher(MapSettings())
-    // Restore every settings holder, including a previously uninitialized holder.
-    private val settingsSnapshot = listOf(
-        SettingsUtils, SettingsUtils.fileShare, SettingsUtils.mcp,
-        SettingsUtils.easyFileShare, DataEncryptionKey,
-    ).map { holder ->
-        val field = holder.javaClass.getDeclaredField("settings").apply { isAccessible = true }
-        field to field.get(null)
-    }
-    private var mainInstalled = false
-    private var koinStarted = false
-    fun start() {
-        SettingsUtils.init(MapSettings())
-        FolderSpanDatabase.Schema.create(driver)
-        DatabaseReady.markReady()
-        database = shareSaveDatabase(driver)
-        database.deviceRoleQueries.insertWithId(2L, "Share test", "Share test", 0L)
-        certificates = DeviceCertificateState(database)
-        Dispatchers.setMain(StandardTestDispatcher())
-        mainInstalled = true
-        val koin = startKoin { modules(module {
-            single { database }
-            single { certificates }
-            single { tasks }
-            single { FileShareState() }
-            single { DeviceState() }
-        }) }.koin
-        koinStarted = true
-        devices = koin.get()
-        // Prevent discovery/UI background jobs from touching the user's app. Business methods remain real.
-        (devices.javaClass.getDeclaredField("mainScope").apply { isAccessible = true }.get(devices) as CoroutineScope).cancel()
-        Dispatchers.setMain(Dispatchers.Unconfined)
-    }
-    override fun close() {
-        var failure: Throwable? = null
-        fun cleanup(block: () -> Unit) {
-            try { block() } catch (error: Throwable) {
-                failure?.addSuppressed(error) ?: run { failure = error }
-            }
-        }
-        cleanup {
-            val scheduler = tasks.javaClass.getDeclaredField("taskScheduler").apply { isAccessible = true }.get(tasks)
-            val taskScope = scheduler.javaClass.getDeclaredField("taskScope").apply { isAccessible = true }.get(scheduler) as CoroutineScope
-            runBlocking { taskScope.coroutineContext.job.cancelAndJoin() }
-        }
-        if (::devices.isInitialized) {
-            cleanup { (devices.javaClass.getDeclaredField("mainScope").apply { isAccessible = true }.get(devices) as CoroutineScope).cancel() }
-            cleanup { (devices.javaClass.getDeclaredField("client").apply { isAccessible = true }.get(devices) as HttpClient).close() }
-        }
-        if (koinStarted) cleanup { stopKoin() }
-        if (mainInstalled) cleanup { Dispatchers.resetMain() }
-        cleanup { driver.close() }
-        cleanup { directory.toFile().deleteRecursively() }
-        settingsSnapshot.forEach { (field, previous) -> cleanup { field.set(null, previous) } }
-        failure?.let { throw it }
-    }
-}
-
-internal fun shareSaveDatabase(driver: JdbcSqliteDriver) = FolderSpanDatabase(
-    driver = driver,
-    DeviceAdapter = Device.Adapter(shareSaveEnumAdapter<DeviceType>()),
-    DeviceConnectAdapter = DeviceConnect.Adapter(shareSaveEnumAdapter<DeviceConnectType>(), shareSaveEnumAdapter<DeviceCategory>()),
-    FileBookmarkAdapter = FileBookmark.Adapter(shareSaveEnumAdapter<DrawerBookmarkType>(), shareSaveEnumAdapter<FileProtocol>()),
-    FileFavoriteAdapter = FileFavorite.Adapter(shareSaveEnumAdapter<FileProtocol>()),
-    FileRecentAdapter = FileRecent.Adapter(shareSaveEnumAdapter<FileProtocol>()),
-    FileFilterAdapter = FileFilter.Adapter(shareSaveEnumAdapter<FileFilterType>(), shareSaveStringsAdapter),
-    DeviceReceiveShareAdapter = DeviceReceiveShare.Adapter(shareSaveEnumAdapter<DeviceConnectType>()),
-    FilePathPreferenceAdapter = FilePathPreference.Adapter(
-        shareSaveEnumAdapter<FileProtocol>(), shareSaveEnumAdapter<FileFilterSort>(), shareSaveStringsAdapter,
-    ),
-)
-
-private inline fun <reified T : Enum<T>> shareSaveEnumAdapter(): ColumnAdapter<T, String> =
-    object : ColumnAdapter<T, String> {
-        override fun decode(databaseValue: String): T = enumValueOf(databaseValue)
-        override fun encode(value: T): String = value.name
-    }
-
-private val shareSaveStringsAdapter = object : ColumnAdapter<List<String>, String> {
-    override fun decode(databaseValue: String): List<String> = databaseValue.split(',').filter(String::isNotEmpty)
-    override fun encode(value: List<String>): String = value.joinToString(",")
-}
+internal fun createShareSaveTestDriver() =
+    JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).apply { FolderSpanDatabase.Schema.create(this) }

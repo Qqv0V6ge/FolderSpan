@@ -74,7 +74,7 @@ class WebRtcControllerFailureJvmTest {
         try {
             controller.javaClass.getDeclaredField("serverLauncher").apply { isAccessible = true }.set(
                 controller,
-                WebRtcDeviceSessionServerLauncher { _, _, _, _, _ ->
+                WebRtcDeviceSessionServerLauncher { _, _, _, _, _, _ ->
                     starts.incrementAndGet()
                     started.complete(Unit)
                     awaitCancellation()

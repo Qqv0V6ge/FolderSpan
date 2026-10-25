@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.webrtc.IceCandidate
+import org.webrtc.IceCandidateErrorEvent
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
@@ -31,18 +32,15 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     private val incoming = Channel<WebRtcDataChannel>(capacity = 1)
     private val candidates = Channel<WebRtcIceCandidate>(capacity = 64)
     private val connectionState = MutableStateFlow(WebRtcPeerConnectionState.New)
+    @Volatile private var iceServerErrorCode: Int? = null
+    actual val lastIceServerErrorCode: Int? get() = if (closed.get()) null else iceServerErrorCode
 
     actual val onIceCandidate: Flow<WebRtcIceCandidate> = candidates.receiveAsFlow()
     actual val onDataChannel: Flow<WebRtcDataChannel> = incoming.receiveAsFlow()
     actual val onConnectionStateChange: Flow<WebRtcPeerConnectionState> = connectionState
 
     private val native: PeerConnection = checkNotNull(factory.createPeerConnection(
-        PeerConnection.RTCConfiguration(iceServers.map { server ->
-            PeerConnection.IceServer.builder(server.urls)
-                .setUsername(server.username)
-                .setPassword(server.password)
-                .createIceServer()
-        }).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN },
+        androidWebRtcConfiguration(iceServers),
         object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
@@ -52,6 +50,10 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
             override fun onAddStream(stream: MediaStream) = Unit
             override fun onRemoveStream(stream: MediaStream) = Unit
             override fun onRenegotiationNeeded() = Unit
+
+            override fun onIceCandidateError(event: IceCandidateErrorEvent) {
+                if (!closed.get()) iceServerErrorCode = event.errorCode
+            }
 
             override fun onIceCandidate(candidate: IceCandidate) {
                 configureWebRtcUdpSocketBuffers(candidate.sdp)
@@ -88,8 +90,10 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         },
     )) { "Creating Android WebRTC PeerConnection failed" }
 
-    actual suspend fun createOffer(): WebRtcSessionDescription = createDescription { observer ->
-        native.createOffer(observer, MediaConstraints())
+    actual suspend fun createOffer(iceRestart: Boolean): WebRtcSessionDescription = createDescription { observer ->
+        native.createOffer(observer, MediaConstraints().apply {
+            if (iceRestart) mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
+        })
     }
 
     actual suspend fun createAnswer(): WebRtcSessionDescription = createDescription { observer ->
@@ -144,6 +148,17 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         }
     }
 
+    actual suspend fun getSelectedIcePath(): WebRtcIcePath = suspendCancellableCoroutine { continuation ->
+        nativeLock.read {
+            if (closed.get()) { continuation.resume(WebRtcIcePath()); return@read }
+            native.getStats { report ->
+                if (continuation.isActive) continuation.resume(selectedWebRtcIcePath(report.statsMap.mapValues { (_, stat) ->
+                    WebRtcIceStats(stat.type, stat.members)
+                }))
+            }
+        }
+    }
+
     actual fun createDataChannel(label: String, ordered: Boolean, maxRetransmits: Int?): WebRtcDataChannel? =
         nativeLock.read {
             if (closed.get()) return@read null
@@ -190,3 +205,16 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         }
     }
 }
+
+internal fun androidWebRtcConfiguration(iceServers: List<WebRtcIceServerConfig>): PeerConnection.RTCConfiguration =
+    PeerConnection.RTCConfiguration(iceServers.map { server ->
+        PeerConnection.IceServer.builder(server.urls)
+            .setUsername(server.username)
+            .setPassword(server.password)
+            .createIceServer()
+    }).apply {
+        sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        iceTransportsType = PeerConnection.IceTransportsType.ALL
+        disableIPv6OnWifi = false
+        tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
+    }

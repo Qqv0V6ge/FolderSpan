@@ -60,6 +60,7 @@ data class WebRtcRoomInput(
 
     fun canSave(): Boolean {
         val normalized = normalized()
+        if (runCatching { normalized.toWebRtcConfig() }.isFailure) return false
         if (normalized.source == WebRtcRoomSource.Official) {
             return normalized.name.isNotBlank() && normalized.name.length <= OfficialRoomNameMaxLength
         }
@@ -127,7 +128,7 @@ fun WebRtcRoomInput.toWebRtcConfig(): WebRtcConfig {
 fun WebRtcRoomInput.toWebRtcConfigResult(): Result<WebRtcConfig> {
     val normalized = normalized()
     if (normalized.source != WebRtcRoomSource.Official) {
-        return Result.success(normalized.toWebRtcConfig())
+        return runCatching { normalized.toWebRtcConfig() }
     }
 
     val officialUrl = WebRtcOfficialGateway.websocketUrl()
@@ -135,7 +136,7 @@ fun WebRtcRoomInput.toWebRtcConfigResult(): Result<WebRtcConfig> {
         return Result.failure(IllegalStateException(AppStrings.ui_official_webrtc_gateway_address_unavailable))
     }
 
-    return WebRtcOfficialGateway.websocketHeaders().map { headers ->
+    return WebRtcOfficialGateway.websocketHeaders().mapCatching { headers ->
         normalized.copy(wssUrl = officialUrl).toWebRtcConfig().copy(headers = headers)
     }
 }
@@ -153,7 +154,7 @@ fun WebRtcRoomProfile.matchesActiveConfig(config: WebRtcConfig?): Boolean {
     if (source == WebRtcRoomSource.Official) {
         return config.roomId == roomId
     }
-    val roomConfig = toWebRtcConfig()
+    val roomConfig = toWebRtcConfigResult().getOrNull() ?: return false
     return roomConfig.wssUrl == config.wssUrl &&
         roomConfig.roomId == config.roomId &&
         roomConfig.iceServers == config.iceServers &&

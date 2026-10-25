@@ -16,6 +16,10 @@ import com.folderspan.service.message.IncomingDeviceMessageCoordinator
 import com.folderspan.service.message.newDeviceMessageId
 import com.folderspan.service.session.DEVICE_SESSION_RPC_CONNECT
 import com.folderspan.service.session.DEVICE_SESSION_RPC_THEME
+import com.folderspan.service.session.DEVICE_SESSION_RPC_WEBRTC_ICE
+import com.folderspan.service.session.DEVICE_SESSION_RPC_OK
+import com.folderspan.service.session.DeviceSessionIceQuery
+import com.folderspan.service.session.DeviceSessionConnectivityProbe
 import com.folderspan.service.session.DeviceSessionClientAuthenticationContext
 import com.folderspan.service.session.DeviceSessionClientMessagingContext
 import com.folderspan.service.session.DeviceSessionClientRuntime
@@ -31,6 +35,8 @@ import com.folderspan.service.webrtc.controller.core.HttpSignalingOpenedRoomStat
 import com.folderspan.service.webrtc.controller.core.WebRtcConnectRequestEvent
 import com.folderspan.service.webrtc.controller.core.WebRtcDeviceSessionPhase
 import com.folderspan.service.webrtc.controller.core.WebRtcPeerSessionSummary
+import com.folderspan.service.webrtc.controller.core.WebRtcRemoteNegotiation
+import com.folderspan.service.webrtc.controller.core.WebRtcCandidateCapacityException
 import com.folderspan.service.webrtc.controller.core.chooseTransferTargetPeerId
 import com.folderspan.service.webrtc.controller.core.resolveHttpSignalingOpenedRoomState
 import com.folderspan.service.webrtc.models.TransferProgress
@@ -40,6 +46,10 @@ import com.folderspan.service.webrtc.models.WebRtcDataChannel
 import com.folderspan.service.webrtc.models.WebRtcDataChannelState
 import com.folderspan.service.webrtc.models.WebRtcIceCandidate
 import com.folderspan.service.webrtc.models.WebRtcIceServerConfig
+import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
+import com.folderspan.service.webrtc.models.asRemoteObservation
+import com.folderspan.service.webrtc.models.webRtcIceUfrags
+import com.folderspan.service.webrtc.models.icePathFailureMessage
 import com.folderspan.service.webrtc.models.WebRtcPeerConnection
 import com.folderspan.service.webrtc.models.WebRtcPeerConnectionState
 import com.folderspan.service.webrtc.models.WebRtcSdpType
@@ -59,6 +69,7 @@ import com.folderspan.service.webrtc.signaling.isValidRoomId
 import com.folderspan.service.webrtc.signaling.toSignalingDevice
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
+import com.folderspan.utils.ProtoBufCodec
 import com.folderspan.utils.SettingsUtils.KEY_DEVICE_ID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
@@ -66,6 +77,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -77,6 +89,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import strings.AppStrings
@@ -97,7 +112,7 @@ class MultiPeerWebRtcController(
         var connectRequested: Boolean = false
         var manualDisconnect: Boolean = false
         var offerStarted: Boolean = false
-        var generation: Int = 0
+        @Volatile var generation: Int = 0
         var connectionAttemptId: String = ""
         var bootstrapAuthorization: DeviceSessionBootstrapAuthorization? = null
         var isDeviceSessionClient: Boolean = false
@@ -109,6 +124,25 @@ class MultiPeerWebRtcController(
         var byteChannel: WebRtcDeviceSessionByteChannel? = null
         var clientRuntime: DeviceSessionClientRuntime? = null
         var serverJob: Job? = null
+        var remoteNegotiation: WebRtcRemoteNegotiation? = null
+        var connectionTimeout: Job? = null
+        var authenticationTimeout: Job? = null
+        var recoveryTimeout: Job? = null
+        var negotiationJob: Job? = null
+        var recoveryProbeJob: Job? = null
+        var probeSession: DeviceSessionConnectivityProbe? = null
+        var recovering: Boolean = false
+        var recoveryNegotiationStarted: Boolean = false
+        var recoveryDescriptionApplied: Boolean = false
+        var localUfrags: Set<String> = emptySet()
+        var remoteUfrags: Set<String> = emptySet()
+        var pendingRemoteUfrags: Set<String> = emptySet()
+        val retiredRemoteUfrags = ArrayDeque<String>()
+        @Volatile var authenticated: Boolean = false
+        @Volatile var negotiation: Int = 0
+        var iceSampling: Job? = null
+        @Volatile var localIce: WebRtcIceSnapshot? = null
+        var remoteIce: WebRtcIceSnapshot? = null
         val peerConnectionCollectors = mutableListOf<Job>()
         val dataChannelCollectors = mutableListOf<Job>()
         val carrierFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 1)
@@ -118,7 +152,7 @@ class MultiPeerWebRtcController(
 
         fun hasOpenSessionChannel(): Boolean = sessionChannel?.state == WebRtcDataChannelState.Open
 
-        fun isConnected(): Boolean = status == WebRtcConnectionStatus.Connected && hasOpenSessionChannel()
+        fun isConnected(): Boolean = authenticated && status == WebRtcConnectionStatus.Connected && hasOpenSessionChannel()
     }
 
     private val peerSessions = mutableMapOf<String, PeerSession>()
@@ -276,6 +310,8 @@ class MultiPeerWebRtcController(
         val session = peerSessions.remove(remoteId) ?: return
         session.manualDisconnect = true
         session.connectRequested = false
+        session.bootstrapAuthorization = null
+        session.connectionAttemptId = ""
         closePeerConnection(session)
         publishPeerSessionStates()
     }
@@ -341,13 +377,13 @@ class MultiPeerWebRtcController(
     }
 
     internal fun deviceSessionClients(remoteId: String): DeviceSessionClients? =
-        peerSessions[remoteId]?.clientRuntime?.clients
+        peerSessions[remoteId]?.takeIf { it.isConnected() }?.clientRuntime?.clients
 
     internal fun isShareSession(remoteId: String): Boolean =
         peerSessions[remoteId]?.isShareSession == true
 
     suspend fun getPeerTheme(remoteId: String, isDark: Boolean): Result<DeviceThemeResponse> {
-        val runtime = peerSessions[remoteId]?.clientRuntime
+        val runtime = peerSessions[remoteId]?.takeIf { it.isConnected() }?.clientRuntime
             ?: return Result.failure(IllegalStateException(AppStrings.webrtc_target_device_not_connected))
         return runCatching {
             runtime.peer.rpcValue<DeviceThemeRequest, DeviceThemeResponse>(
@@ -483,6 +519,8 @@ class MultiPeerWebRtcController(
         pendingInboundApprovalIds.remove(session.remoteId)
         approvedPeerIds.remove(session.remoteId)
         session.connectRequested = false
+        session.bootstrapAuthorization = null
+        session.connectionAttemptId = ""
         closePeerConnection(session)
         session.status = status
         _lastError.value = AppStrings.ui_the_connection_to_the_device_arg0_has_been_disconnected_please_manually.format(
@@ -606,24 +644,39 @@ class MultiPeerWebRtcController(
             _lastError.value = AppStrings.ui_unauthorised_webrtc_connection_request
             return
         }
+        val ufrags = sdp.webRtcIceUfrags()
+        if (session.rejectRemoteDescription(ufrags)) return
+        if (session.authenticated) {
+            if (session.isOfferer || ufrags.isEmpty() || (session.recovering && session.recoveryNegotiationStarted) ||
+                !beginIceRecovery(session, notifyOfferer = false)
+            ) return
+            session.recoveryNegotiationStarted = true
+            session.negotiation++
+        } else {
+            session.isOfferer = false
+        }
         session.manualDisconnect = false
         session.connectRequested = true
-        session.isOfferer = false
         _suggestedRemoteId.value = remote.id
         if (_selectedPeerId.value.isNullOrBlank()) _selectedPeerId.value = remote.id
         if (session.peerConnection == null) setupPeerConnection(session)
         val peerConnection = session.peerConnection ?: return
+        session.pendingRemoteUfrags = ufrags
         val generation = session.generation
         val attemptId = session.connectionAttemptId
-        scope.launch {
-            if (!session.isCurrent(peerConnection, generation)) return@launch
+        val negotiation = session.negotiation
+        fun isCurrent() = session.isCurrent(peerConnection, generation) && session.negotiation == negotiation
+        session.remoteNegotiation?.description(ufrags) {
+            if (!isCurrent()) return@description
             runCatching {
                 peerConnection.setRemoteDescription(WebRtcSessionDescription(WebRtcSdpType.Offer, sdp))
-                if (!session.isCurrent(peerConnection, generation)) return@launch
+                if (!isCurrent()) return@description
+                session.rememberRemoteDescription(ufrags)
                 val answer = peerConnection.createAnswer()
-                if (!session.isCurrent(peerConnection, generation)) return@launch
+                if (!isCurrent()) return@description
+                session.localUfrags = answer.sdp.webRtcIceUfrags()
                 peerConnection.setLocalDescription(answer)
-                if (!session.isCurrent(peerConnection, generation)) return@launch
+                if (!isCurrent()) return@description
                 sendSignaling(
                     SignalingMessage(
                         type = "answer",
@@ -635,9 +688,13 @@ class MultiPeerWebRtcController(
                         ts = nowMs(),
                     )
                 )
+                if (isCurrent() && session.recovering) {
+                    session.recoveryDescriptionApplied = true
+                    verifyIceRecovery(session)
+                }
             }.onFailure { error ->
                 if (error is CancellationException) throw error
-                if (session.isCurrent(peerConnection, generation)) {
+                if (isCurrent()) {
                     failPeerSession(session, error, AppStrings.ui_process_offer_failure)
                 }
             }
@@ -653,17 +710,30 @@ class MultiPeerWebRtcController(
             session.connectionAttemptId.isBlank() ||
             message.connectionAttemptId != session.connectionAttemptId
         ) return
+        if (!session.isOfferer) return
+        val ufrags = sdp.webRtcIceUfrags()
+        if (session.rejectRemoteDescription(ufrags)) return
+        if (session.authenticated && (!session.recovering || !session.recoveryNegotiationStarted || ufrags.isEmpty())) return
+        session.pendingRemoteUfrags = ufrags
         val peerConnection = session.peerConnection ?: return
         val generation = session.generation
-        scope.launch {
-            if (!session.isCurrent(peerConnection, generation)) return@launch
+        val negotiation = session.negotiation
+        fun isCurrent() = session.isCurrent(peerConnection, generation) && session.negotiation == negotiation
+        session.remoteNegotiation?.description(ufrags) {
+            if (!isCurrent()) return@description
             runCatching {
                 peerConnection.setRemoteDescription(
                     WebRtcSessionDescription(WebRtcSdpType.Answer, sdp)
                 )
+                if (!isCurrent()) return@description
+                session.rememberRemoteDescription(ufrags)
+                if (session.recovering) {
+                    session.recoveryDescriptionApplied = true
+                    verifyIceRecovery(session)
+                }
             }.onFailure { error ->
                 if (error is CancellationException) throw error
-                if (session.isCurrent(peerConnection, generation)) {
+                if (isCurrent()) {
                     failPeerSession(session, error, AppStrings.ui_processing_answer_failed)
                 }
             }
@@ -671,30 +741,25 @@ class MultiPeerWebRtcController(
     }
 
     private fun handleIce(message: SignalingMessage) {
-        val candidate = message.candidate ?: return
         val remote = message.from ?: return
-        val session = ensureSession(remote.id, remote)
+        val session = peerSessions[remote.id] ?: return
         if (
             remote.id !in approvedPeerIds ||
             session.connectionAttemptId.isBlank() ||
             message.connectionAttemptId != session.connectionAttemptId
         ) return
-        if (session.peerConnection == null) setupPeerConnection(session)
-        val peerConnection = session.peerConnection ?: return
-        val generation = session.generation
-        scope.launch {
-            if (!session.isCurrent(peerConnection, generation)) return@launch
-            runCatching {
-                peerConnection.addIceCandidate(
-                    WebRtcIceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate)
-                )
-            }.onFailure { error ->
-                if (error is CancellationException) throw error
-                if (session.isCurrent(peerConnection, generation)) {
-                    LogKit.w("Adding WebRTC ICE candidate failed: remote=${session.remoteId}", error)
-                }
+        if (message.code == "ice-restart" && message.candidate == null) {
+            val requestedUfrags = message.sdp.orEmpty().split(' ').filter(String::isNotBlank).toSet()
+            if (session.isOfferer && requestedUfrags.isNotEmpty() && requestedUfrags == session.remoteUfrags) {
+                beginIceRecovery(session)
             }
+            return
         }
+        val candidate = message.candidate ?: return
+        if (session.peerConnection == null) setupPeerConnection(session)
+        session.remoteNegotiation?.candidate(
+            WebRtcIceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate),
+        )
     }
 
     private fun connectPeerInternal(remoteId: String) {
@@ -741,61 +806,185 @@ class MultiPeerWebRtcController(
             return
         }
         val generation = session.generation
+        val attempt = session.connectionAttemptId
         session.peerConnection = peerConnection
         session.peerConnectionState = WebRtcPeerConnectionState.New
         session.status = WebRtcConnectionStatus.Connecting
         session.offerStarted = false
+        session.remoteNegotiation = WebRtcRemoteNegotiation(
+            scope = scope,
+            isCurrent = {
+                session.isCurrent(peerConnection, generation) && session.remoteId in approvedPeerIds &&
+                    attempt.isNotBlank() && session.connectionAttemptId == attempt
+            },
+            addCandidate = peerConnection::addIceCandidate,
+            onFailure = { error -> failPeerSession(session, error,
+                if (error is WebRtcCandidateCapacityException) AppStrings.webrtc_ice_candidate_limit_exceeded else AppStrings.ui_connection_failed) },
+        )
+        session.connectionTimeout = scope.launch {
+            delay(30_000.milliseconds)
+            if (session.isCurrent(peerConnection, generation) && !session.hasOpenSessionChannel()) {
+                failPeerSession(session, IllegalStateException("WebRTC ICE/DataChannel connection timed out"),
+                    config.iceServers.icePathFailureMessage(peerConnection.lastIceServerErrorCode))
+            }
+        }
         publishPeerSessionStates()
 
-        session.peerConnectionCollectors += peerConnection.onIceCandidate.onEach { candidate ->
-            if (generation != session.generation || candidate.candidate.isBlank()) return@onEach
-            val activeConfig = currentConfig ?: return@onEach
-            sendSignaling(
-                SignalingMessage(
-                    type = "ice",
-                    roomId = activeConfig.roomId,
-                    from = resolveLocalDevice(activeConfig),
-                    to = session.peer.asTargetDevice(),
-                    candidate = SignalingIceCandidate(
-                        sdpMid = candidate.sdpMid,
-                        sdpMLineIndex = candidate.sdpMLineIndex,
-                        candidate = candidate.candidate,
-                    ),
-                    connectionAttemptId = session.connectionAttemptId,
-                    ts = nowMs(),
+        session.peerConnectionCollectors += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            peerConnection.onIceCandidate.collect { candidate ->
+                if (!session.isCurrent(peerConnection, generation) || session.remoteId !in approvedPeerIds ||
+                    session.connectionAttemptId != attempt || candidate.candidate.isBlank()
+                ) return@collect
+                val activeConfig = currentConfig ?: return@collect
+                sendSignaling(
+                    SignalingMessage(
+                        type = "ice",
+                        roomId = activeConfig.roomId,
+                        from = resolveLocalDevice(activeConfig),
+                        to = session.peer.asTargetDevice(),
+                        candidate = SignalingIceCandidate(
+                            sdpMid = candidate.sdpMid,
+                            sdpMLineIndex = candidate.sdpMLineIndex,
+                            candidate = candidate.candidate,
+                        ),
+                        connectionAttemptId = session.connectionAttemptId,
+                        ts = nowMs(),
+                    )
                 )
-            )
-        }.launchIn(scope)
-
-        session.peerConnectionCollectors += peerConnection.onDataChannel.onEach { channel ->
-            if (generation == session.generation) attachSessionChannel(session, channel, generation)
-        }.launchIn(scope)
-
-        session.peerConnectionCollectors += peerConnection.onConnectionStateChange.onEach { state ->
-            if (generation != session.generation) return@onEach
-            session.peerConnectionState = state
-            when (state) {
-                WebRtcPeerConnectionState.New,
-                WebRtcPeerConnectionState.Connecting,
-                WebRtcPeerConnectionState.Connected -> {
-                    if (session.status != WebRtcConnectionStatus.Connected) {
-                        session.status = WebRtcConnectionStatus.Connecting
-                    }
-                    publishPeerSessionStates()
-                }
-
-                WebRtcPeerConnectionState.Disconnected,
-                WebRtcPeerConnectionState.Closed -> {
-                    session.carrierFailures.tryEmit(IllegalStateException("PeerConnection $state"))
-                    handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "PeerConnection $state")
-                }
-
-                WebRtcPeerConnectionState.Failed -> {
-                    session.carrierFailures.tryEmit(IllegalStateException("PeerConnection failed"))
-                    handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Error, "PeerConnection failed")
-                }
             }
-        }.launchIn(scope)
+        }
+
+        session.peerConnectionCollectors += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            peerConnection.onDataChannel.collect { channel ->
+                if (generation == session.generation) attachSessionChannel(session, channel, generation)
+            }
+        }
+
+        session.peerConnectionCollectors += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            peerConnection.onConnectionStateChange.collect { state ->
+                if (generation == session.generation) handlePeerConnectionState(session, state)
+            }
+        }
+    }
+
+    private fun handlePeerConnectionState(session: PeerSession, state: WebRtcPeerConnectionState) {
+        session.peerConnectionState = state
+        when (state) {
+            WebRtcPeerConnectionState.New, WebRtcPeerConnectionState.Connecting -> {
+                if (!session.authenticated || session.recovering) session.status = WebRtcConnectionStatus.Connecting
+                publishPeerSessionStates()
+            }
+            WebRtcPeerConnectionState.Connected -> {
+                if (session.recovering) verifyIceRecovery(session)
+                else if (!session.authenticated) session.status = WebRtcConnectionStatus.Connecting
+                publishPeerSessionStates()
+            }
+            WebRtcPeerConnectionState.Disconnected -> if (!beginIceRecovery(session)) {
+                session.carrierFailures.tryEmit(IllegalStateException("PeerConnection disconnected"))
+                handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "PeerConnection disconnected")
+            }
+            WebRtcPeerConnectionState.Closed -> {
+                session.carrierFailures.tryEmit(IllegalStateException("PeerConnection closed"))
+                handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "PeerConnection closed")
+            }
+            WebRtcPeerConnectionState.Failed -> failPeerSession(session, IllegalStateException("PeerConnection failed"),
+                currentConfig?.iceServers.orEmpty().icePathFailureMessage(session.peerConnection?.lastIceServerErrorCode))
+        }
+    }
+
+    private fun PeerSession.rejectRemoteDescription(ufrags: Set<String>): Boolean = ufrags.isNotEmpty() &&
+        (ufrags == remoteUfrags || pendingRemoteUfrags.isNotEmpty() || ufrags.any { it in retiredRemoteUfrags })
+
+    private fun PeerSession.rememberRemoteDescription(ufrags: Set<String>) {
+        retiredRemoteUfrags.addAll(remoteUfrags - ufrags)
+        while (retiredRemoteUfrags.size > 16) retiredRemoteUfrags.removeFirst()
+        remoteUfrags = ufrags
+        pendingRemoteUfrags = emptySet()
+    }
+
+    private fun beginIceRecovery(session: PeerSession, notifyOfferer: Boolean = true): Boolean {
+        val config = currentConfig ?: return false
+        val connection = session.peerConnection ?: return false
+        if (!session.authenticated || session.manualDisconnect || !session.hasOpenSessionChannel() ||
+            session.serverJob?.isActive != true ||
+            session.remoteId !in approvedPeerIds || session.connectionAttemptId.isBlank() ||
+            signalingClient == null || _connectionStatus.value != WebRtcConnectionStatus.Connected ||
+            session.peerConnectionState in listOf(WebRtcPeerConnectionState.Failed, WebRtcPeerConnectionState.Closed)
+        ) return false
+        if (session.recovering) return true
+        session.recovering = true
+        session.recoveryNegotiationStarted = false
+        session.recoveryDescriptionApplied = false
+        session.negotiationJob?.cancel()
+        session.negotiationJob = null
+        session.recoveryProbeJob?.cancel()
+        session.recoveryProbeJob = null
+        session.status = WebRtcConnectionStatus.Connecting
+        session.iceSampling?.cancel()
+        session.iceSampling = null
+        session.localIce = null
+        session.remoteIce = null
+        val generation = session.generation
+        val attempt = session.connectionAttemptId
+        session.recoveryTimeout = scope.launch {
+            delay(30_000L)
+            if (session.isCurrent(connection, generation) && session.recovering) {
+                failPeerSession(session, IllegalStateException("WebRTC ICE recovery timed out"), AppStrings.webrtc_ice_recovery_timeout)
+            }
+        }
+        publishPeerSessionStates()
+        if (session.isOfferer) {
+            session.recoveryNegotiationStarted = true
+            val negotiation = ++session.negotiation
+            session.negotiationJob = scope.launch {
+                fun isCurrent() = session.isCurrent(connection, generation) && session.negotiation == negotiation && session.recovering
+                try {
+                    val offer = connection.createOffer(iceRestart = true)
+                    if (!isCurrent()) return@launch
+                    session.localUfrags = offer.sdp.webRtcIceUfrags()
+                    connection.setLocalDescription(offer)
+                    if (!isCurrent()) return@launch
+                    sendSignaling(SignalingMessage(type = "offer", roomId = config.roomId, from = resolveLocalDevice(config),
+                        to = session.peer.asTargetDevice(), sdp = offer.sdp, connectionAttemptId = attempt, ts = nowMs()))
+                } catch (error: CancellationException) { throw error }
+                catch (error: Throwable) { if (isCurrent()) failPeerSession(session, error, AppStrings.ui_create_offer_failure) }
+            }
+        } else if (notifyOfferer) {
+            session.negotiationJob = scope.launch {
+                if (!session.isCurrent(connection, generation)) return@launch
+                sendSignaling(SignalingMessage(type = "ice", code = "ice-restart", roomId = config.roomId,
+                    from = resolveLocalDevice(config), to = session.peer.asTargetDevice(),
+                    sdp = session.localUfrags.sorted().joinToString(" "), connectionAttemptId = attempt, ts = nowMs()))
+            }
+        }
+        return true
+    }
+
+    private fun verifyIceRecovery(session: PeerSession) {
+        if (!session.recovering || !session.recoveryDescriptionApplied ||
+            session.peerConnectionState in listOf(WebRtcPeerConnectionState.Failed, WebRtcPeerConnectionState.Closed) ||
+            !session.hasOpenSessionChannel() || session.recoveryProbeJob?.isActive == true
+        ) return
+        val probe = session.probeSession ?: return
+        val connection = session.peerConnection ?: return
+        val generation = session.generation
+        val negotiation = session.negotiation
+        session.recoveryProbeJob = scope.launch {
+            val usable = try { probe() }
+                catch (error: CancellationException) { throw error }
+                catch (_: Throwable) { false }
+            if (!session.isCurrent(connection, generation) || session.negotiation != negotiation || !session.recovering) return@launch
+            if (!usable || !session.hasOpenSessionChannel()) {
+                failPeerSession(session, IllegalStateException("Device Session recovery probe failed"), AppStrings.ui_connection_failed)
+                return@launch
+            }
+            session.recovering = false
+            session.recoveryTimeout?.cancel()
+            session.recoveryTimeout = null
+            session.status = WebRtcConnectionStatus.Connected
+            startIceSampling(session)
+            publishPeerSessionStates()
+        }
     }
 
     private fun createPeerConnection(
@@ -842,11 +1031,12 @@ class MultiPeerWebRtcController(
             return
         }
         attachSessionChannel(session, channel, generation)
-        scope.launch {
+        session.negotiationJob = scope.launch {
             if (!session.isCurrent(peerConnection, generation)) return@launch
             runCatching {
                 val offer = peerConnection.createOffer()
                 if (!session.isCurrent(peerConnection, generation)) return@launch
+                session.localUfrags = offer.sdp.webRtcIceUfrags()
                 peerConnection.setLocalDescription(offer)
                 if (!session.isCurrent(peerConnection, generation)) return@launch
                 sendSignaling(
@@ -903,7 +1093,11 @@ class MultiPeerWebRtcController(
         session.sessionChannel = channel
 
         fun onOpen() {
-            if (generation == session.generation) startDeviceSession(session, channel, generation)
+            if (generation == session.generation) {
+                session.connectionTimeout?.cancel()
+                session.connectionTimeout = null
+                startDeviceSession(session, channel, generation)
+            }
         }
         // Register before sampling state: native OPEN can arrive before a queued collector starts.
         val closeCollector = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -959,9 +1153,9 @@ class MultiPeerWebRtcController(
         session.status = WebRtcConnectionStatus.Connecting
         publishPeerSessionStates()
 
-        sessionScope.launch {
+        session.authenticationTimeout = scope.launch {
             delay(15_000.milliseconds)
-            if (generation == session.generation && session.status == WebRtcConnectionStatus.Connecting) {
+            if (generation == session.generation && !session.authenticated) {
                 failPeerSession(
                     session,
                     IllegalStateException("Device Session authentication timed out"),
@@ -1001,28 +1195,36 @@ class MultiPeerWebRtcController(
                         ),
                         messaging = messaging,
                     )
-                    check(runtime.connectResponse.connection.connectType == DeviceConnectType.APPROVED) {
-                        "WebRTC Device Session authorization rejected"
+                    val attached = try {
+                        check(runtime.connectResponse.connection.connectType == DeviceConnectType.APPROVED) {
+                            "WebRTC Device Session authorization rejected"
+                        }
+                        markSessionAuthenticated(session, generation, runtime)
+                    } catch (error: Throwable) {
+                        withContext(NonCancellable) {
+                            if (error !is CancellationException) withContext(scope.coroutineContext.minusKey(Job)) {
+                                if (generation == session.generation) failSessionProtocol(session, error)
+                            }
+                            runtime.close()
+                        }
+                        throw error
                     }
-                    if (generation != session.generation) {
+                    if (!attached) {
                         runtime.close()
                         return@launch
                     }
-                    session.clientRuntime = runtime
-                    session.status = WebRtcConnectionStatus.Connected
-                    publishPeerSessionStates()
                     runtime.sessionJob.join()
-                    if (generation == session.generation && !session.manualDisconnect) {
-                        handleUnexpectedPeerDisconnect(
-                            session,
-                            WebRtcConnectionStatus.Disconnected,
-                            "Device Session closed",
-                        )
+                    withContext(scope.coroutineContext.minusKey(Job)) {
+                        if (generation == session.generation && !session.manualDisconnect) {
+                            handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "Device Session closed")
+                        }
                     }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
-                    if (generation == session.generation) failSessionProtocol(session, error)
+                    withContext(scope.coroutineContext.minusKey(Job)) {
+                        if (generation == session.generation) failSessionProtocol(session, error)
+                    }
                 }
             }
         } else {
@@ -1038,27 +1240,46 @@ class MultiPeerWebRtcController(
                         remoteDeviceId = session.remoteId,
                         connectionAttemptId = session.connectionAttemptId,
                         scope = sessionScope,
-                        onAuthenticated = {
-                            if (generation == session.generation) {
-                                session.status = WebRtcConnectionStatus.Connected
-                                publishPeerSessionStates()
-                            }
+                        iceSnapshot = { session.localIce.takeIf { generation == session.generation && session.authenticated } },
+                        onAuthenticated = { probe ->
+                            markSessionAuthenticated(session, generation, probe = probe)
                         },
                     )
-                    if (generation == session.generation && !session.manualDisconnect) {
-                        handleUnexpectedPeerDisconnect(
-                            session,
-                            WebRtcConnectionStatus.Disconnected,
-                            "Device Session closed",
-                        )
+                    withContext(scope.coroutineContext.minusKey(Job)) {
+                        if (generation == session.generation && !session.manualDisconnect) {
+                            handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "Device Session closed")
+                        }
                     }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
-                    if (generation == session.generation) failSessionProtocol(session, error)
+                    withContext(scope.coroutineContext.minusKey(Job)) {
+                        if (generation == session.generation) failSessionProtocol(session, error)
+                    }
                 }
             }
         }
+    }
+
+    private suspend fun markSessionAuthenticated(
+        session: PeerSession,
+        generation: Int,
+        runtime: DeviceSessionClientRuntime? = null,
+        probe: DeviceSessionConnectivityProbe? = null,
+    ): Boolean = withContext(scope.coroutineContext.minusKey(Job)) {
+        if (generation != session.generation) return@withContext false
+        if (runtime != null) session.clientRuntime = runtime
+        session.probeSession = probe ?: runtime?.let { active -> suspend {
+            val nonce = newDeviceMessageId().encodeToByteArray()
+            active.peer.connection.ping(nonce).contentEquals(nonce)
+        } }
+        session.authenticated = true
+        session.authenticationTimeout?.cancel()
+        session.authenticationTimeout = null
+        session.status = WebRtcConnectionStatus.Connected
+        startIceSampling(session)
+        publishPeerSessionStates()
+        true
     }
 
     private fun failSessionProtocol(session: PeerSession, error: Throwable) {
@@ -1069,6 +1290,35 @@ class MultiPeerWebRtcController(
                 arg0 = error.message ?: AppStrings.ui_connection_failed,
             ),
         )
+    }
+
+    private fun startIceSampling(session: PeerSession) {
+        session.iceSampling?.cancel()
+        val connection = session.peerConnection ?: return
+        val generation = session.generation
+        val negotiation = session.negotiation
+        val attempt = session.connectionAttemptId
+        session.iceSampling = scope.launch {
+            while (session.isCurrent(connection, generation) && session.negotiation == negotiation && session.authenticated && !session.recovering) {
+                val path = try { withTimeoutOrNull(2_000L) { connection.getSelectedIcePath() } }
+                    catch (error: CancellationException) { throw error }
+                    catch (_: Throwable) { null }
+                if (!session.isCurrent(connection, generation) || session.negotiation != negotiation || session.recovering) return@launch
+                session.localIce = path?.let { WebRtcIceSnapshot(currentLocalDeviceId, session.remoteId, attempt, negotiation, it) }
+                val runtime = session.clientRuntime
+                val remote = if (runtime == null) null else try {
+                    withTimeoutOrNull(2_000L) {
+                        val response = runtime.peer.rpc(DEVICE_SESSION_RPC_WEBRTC_ICE, ProtoBufCodec.encode(DeviceSessionIceQuery(attempt, negotiation)))
+                        if (response.status != DEVICE_SESSION_RPC_OK) null else ProtoBufCodec.decode<WebRtcIceSnapshot>(response.payload)
+                    }
+                } catch (error: CancellationException) { throw error }
+                catch (_: Throwable) { null }
+                if (!session.isCurrent(connection, generation) || session.negotiation != negotiation || session.recovering) return@launch
+                session.remoteIce = remote?.asRemoteObservation(currentLocalDeviceId, session.remoteId, attempt, negotiation)
+                publishPeerSessionStates()
+                delay(2_000L)
+            }
+        }
     }
 
     private fun failPeerSession(session: PeerSession, error: Throwable, fallback: String) {
@@ -1082,7 +1332,7 @@ class MultiPeerWebRtcController(
         closePeerConnection(session)
         session.status = WebRtcConnectionStatus.Error
         _lastError.value = fallback
-        LogKit.w("WebRTC peer session failed: remote=${session.remoteId}", error)
+        LogKit.w("WebRTC peer session failed: remote=${session.remoteId} cause=${error::class.simpleName}")
         publishPeerSessionStates()
     }
 
@@ -1100,6 +1350,32 @@ class MultiPeerWebRtcController(
 
     private fun closePeerConnection(session: PeerSession) {
         session.generation += 1
+        session.authenticationTimeout?.cancel()
+        session.authenticationTimeout = null
+        session.recoveryTimeout?.cancel()
+        session.recoveryTimeout = null
+        session.negotiationJob?.cancel()
+        session.negotiationJob = null
+        session.recoveryProbeJob?.cancel()
+        session.recoveryProbeJob = null
+        session.probeSession = null
+        session.recovering = false
+        session.recoveryNegotiationStarted = false
+        session.recoveryDescriptionApplied = false
+        session.localUfrags = emptySet()
+        session.remoteUfrags = emptySet()
+        session.pendingRemoteUfrags = emptySet()
+        session.retiredRemoteUfrags.clear()
+        session.authenticated = false
+        session.negotiation = 0
+        session.iceSampling?.cancel()
+        session.iceSampling = null
+        session.localIce = null
+        session.remoteIce = null
+        session.remoteNegotiation?.close()
+        session.remoteNegotiation = null
+        session.connectionTimeout?.cancel()
+        session.connectionTimeout = null
         session.dataChannelCollectors.forEach(Job::cancel)
         session.dataChannelCollectors.clear()
         session.peerConnectionCollectors.forEach(Job::cancel)
@@ -1129,6 +1405,7 @@ class MultiPeerWebRtcController(
             val client = signalingClient ?: error(AppStrings.webrtc_signaling_not_connected)
             client.send(message)
         }.onFailure { error ->
+            if (error is CancellationException) throw error
             LogKit.w("Sending WebRTC signal failed: type=${message.type} to=${message.to?.id}", error)
             if (currentConfig?.roomId == message.roomId) {
                 handleUnexpectedRoomDisconnect("Send ${message.type} failed")
@@ -1170,6 +1447,8 @@ class MultiPeerWebRtcController(
                     isAwaitingApproval = awaitingApproval,
                     isShareSession = session?.isShareSession == true,
                     sessionPhase = resolveDeviceSessionPhase(session, awaitingApproval),
+                    localIce = session?.localIce,
+                    remoteIce = session?.remoteIce,
                 )
             }
     }
@@ -1179,6 +1458,7 @@ class MultiPeerWebRtcController(
         awaitingApproval: Boolean,
     ): WebRtcDeviceSessionPhase = when {
         session?.status == WebRtcConnectionStatus.Error -> WebRtcDeviceSessionPhase.Failed
+        session?.recovering == true -> WebRtcDeviceSessionPhase.PeerConnection
         session?.status == WebRtcConnectionStatus.Connected -> WebRtcDeviceSessionPhase.Ready
         awaitingApproval || session == null || session.connectionAttemptId.isBlank() ->
             WebRtcDeviceSessionPhase.Signaling

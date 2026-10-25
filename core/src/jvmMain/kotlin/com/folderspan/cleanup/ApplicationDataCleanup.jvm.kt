@@ -67,7 +67,6 @@ actual object ApplicationDataCleanup {
 internal data class DesktopCleanupEnvironment(
     val homeDirectory: Path,
     val applicationDataDirectory: Path,
-    val workingDirectory: Path,
     val cacheDirectory: Path,
     val preferences: Preferences,
     val removeLoginStartup: () -> Unit,
@@ -129,7 +128,7 @@ internal class DesktopApplicationDataCleaner {
             }
             if (ApplicationDataCleanupCategory.TransferHistory in categories) {
                 APPLICATION_DIRECTORY_NAMES.forEach { name ->
-                    add(environment.workingDirectory.resolve(name))
+                    add(environment.applicationDataDirectory.resolve(name))
                 }
             }
             if (ApplicationDataCleanupCategory.CacheAndLogs in categories) {
@@ -145,11 +144,19 @@ fun resolveDesktopApplicationDataDirectory(
     homeDirectory: Path = Paths.get(System.getProperty("user.home")),
     osName: String = System.getProperty("os.name").orEmpty(),
     appDataEnvironment: String? = System.getenv("APPDATA"),
+    xdgDataHomeEnvironment: String? = System.getenv("XDG_DATA_HOME"),
 ): Path = when (desktopOsFamily(osName)) {
     DesktopOsFamily.MacOs -> homeDirectory.resolve("Library/Application Support/FolderSpan")
     DesktopOsFamily.Windows -> Paths.get(appDataEnvironment ?: homeDirectory.toString()).resolve("FolderSpan")
     DesktopOsFamily.Linux,
-    DesktopOsFamily.Unsupported -> homeDirectory.resolve(".local/share/FolderSpan")
+    DesktopOsFamily.Unsupported -> {
+        val dataHome = xdgDataHomeEnvironment
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Paths.get(it) }
+            ?.takeIf { it.isAbsolute }
+            ?: homeDirectory.resolve(".local/share")
+        dataHome.resolve("FolderSpan")
+    }
 }.toAbsolutePath().normalize()
 
 private fun defaultDesktopCleanupEnvironment(): DesktopCleanupEnvironment {
@@ -157,7 +164,6 @@ private fun defaultDesktopCleanupEnvironment(): DesktopCleanupEnvironment {
     return DesktopCleanupEnvironment(
         homeDirectory = homeDirectory,
         applicationDataDirectory = resolveDesktopApplicationDataDirectory(homeDirectory),
-        workingDirectory = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize(),
         cacheDirectory = resolveDesktopApplicationDataDirectory().resolve("cache"),
         preferences = Preferences.userRoot(),
         removeLoginStartup = {

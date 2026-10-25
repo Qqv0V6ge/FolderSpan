@@ -18,12 +18,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotApplyConflictException
 import com.folderspan.data.StatusEnum
-import com.folderspan.data.file.FileProtocol
 import com.folderspan.ui.state.file.ExternalFileResourceLeaseRegistry
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
-import com.folderspan.utils.isAndroidContentUriPath
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlin.time.Clock
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -49,6 +50,33 @@ class TaskState(
     private val cleanupFailuresState = MutableStateFlow<List<TaskCleanupFailure>>(emptyList())
     val deletionBusy = deletionBusyState.asStateFlow()
     val cleanupFailures = cleanupFailuresState.asStateFlow()
+    private val residualsState = MutableStateFlow<Map<Long, TaskResidualSummary>>(emptyMap())
+    private val residualNoticeKeysState = MutableStateFlow<List<Long>>(emptyList())
+    val residuals = residualsState.asStateFlow()
+    val residualNoticeKeys = residualNoticeKeysState.asStateFlow()
+    private val shutdownStarted = MutableStateFlow(false)
+    private val completedTaskDeletionKeys = MutableStateFlow<Set<Long>>(emptySet())
+    private val externalTaskWriters = MutableStateFlow<Map<Long, CompletableDeferred<Unit>>>(emptyMap())
+    private val interruptedExternalTaskKeys = MutableStateFlow<Set<Long>>(emptySet())
+
+    fun dismissResidualNotice(taskKey: Long) {
+        residualNoticeKeysState.update { keys -> keys.filterNot { it == taskKey } }
+    }
+
+    private fun clearTaskResiduals(taskKey: Long) {
+        residualsState.update { it - taskKey }
+        dismissResidualNotice(taskKey)
+    }
+
+    private fun publishTaskResiduals(summary: TaskResidualSummary?) {
+        if (summary == null) return
+        withMutableTaskSnapshot {
+            val current = tasks.firstOrNull { it.key == summary.taskKey } ?: return@withMutableTaskSnapshot
+            if (current.status !in setOf(StatusEnum.FAILURE, StatusEnum.SUCCESS) || summary.taskKey in sessionTaskControls) return@withMutableTaskSnapshot
+            residualsState.update { it + (summary.taskKey to summary) }
+            residualNoticeKeysState.update { if (summary.taskKey in it) it else it + summary.taskKey }
+        }
+    }
 
     private class SessionTaskControl(
         val onCancel: () -> Unit,
@@ -88,6 +116,7 @@ class TaskState(
 
     fun requestDeleteTasks(taskKeys: List<Long>) {
         if (!deletionBusyState.compareAndSet(false, true)) return
+        taskKeys.forEach(::dismissResidualNotice)
         deletionScope.launch {
             val failures = mutableListOf<TaskCleanupFailure>()
             try {
@@ -129,20 +158,13 @@ class TaskState(
     private val deletingKeys = MutableStateFlow<Set<Long>>(emptySet())
     private val taskScheduler = TaskSerialScheduler(
         updateStatus = { task, status -> updateStatus(task, status) },
-        deleteTask = { task -> delete(task) },
         getTask = { taskKey -> getTask(taskKey) },
-        onCancelRequested = { task, reason ->
-            snapshotLock.lock()
-            try { cancelledRuntimeKeys.add(task.key); runtimeStore.clearTaskRuntime(task.key) } finally { snapshotLock.unlock() }
-            if (reason.isNotEmpty()) {
-                putResult(task, "cancel_reason", reason)
-            }
-        },
+        onCancelRequested = { task, reason -> markTaskCancelled(task, reason) },
         onTaskExecutionFailure = { taskKey, latestTask, error ->
             handleTaskExecutionFailure(taskKey, latestTask, error)
         },
-        onTaskFinalized = { taskKey ->
-            finalizeCompletedTask(taskKey)
+        onTaskFinalized = { taskKey, cancelledBeforeStart ->
+            finalizeCompletedTask(taskKey, cancelledBeforeStart)
         },
     )
 
@@ -232,7 +254,11 @@ class TaskState(
         restorePersistedTasks()
     }
 
-    suspend fun stop() = taskScheduler.stop()
+    suspend fun stop() {
+        shutdownStarted.value = true
+        taskScheduler.stop()
+        deletionScope.coroutineContext[Job]?.cancelAndJoin()
+    }
 
     private fun notifyChanged() {
         revision++
@@ -252,6 +278,11 @@ class TaskState(
             return true
         }
         tasks[index] = newTask
+        if (newTask.status == StatusEnum.LOADING || newTask.status == StatusEnum.PAUSE) {
+            clearTaskResiduals(newTask.key)
+            completedTaskDeletionKeys.update { it - newTask.key }
+            interruptedExternalTaskKeys.update { it - newTask.key }
+        }
         val sessionControl = sessionTaskControls[newTask.key]
         if (sessionControl == null) {
             runtimeStore.saveTaskSnapshot(newTask)
@@ -271,6 +302,7 @@ class TaskState(
                 replaceTask(index, task)
             } else {
                 tasks.add(task)
+                if (task.status == StatusEnum.LOADING || task.status == StatusEnum.PAUSE) clearTaskResiduals(task.key)
                 if (task.key !in sessionTaskControls) runtimeStore.saveTaskSnapshot(task)
                 notifyChanged()
             }
@@ -285,7 +317,24 @@ class TaskState(
         }
     }
 
-    /** Internal successful completion, or explicit record-only deletion after teardown. */
+    /** Successful work is removed only after its writer stops and old incomplete outputs are handled. */
+    fun completeTask(task: Task) {
+        if (!hasFailedRetryEntries(task)) {
+            // No external output is touched here. Completed receipts need no writer-aware cleanup.
+            val noIncompleteOutputs = !hasPendingRuntimeEntries(task.key) && runCatching {
+                taskCleanupCandidates(cleanupStore.load(task.key).orEmpty()).isEmpty()
+            }.getOrDefault(false)
+            if (noIncompleteOutputs) {
+                delete(task)
+                return
+            }
+            completedTaskDeletionKeys.update { it + task.key }
+        }
+        updateStatus(task, StatusEnum.SUCCESS)
+        scheduleTaskResidualCheck(task.key)
+    }
+
+    /** The low-level record removal used after cleanup, or by explicit record-only deletion. */
     fun delete(key: Long): Boolean {
         val removed = withMutableTaskSnapshot {
             if (findIndexByKey(key) < 0) return@withMutableTaskSnapshot false
@@ -302,6 +351,9 @@ class TaskState(
             failureRevisions.remove(key)
             cleanupFailuresState.update { failures -> failures.filterNot { it.taskKey == key } }
             artifactDisplayPaths.keys.removeAll { it.first == key }
+            clearTaskResiduals(key)
+            completedTaskDeletionKeys.update { it - key }
+            interruptedExternalTaskKeys.update { it - key }
             notifyChanged()
             true
         }
@@ -346,34 +398,19 @@ class TaskState(
         require(task.status == StatusEnum.SUCCESS || task.status == StatusEnum.FAILURE) { "invalid_state" }
         deletingKeys.update { it + taskKey }
         try {
-            if (withTimeoutOrNull(5_000) { taskScheduler.awaitTaskFinished(taskKey); true } != true) {
+            if (withTimeoutOrNull(5_000) { awaitTaskWritersStopped(taskKey); true } != true) {
+                publishTaskResiduals(residualsState.value[taskKey]?.copy(unknown = true)
+                    ?: TaskResidualSummary(taskKey, emptyList(), unknown = true))
                 return@withLock TaskCleanupResult(listOf(TaskCleanupFailure(taskKey, null, "writer_not_stopped")))
             }
             val artifacts = try { cleanupStore.load(taskKey) } catch (_: Exception) {
+                publishTaskResiduals(residualsState.value[taskKey]?.copy(unknown = true)
+                    ?: TaskResidualSummary(taskKey, emptyList(), unknown = true))
                 return@withLock TaskCleanupResult(listOf(TaskCleanupFailure(taskKey, null, "journal_unreadable")))
             }
-            val failures = mutableListOf<TaskCleanupFailure>()
-            val protectedPaths = artifacts.orEmpty().filter { it.completed }.map { it.finalPath }
-            for (artifact in artifacts.orEmpty().sortedByDescending { it.endpoint.path.length }) {
-                if (artifact.purpose == TaskArtifactPurpose.STRUCTURE_DIRECTORY && protectedPaths.any {
-                        it.startsWith(artifact.endpoint.path.trimEnd('/', '\\') + PathUtils.getPathSeparator())
-                    }) continue
-                if (artifact.completed || artifact.cleaned) continue
-                try {
-                    // A missing local path is already clean, including an interrupted creation intent.
-                    // Existing paths must still pass the platform's identity and fingerprint checks.
-                    check(artifact.endpoint.protocol == FileProtocol.Local &&
-                        !isAndroidContentUriPath(artifact.endpoint.path)) { artifact.limitation }
-                    LocalTaskArtifacts.delete(artifact.endpoint.path, artifact.identity, artifact.fingerprint,
-                        artifact.purpose == TaskArtifactPurpose.STRUCTURE_DIRECTORY, artifact.cacheArtifact)
-                    cleanupStore.save(taskKey, artifact.copy(cleaned = true))
-                } catch (_: Exception) {
-                    failures += TaskCleanupFailure(taskKey, taskCleanupDisplayPath(artifact.endpoint.path),
-                        if (artifact.identity.isBlank()) artifact.limitation else "cleanup_failed")
-                }
-            }
-            if (failures.isEmpty()) delete(task)
-            TaskCleanupResult(failures)
+            val result = cleanupOwnedTaskArtifacts(taskKey, artifacts.orEmpty(), cleanupStore)
+            if (result.succeeded) delete(task) else refreshTaskResiduals(taskKey)
+            result
         } finally { deletingKeys.update { it - taskKey } }
     }
 
@@ -386,7 +423,7 @@ class TaskState(
         }
         require(task.status == StatusEnum.SUCCESS || task.status == StatusEnum.FAILURE) { "invalid_state" }
         deletingKeys.update { it + taskKey }
-        try { taskScheduler.awaitTaskFinished(taskKey); delete(task) } finally { deletingKeys.update { it - taskKey } }
+        try { awaitTaskWritersStopped(taskKey); delete(task) } finally { deletingKeys.update { it - taskKey } }
     }
 
     fun updateStatus(task: Task, status: StatusEnum): Boolean {
@@ -428,7 +465,29 @@ class TaskState(
         if (control != null) {
             control.status.value = null
             control.onCancel()
+        } else if (task.key in externalTaskWriters.value) {
+            // The external owner will signal completion after its own writer finally blocks finish.
+            markTaskCancelled(task, reason)
         } else taskScheduler.requestCancel(task, reason)
+    }
+
+    private fun markTaskCancelled(task: Task, reason: String) {
+        snapshotLock.lock()
+        try { cancelledRuntimeKeys.add(task.key); runtimeStore.clearTaskRuntime(task.key) } finally { snapshotLock.unlock() }
+        if (reason.isNotEmpty()) putResult(task, "cancel_reason", reason)
+    }
+
+    internal fun beginTaskOutputs(task: Task) {
+        interruptedExternalTaskKeys.update { it - task.key }
+        externalTaskWriters.update { writers ->
+            check(task.key !in writers) { "task_writer_already_registered" }
+            writers + (task.key to CompletableDeferred<Unit>())
+        }
+    }
+
+    private suspend fun awaitTaskWritersStopped(taskKey: Long) {
+        externalTaskWriters.value[taskKey]?.await()
+        taskScheduler.awaitTaskFinished(taskKey)
     }
 
     fun isTaskCancelled(taskKey: Long): Boolean {
@@ -1022,11 +1081,14 @@ class TaskState(
             notifyChanged()
         }
         ExternalFileResourceLeaseRegistry.restoreTaskBindings(restored)
+        for (task in restored) {
+            if (task.status == StatusEnum.FAILURE || task.status == StatusEnum.SUCCESS) scheduleTaskResidualCheck(task.key, recovered = true)
+        }
     }
 
     private fun normalizeRestoredTask(task: Task): Task {
         if (task.status == StatusEnum.SUCCESS) {
-            runtimeStore.clearTaskRuntime(task.key)
+            if (!hasFailedRetryEntries(task) && !runtimeStore.hasPendingEntries(task.key)) runtimeStore.clearTaskRuntime(task.key)
             return task
         }
         if (task.status != StatusEnum.LOADING && task.status != StatusEnum.PAUSE) {
@@ -1536,17 +1598,77 @@ class TaskState(
         clearSignals(taskKey)
     }
 
-    /**
-     * 当前任务结束后的收尾逻辑，触发下一个排队任务。
-     *
-     * @return 无返回值
-     */
-    private fun finalizeCompletedTask(taskKey: Long) {
+    /** The scheduler invokes this only after all writer finally blocks have completed. */
+    private fun finalizeCompletedTask(taskKey: Long, cancelledBeforeStart: Boolean) {
         val currentTask = getTask(taskKey)
-        if (currentTask?.status == StatusEnum.SUCCESS) {
-            clearRuntimeMetricTrackers(taskKey)
-            runtimeStore.clearTaskRuntime(taskKey)
-            update(currentTask.clearCompletedRuntimeState())
+        if (currentTask?.status in setOf(StatusEnum.SUCCESS, StatusEnum.FAILURE) && !shutdownStarted.value) {
+            scheduleTaskResidualCheck(taskKey, cancelledBeforeStart = cancelledBeforeStart)
         }
+    }
+
+    /** Unscheduled workers call this after returning from their own copy operation. */
+    internal fun taskOutputsFinished(task: Task, interrupted: Boolean = false) {
+        val cancelled = isTaskCancelled(task.key)
+        if (interrupted && !cancelled) interruptedExternalTaskKeys.update { it + task.key }
+        val writer = externalTaskWriters.value[task.key]
+        externalTaskWriters.update { it - task.key }
+        writer?.complete(Unit)
+        if (cancelled) updateStatus(task, StatusEnum.FAILURE)
+        if (!shutdownStarted.value && task.key !in interruptedExternalTaskKeys.value) scheduleTaskResidualCheck(task.key)
+    }
+
+    /** Inspection and cleanup run outside the scheduler and snapshot locks. */
+    private fun scheduleTaskResidualCheck(taskKey: Long, recovered: Boolean = false, cancelledBeforeStart: Boolean = false) {
+        deletionScope.launch {
+            deletionMutex.withLock {
+                val initialTask = getTask(taskKey) ?: return@withLock
+                if (initialTask.status !in setOf(StatusEnum.FAILURE, StatusEnum.SUCCESS) || sessionTaskControl(taskKey) != null || shutdownStarted.value || taskKey in interruptedExternalTaskKeys.value) return@withLock
+                if (withTimeoutOrNull(5_000) { awaitTaskWritersStopped(taskKey); true } != true) return@withLock
+                val task = getTask(taskKey) ?: return@withLock
+                if (task.status !in setOf(StatusEnum.FAILURE, StatusEnum.SUCCESS) || sessionTaskControl(taskKey) != null || shutdownStarted.value || taskKey in interruptedExternalTaskKeys.value) return@withLock
+                val retainForRetry = !isTaskCancelled(taskKey) &&
+                    (hasPendingRuntimeEntries(taskKey) || hasFailedRetryEntries(task))
+                if (!recovered && !retainForRetry) {
+                    deletingKeys.update { it + taskKey }
+                    try {
+                        val artifacts = try { cleanupStore.load(taskKey) } catch (_: Exception) {
+                            cleanupFailuresState.update { failures ->
+                                failures.filterNot { it.taskKey == taskKey } + TaskCleanupFailure(taskKey, null, "journal_unreadable")
+                            }
+                            publishTaskResiduals(TaskResidualSummary(taskKey, emptyList(), unknown = true))
+                            return@withLock
+                        }
+                        if (cancelledBeforeStart && artifacts == null) {
+                            delete(task)
+                            return@withLock
+                        }
+                        val result = cleanupOwnedTaskArtifacts(taskKey, artifacts.orEmpty(), cleanupStore)
+                        cleanupFailuresState.update { failures -> failures.filterNot { it.taskKey == taskKey } + result.failures }
+                        if (result.succeeded && taskKey in completedTaskDeletionKeys.value) {
+                            delete(task)
+                            return@withLock
+                        }
+                    } finally { deletingKeys.update { it - taskKey } }
+                }
+                if (task.status == StatusEnum.SUCCESS) {
+                    clearRuntimeMetricTrackers(taskKey)
+                    if (!hasPendingRuntimeEntries(taskKey)) runtimeStore.clearTaskRuntime(taskKey)
+                    val completed = task.clearCompletedRuntimeState()
+                    update(if (retainForRetry && hasFailedRetryEntries(task)) {
+                        completed.withFailureSummary(getFailureCount(task), task.firstFailurePath(), task.firstFailureMessage())
+                    } else completed)
+                }
+                refreshTaskResiduals(taskKey, recovered)
+            }
+        }
+    }
+
+    private fun refreshTaskResiduals(taskKey: Long, recovered: Boolean = false) {
+        val summary = try {
+            describeTaskResiduals(taskKey, cleanupStore.load(taskKey).orEmpty(), recovered)
+        } catch (_: Exception) {
+            TaskResidualSummary(taskKey, emptyList(), unknown = true, recovered = recovered)
+        }
+        if (summary == null) clearTaskResiduals(taskKey) else publishTaskResiduals(summary)
     }
 }

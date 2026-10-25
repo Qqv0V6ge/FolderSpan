@@ -81,7 +81,8 @@ private var desktopNotificationsInitialized = false
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    ComposeUiFlags.pollSystemTheme = true
+    // The app and tray share the platform theme observer instead of polling per window.
+    ComposeUiFlags.pollSystemTheme = false
 
     installAppLogging()
     val instanceLock = acquireRuntimeLockOrNull()

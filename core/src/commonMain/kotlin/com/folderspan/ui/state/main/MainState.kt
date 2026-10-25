@@ -63,10 +63,17 @@ class MainState {
     // 远程设备ColorScheme（临时状态，不持久化）
     private val _remoteColorScheme = MutableStateFlow<ColorScheme?>(null)
     val remoteColorScheme: StateFlow<ColorScheme?> = _remoteColorScheme
+    private var remoteTheme: RemoteTheme? = null
 
-    fun setRemoteColorScheme(colorScheme: ColorScheme?) {
-        _remoteColorScheme.value = colorScheme
+    fun setRemoteColorScheme(colorScheme: ColorScheme?, isDark: Boolean = currentDarkTheme.value) {
+        remoteTheme = colorScheme?.let { RemoteTheme(it, isDark) }
+        _remoteColorScheme.value = remoteColorSchemeFor(currentDarkTheme.value)
     }
+
+    fun remoteColorSchemeFor(isDark: Boolean): ColorScheme? =
+        remoteTheme?.takeIf { it.isDark == isDark }?.colorScheme
+
+    private data class RemoteTheme(val colorScheme: ColorScheme, val isDark: Boolean)
 
     // 当前设备的light和dark ColorScheme（用于服务端API返回）
     private val _currentColorSchemes = MutableStateFlow<ColorSchemes?>(null)
@@ -82,6 +89,7 @@ class MainState {
 
     fun setCurrentDarkTheme(isDark: Boolean) {
         _currentDarkTheme.value = isDark
+        _remoteColorScheme.value = remoteColorSchemeFor(isDark)
     }
 
     var windowSize: WindowSizeClass = WindowSizeClass.Expanded

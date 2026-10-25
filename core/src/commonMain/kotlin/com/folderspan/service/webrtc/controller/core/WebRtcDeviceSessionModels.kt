@@ -3,6 +3,7 @@ package com.folderspan.service.webrtc.controller.core
 import com.folderspan.service.webrtc.models.WebRtcConfig
 import com.folderspan.service.webrtc.models.WebRtcConnectionStatus
 import com.folderspan.service.webrtc.models.WebRtcPeerSessionDisplayStatus
+import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
 import com.folderspan.service.webrtc.signaling.SignalingDevice
 
 data class WebRtcPeerSessionSummary(
@@ -15,6 +16,8 @@ data class WebRtcPeerSessionSummary(
     val isAwaitingApproval: Boolean,
     val isShareSession: Boolean,
     val sessionPhase: WebRtcDeviceSessionPhase,
+    val localIce: WebRtcIceSnapshot? = null,
+    val remoteIce: WebRtcIceSnapshot? = null,
 )
 
 enum class WebRtcDeviceSessionPhase {

@@ -3,6 +3,8 @@ package com.folderspan.service.webrtc.models
 import com.shepeliev.webrtckmp.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.concurrent.Volatile
 
 private class NonJvmDataChannel(private val channel: DataChannel) : WebRtcDataChannel {
     private val safeLabel: String = runCatching { channel.label }.getOrDefault("unknown")
@@ -39,10 +41,14 @@ private class NonJvmDataChannel(private val channel: DataChannel) : WebRtcDataCh
 }
 
 actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceServerConfig>) {
-    private val peerConnection: PeerConnection =
+    @Volatile private var closed = false
+    // shortcut: the pinned KMP binding hides ICE server errors; use callbacks when it exposes them.
+    actual val lastIceServerErrorCode: Int? get() = null
+    internal val peerConnection: PeerConnection =
         PeerConnection(
             rtcConfiguration = RtcConfiguration(
-                iceServers = iceServers.map { it.toNativeIceServer() }
+                iceServers = iceServers.map { it.toNativeIceServer() },
+                iceTransportPolicy = IceTransportPolicy.All,
             )
         )
 
@@ -59,10 +65,10 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         peerConnection.onDataChannel.map { channel -> NonJvmDataChannel(channel) }
 
     actual val onConnectionStateChange: Flow<WebRtcPeerConnectionState> =
-        peerConnection.onConnectionStateChange.map { state -> state.toWebRtcState() }
+        peerConnection.onConnectionStateChange.map { state -> state.toWebRtcState() }.distinctUntilChanged()
 
-    actual suspend fun createOffer(): WebRtcSessionDescription {
-        val offer = peerConnection.createOffer(OfferAnswerOptions())
+    actual suspend fun createOffer(iceRestart: Boolean): WebRtcSessionDescription {
+        val offer = peerConnection.createOffer(OfferAnswerOptions(iceRestart = iceRestart))
         return offer.toWebRtcDescription()
     }
 
@@ -80,9 +86,17 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     }
 
     actual suspend fun addIceCandidate(candidate: WebRtcIceCandidate) {
-        peerConnection.addIceCandidate(
+        check(peerConnection.addIceCandidate(
             IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate)
-        )
+        )) { "WebRTC rejected ICE candidate" }
+    }
+
+    actual suspend fun getSelectedIcePath(): WebRtcIcePath {
+        if (closed) return WebRtcIcePath()
+        // shortcut: the pinned JS/Wasm binding returns no stats; use the authenticated peer report there.
+        val report = peerConnection.getStats() ?: return WebRtcIcePath()
+        if (closed) return WebRtcIcePath()
+        return selectedWebRtcIcePath(report.stats.mapValues { (_, stat) -> WebRtcIceStats(stat.type, stat.members) })
     }
 
     actual fun createDataChannel(
@@ -99,6 +113,8 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     }
 
     actual fun close() {
+        if (closed) return
+        closed = true
         peerConnection.close()
     }
 }
@@ -107,7 +123,8 @@ private fun WebRtcIceServerConfig.toNativeIceServer(): IceServer {
     return IceServer(
         urls = urls,
         username = username,
-        password = password
+        password = password,
+        tlsCertPolicy = TlsCertPolicy.TlsCertPolicySecure,
     )
 }
 

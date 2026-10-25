@@ -1,5 +1,6 @@
 package com.folderspan.utils
 
+import com.folderspan.test.runSuspendTest
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -17,7 +18,7 @@ import kotlin.test.assertTrue
 class IosOpenInPlaceRootTest {
     @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
     @Test
-    fun openRootKeepsEveryRegisteredFile() {
+    fun openRootKeepsEveryRegisteredFile() = runSuspendTest {
         val testId = NSUUID().UUIDString
         val root = NSTemporaryDirectory().trimEnd('/')
         val firstPath = "$root/folderspan-open-$testId-first.txt"

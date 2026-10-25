@@ -21,7 +21,9 @@ import com.folderspan.extensions.*
 import com.folderspan.service.operation.TraversalScanProgress
 import com.folderspan.service.mcp.file.FileEndpointRef
 import com.folderspan.ui.state.main.*
+import com.folderspan.ui.theme.toColorScheme
 import com.folderspan.utils.FileAccessPermission
+import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.isDropDirectoryWritable
 import com.folderspan.utils.PlatformMemoryManager
@@ -114,11 +116,12 @@ class FileState : KoinComponent {
         FileStateDeskSwitcher(
             mainScope = mainScope,
             fileBookmarkState = fileBookmarkState,
-            deviceState = deviceState,
-            mainState = mainState,
             currentDesk = { _deskType.value },
             currentPath = { _path.value },
-            setDesk = { desk -> _deskType.value = desk },
+            setDesk = { desk ->
+                _deskType.value = desk
+                remoteThemeCoordinator.onDeskChanged()
+            },
             setPathDirectly = { path -> _path.value = path },
             setRootPath = { path -> _rootPath.value = path },
             rememberPathForDesk = { desk, path -> rememberPathForDesk(desk, path) },
@@ -445,6 +448,23 @@ class FileState : KoinComponent {
 
     private val _deskType: MutableStateFlow<DiskBase> = MutableStateFlow(Local())
     val deskType: StateFlow<DiskBase> = _deskType
+    private val remoteThemeCoordinator = FileStateRemoteThemeCoordinator(
+        scope = mainScope,
+        deskType = deskType,
+        mainState = mainState,
+        loadColorScheme = { device, isDark ->
+            val result = deviceState.getRemoteDeviceTheme(device, isDark)
+            if (result == null) {
+                LogKit.w(AppStrings.ui_there_currently_no_available_topic_channels_remote_device_arg0.format(arg0 = device.id))
+                null
+            } else {
+                result.getOrThrow().colorScheme.toColorScheme()
+            }
+        },
+        onFailure = { error ->
+            LogKit.w(AppStrings.ui_failed_get_remote_device_topic_arg0.format(arg0 = error.message.toString()), error)
+        },
+    )
 
     fun beginExternalShareHandling() {
         externalShareHandlingDepth += 1

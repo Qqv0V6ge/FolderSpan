@@ -166,6 +166,8 @@ internal actual object NativePathUtils {
 
     actual fun getAppPath(): String = NSHomeDirectory()
 
+    actual fun getApplicationDataPath(): String = getAppPath()
+
     actual fun getHomePath(): String = NSHomeDirectory()
 
     actual fun getCachePath(): String = NSTemporaryDirectory()

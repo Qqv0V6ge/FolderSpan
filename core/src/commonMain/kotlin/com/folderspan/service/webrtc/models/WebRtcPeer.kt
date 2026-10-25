@@ -49,16 +49,25 @@ interface WebRtcDataChannel {
 fun WebRtcIceCandidate.isRelay(): Boolean =
     candidate.contains("typ relay", ignoreCase = true)
 
+internal fun WebRtcIceCandidate.usernameFragment(): String? =
+    candidate.substringAfter(" ufrag ", "").substringBefore(' ').takeIf(String::isNotBlank)
+
+internal fun String.webRtcIceUfrags(): Set<String> = lineSequence()
+    .map(String::trim).filter { it.startsWith("a=ice-ufrag:") }
+    .map { it.substringAfter(':') }.filter(String::isNotBlank).toSet()
+
 expect class WebRtcPeerConnection(iceServers: List<WebRtcIceServerConfig>) {
     val onIceCandidate: Flow<WebRtcIceCandidate>
     val onDataChannel: Flow<WebRtcDataChannel>
     val onConnectionStateChange: Flow<WebRtcPeerConnectionState>
+    val lastIceServerErrorCode: Int?
 
-    suspend fun createOffer(): WebRtcSessionDescription
+    suspend fun createOffer(iceRestart: Boolean = false): WebRtcSessionDescription
     suspend fun createAnswer(): WebRtcSessionDescription
     suspend fun setLocalDescription(description: WebRtcSessionDescription)
     suspend fun setRemoteDescription(description: WebRtcSessionDescription)
     suspend fun addIceCandidate(candidate: WebRtcIceCandidate)
+    suspend fun getSelectedIcePath(): WebRtcIcePath
 
     fun createDataChannel(
         label: String,

@@ -9,7 +9,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -70,12 +72,12 @@ internal class DeviceSessionControlEndpoint(
                     DeviceSessionControlRequest(requestId = requestId, method = method, payload = payload),
                 ),
             )
-        } catch (error: Throwable) {
-            mutex.withLock { pending.remove(requestId) }
-            waiter.completeExceptionally(error)
-            throw error
+            return waiter.await()
+        } finally {
+            withContext(NonCancellable) {
+                mutex.withLock { if (pending[requestId] === waiter) pending.remove(requestId) }
+            }
         }
-        return waiter.await()
     }
 
     suspend fun handle(payload: ByteArray) {

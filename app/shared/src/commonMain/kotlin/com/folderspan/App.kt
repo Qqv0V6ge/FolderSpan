@@ -1,7 +1,6 @@
 package com.folderspan
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
@@ -92,14 +91,13 @@ fun FolderSpanAppTheme(
     val dynamicColorEnabled by settingsState.dynamicColorEnabled.collectAsState()
     val customColorEnabled by settingsState.customColorEnabled.collectAsState()
     val customSeedHex by settingsState.customSeedColor.collectAsState()
-    val systemDarkTheme = isSystemInDarkTheme()
     val resolvedDarkTheme = when (themeMode) {
-        ThemeMode.System -> systemDarkTheme
+        ThemeMode.System -> isPlatformInDarkTheme()
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }
 
-    LaunchedEffect(resolvedDarkTheme) {
+    SideEffect {
         mainState.setCurrentDarkTheme(resolvedDarkTheme)
     }
 
@@ -131,7 +129,10 @@ fun FolderSpanAppTheme(
         baseDarkColorScheme
     }
 
-    val overrideColorScheme = remoteColorScheme ?: if (customColorsActive) {
+    val matchingRemoteColorScheme = remoteColorScheme?.let {
+        mainState.remoteColorSchemeFor(resolvedDarkTheme)
+    }
+    val overrideColorScheme = matchingRemoteColorScheme ?: if (customColorsActive) {
         if (resolvedDarkTheme) darkColorScheme else lightColorScheme
     } else null
 
