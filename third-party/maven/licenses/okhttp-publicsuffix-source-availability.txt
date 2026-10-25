@@ -1,0 +1,11 @@
+OkHttp 4.12.0 public suffix data
+
+The public suffix data used by OkHttp is covered by the Mozilla Public License 2.0.
+Its exact upstream source distribution can be obtained, without charge, from:
+https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0-sources.jar
+Resource: okhttp3/internal/publicsuffix/publicsuffixes.gz
+
+The same data, decoded into editable UTF-8 rule and exception lists, is included
+in this repository under third-party/maven/okhttp-publicsuffix-source/.
+The accompanying MPL-2.0 text and upstream NOTICE apply to those data files.
+The rest of FolderSpan remains under its respective licenses.

@@ -1,0 +1,14 @@
+FolderSpan — standard edition (no-pro)
+
+Copyright 2026 FolderSpan
+
+FolderSpan's own standard-edition code is licensed under the Apache License,
+Version 2.0. See LICENSE and LICENSING.md for the license and its scope.
+The separate proMain submodule is not licensed by this notice.
+
+This distribution includes third-party software and data. Their copyright
+notices, license terms, and applicable attribution notices are reproduced in
+THIRD_PARTY_NOTICES.txt. Third-party components retain their original licenses;
+the FolderSpan license does not replace them.
+
+Bundled Java runtimes retain their own legal directory and license terms.

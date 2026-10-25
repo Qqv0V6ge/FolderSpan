@@ -1,3 +1,10 @@
+/*
+ * 本地实现兼容 SQLDelight web-worker-driver 的 SQL.js 消息协议。
+ * 本轮对照的官方实现：@cashapp/sqldelight-sqljs-worker 2.4.0，
+ * 固定提交 831eee11cd5c0fb092f62105223ae54a41b45e56。
+ * 历史作者及实际参考/派生关系尚未证实；本说明不将整个本地文件归属上游。
+ * 上游许可及本地行为差异说明见 third-party/workers/WORKER-NOTICES.txt。
+ */
 importScripts("sql-wasm.js");
 
 const DB_NAME = "folderspan-sqljs";

@@ -1,0 +1,66 @@
+FolderSpan 网页与静态资源第三方说明
+核实日期：2026-10-21
+
+本说明记录已识别的上游内容及本地改动；各组件的完整许可原文分别保存，
+不以 FolderSpan 自有代码的 Apache-2.0 许可替代第三方条款。
+
+StreamSaver 2.0.5
+上游：https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.5.tgz
+适用：static/streamsaver/StreamSaver.js、sw.js、mitm.html 中可识别的上游内容。
+许可：streamsaver-2.0.5.LICENSE.txt（MIT；保留 Jimmy Wärting 原文版权）。
+本地文件与该发布包不同，已识别改动包括同源 mitm 地址、postMessage 目标、
+取消逻辑、心跳及部分注释；组件原文和来源见 third-party/manifest.json。
+不据此证明所有本地增量的历史作者。polyfill.min.js 已按下文独立的
+web-streams-polyfill 2.0.2 来源与许可替换，不以 StreamSaver 的 MIT 代替其许可。
+
+web-streams-polyfill 2.0.2 ponyfill
+上游：https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz
+适用：static/streamsaver/polyfill.min.js；实际字节来自 package/dist/ponyfill.js。
+许可：web-streams-polyfill-2.0.2.LICENSE.txt（MIT；保留 Mattias Buelens 与
+Diwank Singh Tomer 原文版权）。原文件名保留，当前是官方未压缩原字节。
+新 SHA-256：71037540957d86a5226328dc8842374839cc7292942eb5ed29a245450b63d0f3
+这不是对旧来源不明字节的重新授权；旧摘要和未明来源事实保存在历史记录中。
+采用前后均执行Node VM针对性检查，当前12项全部通过；未声称浏览器端到端测试。
+
+fflate 0.8.1
+上游：https://registry.npmjs.org/fflate/-/fflate-0.8.1.tgz
+适用：static/workers/fflate.min.js。
+许可：fflate-0.8.1.LICENSE.txt（MIT；保留 Arjun Barrett 原文版权）。
+本地文件增加 jsDelivr 说明前缀，之后正文与包内 umd/index.js 精确一致。
+
+sql.js 1.8.0
+上游：https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz
+适用：Web 资源中的 sql-wasm.js、sql-wasm.wasm。
+许可：sql.js-1.8.0.LICENSE.txt；保留全文中的各版权说明。
+本地 JS/WASM 与该官方包对应字节一致；SQLite 自身的公共领域说明不能
+替代 sql.js 的包装代码许可。本次未核验重建后的 Web 发行包。
+
+crypto-js 4.2.0
+上游：https://registry.npmjs.org/crypto-js/-/crypto-js-4.2.0.tgz
+适用：构建声明引入的 crypto-js npm 内容；最终 Web bundle 须再次核对。
+许可：crypto-js-4.2.0.LICENSE.txt（MIT；保留 Jeff Mott、Evan Vosberg 原文版权）。
+
+SQLDelight sqljs worker 2.4.0
+上游：https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/-/sqldelight-sqljs-worker-2.4.0.tgz
+适用：构建声明引入的官方 npm worker 内容。
+许可：sqldelight-sqljs-worker-2.4.0.LICENSE.txt（Apache-2.0 原文）。
+仓库另有自定义 sqljs.worker.js，不能仅因文件名相同就把它认作上游包复制件；
+此说明不虚构该自定义文件的历史作者或精确来源。
+
+Google Material Design Icons
+固定上游提交：49d4db35df873165d6bd6ba09b063c7dafbac2f4
+原图形：src/file/folder/materialicons/24px.svg 和
+src/communication/hub/materialicons/20px.svg。
+许可：material-design-icons.LICENSE.txt（Apache-2.0 原文）。
+项目三个 icon.svg 副本包含与两份上游 SVG 逐字相同的 path 数据。
+本地组合对 hub 作平移、缩放及 mask，并调整颜色和外层尺寸。
+这些已识别的 Google 图形保留原许可；本说明不授予 Google 名称或商标背书权，
+也不宣称所有 PNG/ICO/ICNS 的历史渲染及本地增量作者均已证明。
+
+GBK 映射
+本项目 GBK 二字节映射的许可与来源另见 files/editor/GBK-MAPPING-NOTICE.txt、
+files/editor/UNICODE-LICENSE.txt；官方表及复现工具在 third-party/resources/。
+
+历史未核事实：旧 WebStreamsPolyfill 的精确版本/来源仍未证明，当前文件已替换。
+被替换旧文件 SHA-256：ffbf43dcd84933cf64cc7d040cd431cb04375a1bda146f66a347c8111a29dcf8。
+历史核查过程另存，不作为声明生成输入。新许可不能用于宣称旧文件已获得追溯授权。

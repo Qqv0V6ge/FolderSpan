@@ -7,6 +7,23 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+abstract class PrepareLicenseAssets : Sync() {
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+}
+
+if (rootProject.findProject(":proMain") == null) {
+    val prepareLicenseAssets = tasks.register<PrepareLicenseAssets>("prepareLicenseAssets") {
+        from(rootProject.tasks.named("prepareLicenseBundle"))
+        outputDirectory.set(layout.buildDirectory.dir("generated/license-assets"))
+        into(outputDirectory)
+    }
+
+    androidComponents.onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(prepareLicenseAssets) { it.outputDirectory }
+    }
+}
+
 val keystoreProperties = Properties().apply {
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     if (keystorePropertiesFile.exists()) {
@@ -129,6 +146,7 @@ android {
     }
     packaging {
         resources {
+            // Complete notices are also shipped separately in assets/licenses/.
             excludes += "/META-INF/{AL2.0,LGPL2.1,DEPENDENCIES}"
             excludes += "/META-INF/INDEX.LIST"
             pickFirsts += "/META-INF/LICENSE.md"

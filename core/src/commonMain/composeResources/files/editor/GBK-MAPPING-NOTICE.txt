@@ -1,0 +1,28 @@
+GBK 二字节映射数据来源与许可
+核实日期：2026-10-21
+
+适用资源：files/editor/gbk-delta-map.bin
+SHA-256：98491587282f1626ffffb379ff660b5fd9e3733512d8624d820ae431a35c69e1
+
+本资源全部 23,940 个双字节位置与 Unicode 官方发布的下列映射一致：
+https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP936.TXT
+表名：cp936 to Unicode table；Unicode version 2.0；Table version 2.01；
+源文件日期：2000-01-07。
+源文件 SHA-256：b86f601c575e9ab457380b6f7abef03c75499cc6075bdc8b4b27f3f2de74bf6a
+
+Unicode 的使用条款将 Public/ 下的计算机数据文件归入 Unicode Data Files，
+并规定除具体另有说明外采用 Unicode License v3。完整版权与许可原文随附于
+UNICODE-LICENSE.txt。原始映射文件未列其他单独许可限制。
+条款来源：https://www.unicode.org/copyright.html
+许可原文：https://www.unicode.org/license.txt
+
+相对原表的转换：仅选 GBK 双字节 lead 0x81..0xFE、trail 0x40..0x7E 与
+0x80..0xFE；未定义项用 0xFFFF；其余值以 ZigZag + LEB128 差分压缩。
+定义项 21,791，未定义项 2,149，编码后 29,746 字节。
+
+third-party/resources/upstream/unicode/CP936.TXT 保存原始数据，
+third-party/resources/tools/verify_gbk_mapping.py 从该数据重建并验证与当前
+资源逐字节一致；工具不会写产品文件。本次没有改变映射行为。
+
+这证明内容可由已归档的官方许可数据复现，不等于证明旧文件最初使用的
+生成工具或历史下载路径。项目自有代码的 Apache-2.0 许可不替代 Unicode 许可。
