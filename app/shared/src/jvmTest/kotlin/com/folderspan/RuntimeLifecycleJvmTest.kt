@@ -63,7 +63,15 @@ class RuntimeLifecycleJvmTest {
                 "\"" + arg.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
             })
             return ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "@$argsFile")
-                .apply { environment()["APPDATA"] = directory.resolve("home").toString() }
+                .apply {
+                    val home = directory.resolve("home")
+                    environment()["APPDATA"] = home.toString()
+                    environment()["LOCALAPPDATA"] = home.resolve("AppData/Local").toString()
+                    environment()["HOME"] = home.toString()
+                    environment()["USERPROFILE"] = home.toString()
+                    environment()["XDG_DATA_HOME"] = home.resolve(".local/share").toString()
+                    environment()["XDG_CACHE_HOME"] = home.resolve(".cache").toString()
+                }
                 .directory(directory.toFile()).redirectErrorStream(true)
                 .redirectOutput(directory.resolve("$name.log").toFile()).start().also(processes::add)
         }

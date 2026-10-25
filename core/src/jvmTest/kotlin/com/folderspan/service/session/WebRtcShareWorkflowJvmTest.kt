@@ -84,6 +84,11 @@ class WebRtcShareWorkflowJvmTest {
                         Path.of(System.getProperty("java.home"), "bin", "java").toString(), "@$argumentsFile",
                     ).apply {
                         environment()["APPDATA"] = home.toString()
+                        environment()["LOCALAPPDATA"] = home.resolve("AppData/Local").toString()
+                        environment()["HOME"] = home.toString()
+                        environment()["USERPROFILE"] = home.toString()
+                        environment()["XDG_DATA_HOME"] = home.resolve(".local/share").toString()
+                        environment()["XDG_CACHE_HOME"] = home.resolve(".cache").toString()
                     }.redirectErrorStream(true).redirectOutput(directory.resolve("$role.log").toFile()).start()
                 }
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(100)
