@@ -18,7 +18,8 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
-  ORG_GRADLE_PROJECT_releaseVersion: 0.0.${{ github.run_number }}
+  # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
+  ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
   ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
 
 jobs:
@@ -120,7 +121,7 @@ jobs:
 
   headless-runtime:
     name: Package Headless Runtime preview (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
-    needs: quality
+    needs: [quality, web]
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 120
@@ -195,6 +196,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Download selected preview Web UI
+        if: matrix.web_ui != 'none'
+        uses: actions/download-artifact@v8
+        with:
+          name: preview-web-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: runtime-web-ui
+
+      - name: Select Web UI archive for runtime preview packaging
+        if: matrix.web_ui != 'none'
+        shell: bash
+        run: |
+          archives=(runtime-web-ui/*.zip)
+          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
+            echo "::error::Expected exactly one preview Web UI archive."
+            exit 1
+          fi
+          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
+
       - name: Build runtime distribution
         shell: bash
         run: >-
@@ -220,6 +239,17 @@ jobs:
           name: preview-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
           path: ${{ matrix.platform.paths }}
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload runtime preview packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: |
+            app/headlessRuntime/build/compose/logs/
+            app/headlessRuntime/build/compose/tmp/*.args.txt
+          if-no-files-found: warn
           retention-days: 14
 
   desktop:
@@ -372,4 +402,15 @@ jobs:
           name: preview-desktop-${{ matrix.platform.label }}-${{ matrix.edition }}
           path: ${{ matrix.platform.paths }}
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload desktop preview packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-desktop-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: |
+            app/desktopApp/build/compose/logs/
+            app/desktopApp/build/compose/tmp/*.args.txt
+          if-no-files-found: warn
           retention-days: 14
