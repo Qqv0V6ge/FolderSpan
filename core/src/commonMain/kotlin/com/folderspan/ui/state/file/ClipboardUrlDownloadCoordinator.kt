@@ -188,7 +188,7 @@ class ClipboardUrlDownloadCoordinator(
                 withContext(uiDispatcher) {
                     ifCurrent(taskGeneration) {
                         if (copied.getOrDefault(false)) {
-                            taskState.delete(task)
+                            taskState.completeTask(task)
                             stateMachine.succeeded(result.staged.displayName, result.staged.size)
                             delivery.completion.complete(true)
                         } else {
@@ -319,7 +319,7 @@ class ClipboardUrlDownloadCoordinator(
             )
             return
         }
-        taskState.delete(task)
+        taskState.completeTask(task)
         stateMachine.succeeded(staged.displayName, staged.size)
     }
 

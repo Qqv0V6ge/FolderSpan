@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -127,12 +130,19 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     private val connectionStates = MutableStateFlow(WebRtcPeerConnectionState.New)
 
     private val factory = PeerConnectionFactory()
+    private val nativeLock = ReentrantReadWriteLock()
+    @Volatile private var closed = false
+    @Volatile private var iceServerErrorCode: Int? = null
+    actual val lastIceServerErrorCode: Int? get() = if (closed) null else iceServerErrorCode
     private val peerConnection: RTCPeerConnection
 
     init {
-        val config = RTCConfiguration()
-        config.iceServers.addAll(iceServers.map { it.toNativeIceServer() })
+        val config = jvmWebRtcConfiguration(iceServers)
         peerConnection = factory.createPeerConnection(config, object : PeerConnectionObserver {
+            override fun onIceCandidateError(event: RTCPeerConnectionIceErrorEvent) {
+                if (!closed) iceServerErrorCode = event.errorCode
+            }
+
             override fun onIceCandidate(candidate: RTCIceCandidate) {
                 configureWebRtcUdpSocketBuffers(candidate.sdp)
                 iceCandidates.tryEmit(
@@ -163,9 +173,9 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     actual val onConnectionStateChange: Flow<WebRtcPeerConnectionState>
         get() = connectionStates.asStateFlow()
 
-    actual suspend fun createOffer(): WebRtcSessionDescription {
+    actual suspend fun createOffer(iceRestart: Boolean): WebRtcSessionDescription {
         return createSessionDescription { observer ->
-            peerConnection.createOffer(RTCOfferOptions(), observer)
+            peerConnection.createOffer(RTCOfferOptions().apply { this.iceRestart = iceRestart }, observer)
         }
     }
 
@@ -193,6 +203,17 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
         )
     }
 
+    actual suspend fun getSelectedIcePath(): WebRtcIcePath = suspendCancellableCoroutine { continuation ->
+        nativeLock.read {
+            if (closed) { continuation.resume(WebRtcIcePath()); return@read }
+            peerConnection.getStats { report ->
+                if (continuation.isActive) continuation.resume(selectedWebRtcIcePath(report.stats.mapValues { (_, stat) ->
+                    WebRtcIceStats(stat.type.toString().lowercase().replace('_', '-'), stat.attributes)
+                }))
+            }
+        }
+    }
+
     actual fun createDataChannel(
         label: String,
         ordered: Boolean,
@@ -208,8 +229,13 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     }
 
     actual fun close() {
-        peerConnection.close()
-        factory.dispose()
+        nativeLock.write {
+            if (closed) return
+            closed = true
+            iceServerErrorCode = null
+            peerConnection.close()
+            factory.dispose()
+        }
     }
 
     private suspend fun createSessionDescription(
@@ -247,15 +273,19 @@ actual class WebRtcPeerConnection actual constructor(iceServers: List<WebRtcIceS
     }
 }
 
+internal fun jvmWebRtcConfiguration(iceServers: List<WebRtcIceServerConfig>): RTCConfiguration = RTCConfiguration().apply {
+    this.iceServers.addAll(iceServers.map { it.toNativeIceServer() })
+    iceTransportPolicy = RTCIceTransportPolicy.ALL
+    portAllocatorConfig.setDisableUdp(false).setDisableUdpRelay(false)
+        .setEnableIpv6(true).setEnableIpv6OnWifi(true)
+}
+
 private fun WebRtcIceServerConfig.toNativeIceServer(): RTCIceServer {
     return RTCIceServer().apply {
+        tlsCertPolicy = TlsCertPolicy.SECURE
         urls.addAll(this@toNativeIceServer.urls)
-        if (this@toNativeIceServer.username.isNotBlank()) {
-            username = this@toNativeIceServer.username
-        }
-        if (this@toNativeIceServer.password.isNotBlank()) {
-            password = this@toNativeIceServer.password
-        }
+        username = this@toNativeIceServer.username
+        password = this@toNativeIceServer.password
     }
 }
 

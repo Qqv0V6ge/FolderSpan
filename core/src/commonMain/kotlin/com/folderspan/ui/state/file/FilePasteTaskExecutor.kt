@@ -283,7 +283,7 @@ internal class FilePasteTaskExecutor(
             try {
                 onTasksSubmitted()
             } catch (error: CancellationException) {
-                tasks.forEach { (task, _, _) -> taskState.delete(task) }
+                tasks.forEach { (task, _, _) -> taskState.requestCancel(task) }
                 throw error
             }
             tasks.forEach { (task, operation, completion) ->
@@ -342,7 +342,7 @@ internal class FilePasteTaskExecutor(
         } catch (error: Throwable) {
             LogKit.e(AppStrings.ui_clipboard_paste_task_failed, error)
             tasks.forEach { (task, _, completion) ->
-                taskState.delete(task)
+                taskState.requestCancel(task)
                 if (!completion.isCompleted) completion.complete(Result.failure(error))
             }
             lease?.let { item -> ExternalFileResourceLeaseRegistry.releaseProducer(item.id) }

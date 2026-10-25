@@ -97,12 +97,15 @@ class TempTaskCleanupStore(
 }
 
 internal data class LocalTaskArtifactIdentity(val identity: String, val fingerprint: String)
+internal data class LocalTaskArtifactDescription(val sizeBytes: Long?)
 
 /** Platforms without exclusive creation and stable identity explicitly fall back to retention. */
 internal expect object LocalTaskArtifacts {
     val supported: Boolean
     fun create(path: String, directory: Boolean = false, cacheArtifact: Boolean = false): LocalTaskArtifactIdentity
     fun inspect(path: String, cacheArtifact: Boolean = false): LocalTaskArtifactIdentity?
+    /** Metadata only; a null result means the tracked path no longer exists. */
+    fun describe(path: String, cacheArtifact: Boolean = false): LocalTaskArtifactDescription?
     fun deliver(path: String, finalPath: String, identity: String)
     fun delete(path: String, identity: String, fingerprint: String, directory: Boolean, cacheArtifact: Boolean = false)
 }

@@ -94,6 +94,8 @@ internal actual object NativePathUtils {
 
     actual fun getAppPath(): String = androidContext().filesDir.absolutePath
 
+    actual fun getApplicationDataPath(): String = getAppPath()
+
     actual fun getHomePath(): String = Environment.getExternalStorageDirectory().absolutePath
 
     actual fun getCachePath(): String = androidContext().cacheDir.absolutePath

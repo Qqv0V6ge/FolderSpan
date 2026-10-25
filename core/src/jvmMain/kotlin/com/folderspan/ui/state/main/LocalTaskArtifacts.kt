@@ -43,6 +43,14 @@ internal actual object LocalTaskArtifacts {
         return inspect(path, cacheArtifact) ?: error("ownership_unverified")
     }
 
+    actual fun describe(path: String, cacheArtifact: Boolean): LocalTaskArtifactDescription? {
+        val attributes = try {
+            Files.readAttributes(guarded(path, cacheArtifact), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        } catch (_: java.nio.file.NoSuchFileException) { return null }
+        check(attributes.isRegularFile || attributes.isDirectory) { "ownership_changed" }
+        return LocalTaskArtifactDescription(if (attributes.isRegularFile) attributes.size() else null)
+    }
+
     actual fun inspect(path: String, cacheArtifact: Boolean): LocalTaskArtifactIdentity? {
         val target = guarded(path, cacheArtifact)
         val attributes = try {

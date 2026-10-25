@@ -11,6 +11,9 @@ import com.folderspan.utils.executeAsListAwait
 import com.folderspan.utils.isAndroidContentUriPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
@@ -29,6 +32,9 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
     )
 
     private val authState = MutableStateFlow(AuthState())
+
+    internal fun observeTokenValidity(token: String): Flow<Boolean> =
+        authState.map { it.permissions.containsKey(token) }.distinctUntilChanged()
 
     /**
      * 设置设备权限

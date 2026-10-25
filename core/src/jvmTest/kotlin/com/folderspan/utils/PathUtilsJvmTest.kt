@@ -12,6 +12,23 @@ import kotlin.test.assertTrue
 
 class PathUtilsJvmTest {
     @Test
+    fun privateApplicationDataDirectoryIsIndependentOfWorkingDirectory() {
+        val originalWorkingDirectory = System.getProperty("user.dir")
+        val applicationData = resolveDesktopApplicationDataDirectory().toString()
+        try {
+            listOf("first-working-directory", "second-working-directory").forEach { name ->
+                val workingDirectory = java.nio.file.Path.of(originalWorkingDirectory).resolve(name).toString()
+                System.setProperty("user.dir", workingDirectory)
+
+                assertEquals(applicationData, PrivateFileStorage.getAppPath())
+                assertEquals(workingDirectory, PathUtils.getAppPath())
+            }
+        } finally {
+            System.setProperty("user.dir", originalWorkingDirectory)
+        }
+    }
+
+    @Test
     fun getFileAndFolderReturnsEmptyListForEmptyDirectory() = kotlinx.coroutines.runBlocking {
         val directory = Files.createTempDirectory("path-utils-empty").toFile()
         try {

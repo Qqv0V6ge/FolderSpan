@@ -8,6 +8,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -21,11 +22,10 @@ import kotlinx.coroutines.withContext
 
 internal class TaskSerialScheduler(
     private val updateStatus: (Task, StatusEnum) -> Boolean,
-    private val deleteTask: (Task) -> Boolean,
     private val getTask: (Long) -> Task?,
     private val onCancelRequested: (Task, String) -> Unit,
     private val onTaskExecutionFailure: (Long, Task?, Exception) -> Unit,
-    private val onTaskFinalized: (Long) -> Unit,
+    private val onTaskFinalized: (Long, Boolean) -> Unit,
 ) {
     private val cancelKeys = MutableStateFlow<Set<Long>>(emptySet())
     private val pauseKeys = MutableStateFlow<Set<Long>>(emptySet())
@@ -113,9 +113,7 @@ internal class TaskSerialScheduler(
             pauseWaiter?.complete(TaskResumeSignal.Cancel)
             executionJob?.cancel(CancellationException(reason))
             if (deleteImmediately) {
-                if (!deleteTask(task)) {
-                    clearSignals(task.key)
-                }
+                finalizeCancelledBeforeStart(task.key, reason)
             }
         }
     }
@@ -177,12 +175,13 @@ internal class TaskSerialScheduler(
 
     fun registerTaskHandler(task: Task, work: suspend () -> Unit) {
         taskScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            var cancelledBeforeStart = false
             queueMutex.withLock {
                 if (scheduledTasks.containsKey(task.key)) {
                     return@withLock
                 }
                 if (cancelKeys.value.contains(task.key)) {
-                    getTask(task.key)?.let(deleteTask) ?: clearSignals(task.key)
+                    cancelledBeforeStart = true
                     return@withLock
                 }
                 scheduledTasks[task.key] = ScheduledTask(work = work)
@@ -191,21 +190,20 @@ internal class TaskSerialScheduler(
                 }
                 dispatchNextLocked()
             }
+            if (cancelledBeforeStart) finalizeCancelledBeforeStart(task.key)
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun launchTask(taskKey: Long, task: ScheduledTask) {
         task.started = true
-        val executionJob = taskScope.launch(start = CoroutineStart.LAZY) {
+        val ready = CompletableDeferred<Unit>()
+        // Enter try/finally even if cancellation wins the race with the first dispatcher turn.
+        val executionJob = taskScope.launch(start = CoroutineStart.ATOMIC) {
             try {
+                ready.await()
                 if (isTaskCancelled(taskKey)) {
-                    val latestTask = getTask(taskKey)
-                    if (latestTask != null) {
-                        deleteTask(latestTask)
-                    } else {
-                        clearSignals(taskKey)
-                    }
-                    return@launch
+                    throw CancellationException(task.cancelReason.ifBlank { AppStrings.message_task_cancelled })
                 }
                 task.work()
                 if (task.cancelRequested || isTaskCancelled(taskKey)) {
@@ -222,7 +220,9 @@ internal class TaskSerialScheduler(
             }
         }
         task.executionJob = executionJob
-        executionJob.start()
+        // Completion is the first point where the writer and its finally blocks are fully stopped.
+        executionJob.invokeOnCompletion { onTaskFinalized(taskKey, false) }
+        ready.complete(Unit)
     }
 
     private fun dispatchNextLocked() {
@@ -233,7 +233,7 @@ internal class TaskSerialScheduler(
             val scheduled = scheduledTasks[nextTaskKey] ?: continue
             if (cancelKeys.value.contains(nextTaskKey)) {
                 scheduledTasks.remove(nextTaskKey)
-                getTask(nextTaskKey)?.let(deleteTask) ?: clearSignals(nextTaskKey)
+                taskScope.launch { finalizeCancelledBeforeStart(nextTaskKey) }
                 continue
             }
             if (pauseKeys.value.contains(nextTaskKey)) {
@@ -260,12 +260,21 @@ internal class TaskSerialScheduler(
     private suspend fun finalizeTask(taskKey: Long) {
         queueMutex.withLock {
             scheduledTasks.remove(taskKey)
-            onTaskFinalized(taskKey)
             if (runningTaskKey == taskKey) {
                 runningTaskKey = null
             }
             dispatchNextLocked()
         }
+    }
+
+    private fun finalizeCancelledBeforeStart(taskKey: Long, reason: String = AppStrings.message_task_cancelled) {
+        val task = getTask(taskKey)
+        if (task == null) {
+            clearSignals(taskKey)
+            return
+        }
+        onTaskExecutionFailure(taskKey, task, CancellationException(reason))
+        onTaskFinalized(taskKey, true)
     }
 
     private fun enqueueRunnableTaskLocked(taskKey: Long) {

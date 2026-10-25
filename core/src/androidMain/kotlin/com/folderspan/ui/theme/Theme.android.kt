@@ -2,6 +2,7 @@ package com.folderspan.ui.theme
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -11,6 +12,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
+
+@Composable
+actual fun isPlatformInDarkTheme(): Boolean = isSystemInDarkTheme()
 
 @Composable
 actual fun SystemAppearance(isDark: Boolean, colorScheme: ColorScheme) {

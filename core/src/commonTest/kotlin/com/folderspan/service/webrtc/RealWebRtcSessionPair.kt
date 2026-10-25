@@ -35,8 +35,9 @@ internal suspend fun <T> withRealWebRtcSessionPair(
         streamWindowBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES,
         maxFileStreams = 8,
     ),
+    iceServers: List<WebRtcIceServerConfig> = realWebRtcTestIceServers,
     block: suspend (DeviceSessionPeer, DeviceSessionPeer, WebRtcDataChannel) -> T,
-): T = withRealWebRtcDataChannelPair { outgoing, accepted, _, _ ->
+): T = withRealWebRtcDataChannelPair(iceServers = iceServers) { outgoing, accepted, _, _ ->
     val client = DeviceSessionPeer(
         DeviceSessionTransport(WebRtcDeviceSessionByteChannel(outgoing, this), plan, plan, isClient = true),
         plan,
@@ -63,9 +64,10 @@ internal suspend fun <T> withRealWebRtcSessionPair(
 internal suspend fun <T> withRealWebRtcDataChannelPair(
     label: String = WEB_RTC_DEVICE_SESSION_CHANNEL_LABEL,
     blockOwnsConnections: Boolean = false,
+    iceServers: List<WebRtcIceServerConfig> = realWebRtcTestIceServers,
     block: suspend CoroutineScope.(WebRtcDataChannel, WebRtcDataChannel, WebRtcPeerConnection, WebRtcPeerConnection) -> T,
 ): T = coroutineScope {
-    val initiator = WebRtcPeerConnection(realWebRtcTestIceServers)
+    val initiator = WebRtcPeerConnection(iceServers)
     var responderToClose: WebRtcPeerConnection? = null
     var handedToBlock = false
     val jobs = mutableListOf<Job>()
@@ -77,7 +79,7 @@ internal suspend fun <T> withRealWebRtcDataChannelPair(
     var responderState = "New"
     var stage = "creating responder"
     try {
-        val responder = WebRtcPeerConnection(realWebRtcTestIceServers).also { responderToClose = it }
+        val responder = WebRtcPeerConnection(iceServers).also { responderToClose = it }
         jobs += launch(start = CoroutineStart.UNDISPATCHED) {
             initiator.onConnectionStateChange.collect { initiatorState = it.name }
         }

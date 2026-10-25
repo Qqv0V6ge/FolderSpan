@@ -1,7 +1,5 @@
 package com.folderspan.ui.state.file
 
-import strings.AppStrings
-
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.PathInfo
 import com.folderspan.data.main.DiskBase
@@ -9,10 +7,6 @@ import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.network.Network
 import com.folderspan.data.main.network.NetworkAccess
 import com.folderspan.data.main.share.Share
-import com.folderspan.ui.state.main.DeviceState
-import com.folderspan.ui.state.main.MainState
-import com.folderspan.ui.theme.toColorScheme
-import com.folderspan.utils.LogKit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,8 +15,6 @@ import kotlinx.coroutines.withContext
 internal class FileStateDeskSwitcher(
     private val mainScope: CoroutineScope,
     private val fileBookmarkState: FileBookmarkState,
-    private val deviceState: DeviceState,
-    private val mainState: MainState,
     private val currentDesk: () -> DiskBase,
     private val currentPath: () -> String,
     private val setDesk: (DiskBase) -> Unit,
@@ -77,8 +69,6 @@ internal class FileStateDeskSwitcher(
                 }
 
                 if (type is Device) {
-                    applyRemoteDeviceTheme(type)
-
                     val homeBookmark =
                         fileBookmarkState.bookmarks.firstOrNull { item -> item.type == DrawerBookmarkType.Home }
                     if (homeBookmark != null) {
@@ -88,8 +78,6 @@ internal class FileStateDeskSwitcher(
                             updatePath(rootPaths.first().path)
                         }
                     }
-                } else {
-                    mainState.setRemoteColorScheme(null)
                 }
 
                 if (rememberedPath != null) {
@@ -116,28 +104,4 @@ internal class FileStateDeskSwitcher(
 
     @Suppress("UNUSED_PARAMETER")
     private fun keepProtocolForCallSiteCompatibility(protocol: FileProtocol) = Unit
-
-    private suspend fun applyRemoteDeviceTheme(type: Device) {
-        try {
-            val isDark = mainState.currentDarkTheme.value
-            val themeResult = deviceState.getRemoteDeviceTheme(type, isDark)
-
-            if (themeResult == null) {
-                LogKit.w(AppStrings.ui_there_currently_no_available_topic_channels_remote_device_arg0.format(arg0 = type.id))
-                mainState.setRemoteColorScheme(null)
-            } else {
-                themeResult.onSuccess { response ->
-                    val colorScheme = response.colorScheme.toColorScheme()
-                    LogKit.i(AppStrings.ui_get_remote_device_colorscheme_isdark_arg0_apply_it.format(arg0 = (isDark).toString()))
-                    mainState.setRemoteColorScheme(colorScheme)
-                }.onFailure { e ->
-                    LogKit.w(AppStrings.ui_failed_get_remote_device_topic_arg0.format(arg0 = (e.message).toString()), e)
-                    mainState.setRemoteColorScheme(null)
-                }
-            }
-        } catch (e: Exception) {
-            LogKit.e(AppStrings.ui_get_remote_device_topic_exception_arg0.format(arg0 = (e.message).toString()), e)
-            mainState.setRemoteColorScheme(null)
-        }
-    }
 }

@@ -14,7 +14,7 @@ internal suspend fun TaskState.withTaskArtifact(
     purpose: TaskArtifactPurpose = TaskArtifactPurpose.FILE,
     work: suspend (String) -> Result<Boolean>,
 ): Result<Boolean> {
-    val previous = findTaskArtifact(task.key, entryId)
+    val previous = findTaskArtifact(task.key, entryId)?.takeUnless { it.cleaned }
     if (previous?.completed == true) return Result.success(true)
     val localFile = destination.protocol == FileProtocol.Local && LocalTaskArtifacts.supported &&
         !isAndroidContentUriPath(destination.path) &&

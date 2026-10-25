@@ -180,7 +180,7 @@ internal class FileRuntimeTaskExecutor(
             try {
                 val result = executePendingTask(currentTask, meta, resumedFromRecovery = true)
                 if (result.isSuccess && result.getOrDefault(false)) {
-                    taskState.delete(currentTask)
+                    taskState.completeTask(currentTask)
                     updateFileAndFolder()
                 } else if (result.isFailure && result.exceptionOrNull() is CancellationException) {
                     taskState.updateStatus(currentTask, StatusEnum.FAILURE)
@@ -239,11 +239,7 @@ internal class FileRuntimeTaskExecutor(
     }
 
     fun finishSuccessfulTask(task: Task) {
-        if (taskState.hasFailedRetryEntries(task)) {
-            taskState.updateStatus(task, StatusEnum.SUCCESS)
-        } else {
-            taskState.delete(task)
-        }
+        taskState.completeTask(task)
     }
 
     private suspend fun executePendingTask(

@@ -5,7 +5,7 @@ The FolderSpan Apache-2.0 license does not replace those terms.
 Platform-specific entries apply where the corresponding components are used.
 Bundled Java runtimes also retain their own runtime/legal directory.
 
-Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.
+This inventory was captured for the 2026-10-21 dependency snapshot. Source-code synchronization from FileManager e71042a0 updates dependency declarations, including webrtc-java 0.20.0; the component table and native correspondence have NOT been refreshed or revalidated for those new versions. Refresh the affected inventory, upstream terms and actual binary correspondence before a new distribution. Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.
 
 Maven component inventory
 Component | Resolved configurations | License metadata
