@@ -111,8 +111,13 @@ object ExternalFileResourceLeaseRegistry {
                     entry.referenceCount++
                 }
             }
+            // A different TaskState may still own a producer or task lease, including a root
+            // reserved before its first file is written. Keep those roots as well as restored ones.
+            leases.values.mapNotNullTo(activeRoots) { entry -> entry.lease.rootPath }
+            // Serialize the scan with registration: a stale snapshot must not delete a root
+            // whose producer registered while recovery was enumerating the staging directory.
+            reconcileExternalFileStagingRoots(activeRoots)
         }
-        reconcileExternalFileStagingRoots(activeRoots)
     }
 
     internal fun referenceCount(leaseId: String): Int = withLock {
