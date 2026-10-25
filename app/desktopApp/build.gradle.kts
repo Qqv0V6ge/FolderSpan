@@ -1,5 +1,7 @@
+import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -96,6 +98,13 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+val isStandardEdition = rootProject.findProject(":proMain") == null
+if (isStandardEdition) {
+    sourceSets.named("main") {
+        resources.srcDir(rootProject.tasks.named("prepareLicenseBundle"))
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.folderspan.MainKt"
@@ -115,6 +124,10 @@ compose.desktop {
             description = desktopPackageDescription
             vendor = desktopPackageVendor
             packageName = desktopAppName
+            if (isStandardEdition) {
+                licenseFile.set(rootProject.file("LICENSE"))
+                appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
+            }
             modules("java.sql")
 
             linux {
@@ -265,4 +278,17 @@ tasks.withType<AbstractJLinkTask>().configureEach {
 
 tasks.withType<JavaExec>().configureEach {
     jvmArgs(desktopNoProxyJvmArgs)
+}
+
+if (isStandardEdition) {
+    tasks.matching { it.name == "prepareAppResources" }.configureEach {
+        dependsOn(rootProject.tasks.named("prepareDesktopLicenseResources"))
+    }
+    // Compose marks appResourcesDir as internal; include it in packaging fingerprints.
+    tasks.withType<AbstractJPackageTask>().configureEach {
+        inputs.dir(appResourcesDir)
+            .withPropertyName("applicationResources")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+            .optional()
+    }
 }

@@ -1,2 +1,12 @@
 # 保持通知路由目录在所有平台使用 LF，以便逐字节验证生成结果。
 notification-routes.json text eol=lf
+
+# Preserve the upstream bytes used by third-party notice SHA-256 checks.
+/LICENSE text eol=lf
+/THIRD_PARTY_NOTICES.txt -text
+/docs/distribution-kit/**/demo-files/** -text
+/third-party/** -text
+/core/src/commonMain/composeResources/files/share-file/static/third-party-licenses/** -text
+/core/src/commonMain/composeResources/files/editor/GBK-MAPPING-NOTICE.txt -text
+/core/src/commonMain/composeResources/files/editor/UNICODE-LICENSE.txt -text
+/core/src/commonMain/composeResources/files/share-file/static/streamsaver/polyfill.min.js -text

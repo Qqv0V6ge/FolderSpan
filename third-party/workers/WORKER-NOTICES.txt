@@ -1,0 +1,31 @@
+FolderSpan local SQL.js worker — provenance and compatibility note
+
+Scope: app/shared/src/jsMain/resources/sqljs.worker.js and the wasmJsMain copy.
+The two local implementations are identical. They implement the message protocol
+used by SQLDelight WebWorkerDriver and load the separate sql.js runtime.
+
+Official implementation used for this review:
+  @cashapp/sqldelight-sqljs-worker 2.4.0, Apache License 2.0
+  https://registry.npmjs.org/@cashapp/sqldelight-sqljs-worker/2.4.0
+  SQLDelight project README notice: Copyright 2016 Square, Inc.
+  That is the upstream project's attribution, not a claim that Square authored
+  this entire local worker. The official package and fixed source worker match.
+
+Separate runtime:
+  sql.js 1.8.0, MIT
+  Copyright (c) 2017 sql.js authors (see the preserved AUTHORS file).
+  Its original worker was also compared; it differs from the local worker.
+  The complete upstream license retains the separate Makefile attribution.
+
+The local worker has runtime-origin isolation, IndexedDB persistence, serialized
+dispatch, save-failure handling and last_insert_rowid caching. Its history in
+this repository begins with a public import. Protocol correspondence alone does
+not prove historical copying, derivation, independent creation or authorship.
+No individual author or absence of AI code is asserted by this note.
+
+Full upstream license texts and the referenced authorship notices are preserved
+under third-party/workers/. Review snapshots are kept separately from the
+notice-generation inputs. The publisher's Apache-2.0 adoption applies only to code
+they have authority to license; it does not replace third-party terms or resolve
+the outstanding local authorship/source-chain facts. The new source headers are
+comments only. Previously published v1.0.0 binaries have not been rebuilt.

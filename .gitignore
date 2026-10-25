@@ -41,3 +41,4 @@ server/keystore.p12
 .codex/
 .codebase-memory/
 output/
+docs/distribution-kit/

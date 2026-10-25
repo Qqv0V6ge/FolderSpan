@@ -1,0 +1,22 @@
+{
+  "component": "com.squareup.okhttp3:okhttp:4.12.0 public suffix data",
+  "license": "MPL-2.0",
+  "source_archive_url": "https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0-sources.jar",
+  "source_archive_sha256": "d91a769a4140e542cddbac4e67fcf279299614e8bfd53bd23b85e60c2861341c",
+  "binary_archive_sha256": "b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0",
+  "resource_member": "okhttp3/internal/publicsuffix/publicsuffixes.gz",
+  "resource_sha256": "9af43e9995ec749e7a30eec4e5a87770d7e2027847084a07cca82060eff0c791",
+  "artifact_and_sources_resource_match": true,
+  "decoded_source": {
+    "rules.txt": {
+      "sha256": "650b23ef38120636ff010ffe0d505ab046f6c716dc5bc47a7fe658188fae5e30",
+      "lines": 9499
+    },
+    "exceptions.txt": {
+      "sha256": "b487ad0540e4e35b08306183d9ea4bc63c1789d0611d6e010de336b6a141e85a",
+      "lines": 8
+    }
+  },
+  "format": "gzip of big-endian uint32 rules byte length, exact UTF-8 rules bytes, big-endian uint32 exception length, exact UTF-8 exception bytes; the separate editable rule files reconstruct the artifact resource. PublicSuffixDatabase.kt is the exact upstream reader (Apache-2.0).",
+  "original_full_psl_with_comments": "https://publicsuffix.org/list/public_suffix_list.dat (moving source; not falsely identified as byte-identical to this 4.12.0 snapshot)"
+}

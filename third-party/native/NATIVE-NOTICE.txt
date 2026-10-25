@@ -1,0 +1,28 @@
+FolderSpan 普通版：原生组件与运行时第三方声明
+
+FolderSpan 自有普通版代码采用 Apache License 2.0。以下第三方作品仍分别受其原始许可约束；项目许可证不替这些作品重新授权。不同目标平台包含的组件不同，版本范围、来源和原文摘要见仓库的 third-party/manifest.json；Maven 组件清单见 third-party/maven/components.csv。构建审计证据与声明生成输入分开保存。
+
+Android WebRTC 使用 io.github.webrtc-sdk:android:125.6422.06.1，经 webrtc-kmp 0.125.11 引入。WebRTC 及其原生第三方许可原文见 licenses/webrtc-android/LICENSE 和 licenses/webrtc-android/WEBRTC.md。官方完整集合包括构建工具条目；保留集合不表示其中每项都被链接进 FolderSpan。
+
+macOS 桌面使用 webrtc-java 0.18.0；其包装、外部 WebRTC、JNI helper 的许可分别保留在 licenses/webrtc-java/。licenses/webrtc-desktop-branch7977/ 是该版本默认 WebRTC 分支的固定源码快照许可集合，尚未以发行 native 的实际构建依赖图证明其完整对应关系，不能用 Android M125 集合代替桌面声明。
+
+Skiko 0.150.1、Skia m150-1f14f1166a 及其各第三方组件分别保留原始许可。macOS 使用的 Skia 默认静态依赖包含 ICU、HarfBuzz、Expat、libpng、libjpeg-turbo、WebP、zlib、PIEX 和 Adobe DNG SDK；详见 licenses/skiko/、licenses/skia/ 及 licenses/skia-external/。
+
+使用 IJG/libjpeg-turbo 的构建保留下列原始署名：
+This software is based in part on the work of the Independent JPEG Group.
+
+使用 Adobe DNG SDK 的构建保留下列原始声明：
+This product includes DNG technology under license by Adobe Systems
+Incorporated.
+
+Adobe DNG SDK 使用其独立 SDK License Agreement，不属于项目 Apache-2.0 许可。完整许可、NOTICE、PATENTS 已保留；不得使用 Adobe 或 DNG 商标背书本产品。
+
+JNA 5.19.0 的 Apache-2.0 / LGPL-2.1-or-later 双许可中，本项目选择 Apache-2.0 路线。JNA 许可告知和 Apache 全文见 licenses/jna/LICENSE、licenses/jna/AL2.0；其内嵌 libffi 的独立 MIT 许可见 licenses/jna/native/libffi/LICENSE。另保留 LGPL 原文仅为上游可选路线参考，不将其表述为本项目已选择的路线。
+
+okio-zstd / zstd-kmp 0.4.0 的封装采用 Apache-2.0。其固定 Zstandard 源码提交为 1dbc2e09084e843f6c0dcc2d0791610015c50979（1.5.8）；本项目选择 Zstandard 的 BSD 路线，原文见 licenses/zstd/LICENSE，并保留其 xxHash 源码许可告知。GNU GPL 可选文本和 JNI 构建头文件 GPLv2 + Classpath Exception 文本另留作来源参考；不据此把独立 FolderSpan 应用改为 GPL。
+
+sqlite-jdbc 3.53.4.0 的 Apache-2.0、Zentus BSD 及 NOTICE 保留在 licenses/sqlite-jdbc/。其 SQLite 3.53.4 上游公共领域说明单独保留，不能用 SQLite 的公共领域地位覆盖 JDBC 包装和扩展。
+
+iOS 路线使用的 libsmb2 6.2、OpenSSL 3.3.2、libssh2 1.11.1 和 curl 8.12.1 为当前构建脚本默认值，实际可被覆盖，尚无最终 IPA。对应原文分别位于 licenses/libsmb2/、licenses/openssl/、licenses/libssh2/、licenses/curl/；libsmb2 客户端为 LGPL-2.1-or-later，静态链接须另行履行库源码、可修改与重链接材料等条件。iOS WebRTC-SDK 125.6422.05 的实际 XCFramework LICENSE 保留在 licenses/webrtc-ios/。这些 iOS 条件不自动适用于已检查的 Android APK。
+
+随包 OpenJDK 运行时及其内部第三方内容各有独立许可。分发时必须保留该实际运行时的完整 legal 目录、GPLv2/Classpath Exception、Assembly Exception、其他适用文本，并提供与实际运行时对应的源码交付或有效提供方式。仅有项目 Apache-2.0 或仅有 JDK 的 src.zip 不代表这些义务已完成。具体发行须核对实际运行时与对应源码；通用分发条件另见仓库根 LICENSING.md。

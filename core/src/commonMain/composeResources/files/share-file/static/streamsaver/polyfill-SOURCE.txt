@@ -1,0 +1,30 @@
+Web Streams ponyfill 来源、许可与替换记录
+核实及替换日期：2026-10-21
+
+现有路径：static/streamsaver/polyfill.min.js
+实际内容：web-streams-polyfill 2.0.2 官方 npm 包的 dist/ponyfill.js 原字节。
+文件名保留历史 .min.js 后缀以保持引用路径；当前内容未压缩，也未手工改写。
+SHA-256：71037540957d86a5226328dc8842374839cc7292942eb5ed29a245450b63d0f3
+字节数：143383
+
+上游包：https://registry.npmjs.org/web-streams-polyfill/-/web-streams-polyfill-2.0.2.tgz
+包 SHA-256：290465fdb4aed0c84f3b1df8b2ba472c4c86dc86a14faab5b426f976e74f1e92
+包成员：package/dist/ponyfill.js
+许可：MIT；完整上游原文见 ../third-party-licenses/web-streams-polyfill-2.0.2.LICENSE.txt
+版权：Copyright (c) 2019 Mattias Buelens；Copyright (c) 2016 Diwank Singh Tomer。
+此处仅转录原文版权信息，不用项目 Apache-2.0 重新授权该组件。
+
+采用 ponyfill 变体，导出 WebStreamsPolyfill，不覆盖宿主原生 Streams 全局。
+本项目 StreamSaver 读取 WebStreamsPolyfill.WritableStream 作为缺少原生
+WritableStream 时的回退；已有原生 WritableStream 仍由 StreamSaver 优先采用。
+
+已执行 Node VM 检查：来源锁定、导出、原生全局保留、顺序读写、pipeTo、
+背压、取消/abort、sink 错误传播、TransformStream、真实 StreamSaver 的
+写入/close/abort 与原生优先选择，共12项全部通过。仅浏览器边界的 DOM 和
+MessageChannel 使用内存替身；没有声称完成浏览器/Service Worker端到端下载测试。
+可复查测试：node third-party/resources/tests/verify_web_streams.cjs。
+历史前后核查结果另存，不是运行或生成声明所必需的文件。
+
+被替换旧文件 SHA-256：ffbf43dcd84933cf64cc7d040cd431cb04375a1bda146f66a347c8111a29dcf8
+旧文件30123字节，历史精确来源/版本仍未证明；替换不抹去该事实，也不能
+把新 MIT 许可追溯为旧文件的授权证明。公开 v1 安装包本次没有重建或改写。
