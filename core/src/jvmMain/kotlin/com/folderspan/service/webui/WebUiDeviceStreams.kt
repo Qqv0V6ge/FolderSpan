@@ -22,9 +22,10 @@ internal class PlatformDeviceTransport(
     private val session: WebUiPlatformSession,
     options: WebUiDeviceTransportOpen,
     private val eventHandle: String,
+    parentScope: CoroutineScope = session.scope,
 ) {
-    private val job = SupervisorJob(session.scope.coroutineContext[Job])
-    private val scope = CoroutineScope(session.scope.coroutineContext + job)
+    private val job = SupervisorJob(parentScope.coroutineContext[Job])
+    private val scope = CoroutineScope(parentScope.coroutineContext + job)
     private val transport = DeviceSessionTransport(owner.channel, options.sendPlan, options.receivePlan, options.isClient,
         onPing = { events.send(DeviceSessionFrames.ping(it)) })
     val connection = transport.connection as DeviceSessionConnection
@@ -32,7 +33,18 @@ internal class PlatformDeviceTransport(
     private val mutex = Mutex()
     private val bodyMutex = Mutex()
     private val bodies = Channel<DeviceSessionFrame>(options.receivePlan.frameQueueCapacity())
-    private val opening = mutableMapOf<Int, CompletableDeferred<Unit>>()
+    private class PendingOpen(parent: Job) {
+        val ready = CompletableDeferred<Unit>(parent)
+        val sent = CompletableDeferred<Unit>(parent)
+        var worker: Job? = null
+        var startRequested = false
+
+        fun fail(error: Throwable) {
+            ready.completeExceptionally(error)
+            sent.completeExceptionally(error)
+        }
+    }
+    private val opening = mutableMapOf<Int, PendingOpen>()
     private val routes = mutableMapOf<Int, CompletableDeferred<PlatformDeviceTransfer?>>()
     private val transfers = mutableMapOf<Int, PlatformDeviceTransfer>()
     private val queueCapacity = options.receivePlan.streamFrameQueueCapacity()
@@ -118,25 +130,58 @@ internal class PlatformDeviceTransport(
         require(input.streamId >= 0)
         return when (input.operation) {
             "allocate" -> {
-                val allocated = CompletableDeferred<Int>()
-                val ready = CompletableDeferred<Unit>()
-                scope.launch {
+                val allocated = CompletableDeferred<Int>(job)
+                val pending = PendingOpen(job)
+                var streamId: Int? = null
+                pending.worker = scope.launch(start = CoroutineStart.LAZY) {
                     try {
                         connection.openStream(input.payload) { id ->
-                            mutex.withLock { opening[id] = ready }
+                            streamId = id
+                            mutex.withLock { opening[id] = pending }
                             allocated.complete(id)
-                            ready.await()
+                            pending.ready.await()
                         }
+                        // openStream returns once OPEN is in the ordered outgoing queue, not after a peer ACK.
+                        pending.sent.complete(Unit)
                     } catch (error: Throwable) {
                         allocated.completeExceptionally(error)
+                        pending.fail(error)
+                        withContext(NonCancellable) {
+                            mutex.withLock {
+                                streamId?.let { id -> if (opening[id] === pending) opening.remove(id) }
+                            }
+                        }
                     }
                 }
-                WebUiDeviceOperationResult(streamId = allocated.await())
+                pending.worker!!.start()
+                try {
+                    WebUiDeviceOperationResult(streamId = allocated.await())
+                } catch (error: Throwable) {
+                    allocated.completeExceptionally(error)
+                    pending.fail(error)
+                    pending.worker?.cancel()
+                    throw error
+                }
             }
             "start" -> {
-                val ready = mutex.withLock { opening.remove(input.streamId) }
-                requireNotNull(ready) { "unknown pending stream" }.complete(Unit)
-                WebUiDeviceOperationResult()
+                val pending = mutex.withLock {
+                    requireNotNull(opening[input.streamId]?.takeUnless { it.startRequested }) {
+                        "unknown pending stream"
+                    }.also { it.startRequested = true }
+                }
+                pending.ready.complete(Unit)
+                try {
+                    pending.sent.await()
+                    WebUiDeviceOperationResult()
+                } catch (error: Throwable) {
+                    pending.fail(error)
+                    pending.worker?.cancel()
+                    throw error
+                } finally {
+                    withContext(NonCancellable) {
+                        mutex.withLock { if (opening[input.streamId] === pending) opening.remove(input.streamId) }
+                    }
+                }
             }
             "accept" -> WebUiDeviceOperationResult(accepted = connection.acceptRemoteStream(input.streamId))
             "data" -> { connection.sendData(input.streamId, input.payload); WebUiDeviceOperationResult() }
@@ -144,11 +189,14 @@ internal class PlatformDeviceTransport(
             "trailer" -> { connection.sendTrailer(input.streamId, input.payload); WebUiDeviceOperationResult() }
             "window" -> { require(input.value >= 0); connection.sendWindowUpdate(input.streamId, input.value); WebUiDeviceOperationResult() }
             "reset" -> {
-                mutex.withLock {
-                    opening.remove(input.streamId)?.cancel()
+                val pending = mutex.withLock {
+                    val pending = opening.remove(input.streamId)
                     routes.remove(input.streamId)?.complete(null)
                     transfers[input.streamId]?.cancel()
+                    pending
                 }
+                pending?.fail(DeviceSessionIoException("stream reset: ${input.streamId}"))
+                pending?.worker?.cancel()
                 connection.sendRst(input.streamId, input.value)
                 WebUiDeviceOperationResult()
             }
@@ -156,6 +204,11 @@ internal class PlatformDeviceTransport(
             "go-away" -> { connection.goAway(); WebUiDeviceOperationResult() }
             else -> error("unknown device transport operation")
         }
+    }
+
+    suspend fun awaitOpenSent(streamId: Int) {
+        val pending = mutex.withLock { opening[streamId] }
+        pending?.sent?.await()
     }
 
     suspend fun transfer(request: DeviceSessionHostTransfer): String {
@@ -202,9 +255,11 @@ internal class PlatformDeviceTransport(
                 }
             }
         }
-        if (receiving) mutex.withLock {
-            routes.getOrPut(request.streamId) { CompletableDeferred() }.complete(transfer)
-            opening[request.streamId]?.complete(Unit)
+        mutex.withLock {
+            if (receiving) routes.getOrPut(request.streamId) { CompletableDeferred() }.complete(transfer)
+            // A transfer requested inside onStreamAllocated must release OPEN itself: the caller
+            // cannot send explicit start until that transfer returns. Retain the entry for start.
+            opening[request.streamId]?.ready?.complete(Unit)
         }
         transfer.start()
         return handle
@@ -238,6 +293,7 @@ internal class PlatformDeviceTransfer(
     fun start() {
         worker = scope.launch {
             try {
+                transport.awaitOpenSent(request.streamId)
                 result = when (request.kind) {
                     DeviceSessionHostTransferKind.SendFile -> sendFile()
                     DeviceSessionHostTransferKind.ReceiveFile -> receiveFile()
@@ -342,6 +398,7 @@ internal class PlatformDeviceTransfer(
 
     private suspend fun relay(): FolderSpanArchiveTransferResult {
         val target = requireNotNull((session.resource(request.targetHandle) as PlatformDeviceChannel).transport)
+        target.awaitOpenSent(request.targetStreamId)
         var received = 0L
         val chunks = flow {
             for (chunk in input) {
