@@ -38,12 +38,21 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLClassLoader
 import java.nio.file.Files
+import java.nio.file.AccessDeniedException
+import java.nio.file.DirectoryNotEmptyException
+import java.nio.file.FileSystemException
+import java.nio.file.FileVisitResult
+import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.prefs.AbstractPreferences
@@ -119,10 +128,80 @@ class WebRtcShareWorkflowJvmTest {
                                 check(process.waitFor(3, TimeUnit.SECONDS)) { "Workflow child did not exit" }
                             }
                         } }.toTypedArray(),
-                        { check(directory.toFile().deleteRecursively()) { "Could not remove workflow test directory" } },
+                        { deleteWorkflowDirectory(directory) },
                     )
                 }
             }
+        }
+    }
+
+    @Test
+    fun workflowCleanupRetriesWindowsAccessDeniedAndDeletesTree() {
+        val directory = Files.createTempDirectory("webrtc-workflow-cleanup")
+        val content = Files.write(directory.resolve("payload.bin"), byteArrayOf(1, 2, 3))
+        var attempts = 0
+        var pauses = 0
+        try {
+            deleteWorkflowDirectory(directory, windowsFileSystem = true, deleteTree = { path ->
+                attempts++
+                if (attempts == 1) throw AccessDeniedException(content.toString())
+                deleteWorkflowDirectoryTree(path)
+            }, pause = { pauses++ })
+            assertEquals(2, attempts)
+            assertEquals(1, pauses)
+            assertTrue(Files.notExists(directory, LinkOption.NOFOLLOW_LINKS))
+        } finally {
+            deleteWorkflowDirectoryTree(directory)
+        }
+    }
+
+    @Test
+    fun workflowCleanupKeepsPersistentWindowsFailure() {
+        val directory = Files.createTempDirectory("webrtc-workflow-cleanup")
+        val denied = AccessDeniedException(directory.resolve("locked.bin").toString())
+        var attempts = 0
+        var pauses = 0
+        try {
+            val failure = assertFailsWith<IOException> {
+                deleteWorkflowDirectory(directory, windowsFileSystem = true, deleteTree = {
+                    attempts++
+                    throw denied
+                }, pause = { pauses++ })
+            }
+            assertSame(denied, failure.cause)
+            assertTrue(failure.message.orEmpty().contains(directory.toString()))
+            assertEquals(WORKFLOW_CLEANUP_ATTEMPTS, attempts)
+            assertEquals(WORKFLOW_CLEANUP_ATTEMPTS - 1, pauses)
+            assertTrue(Files.exists(directory))
+        } finally {
+            deleteWorkflowDirectoryTree(directory)
+        }
+    }
+
+    @Test
+    fun workflowCleanupDoesNotRetryUnrelatedOrNonWindowsErrors() {
+        val directory = Files.createTempDirectory("webrtc-workflow-cleanup")
+        val errors = listOf(
+            true to FileSystemException(directory.toString(), null, "Unrelated filesystem failure"),
+            true to IllegalStateException("Unrelated cleanup failure"),
+            false to AccessDeniedException(directory.toString()),
+        )
+        try {
+            for ((windowsFileSystem, error) in errors) {
+                var attempts = 0
+                var pauses = 0
+                val failure = assertFailsWith<Exception> {
+                    deleteWorkflowDirectory(directory, windowsFileSystem, deleteTree = {
+                        attempts++
+                        throw error
+                    }, pause = { pauses++ })
+                }
+                assertSame(error, if (error is FileSystemException) failure.cause else failure)
+                assertEquals(1, attempts)
+                assertEquals(0, pauses)
+            }
+        } finally {
+            deleteWorkflowDirectoryTree(directory)
         }
     }
 }
@@ -402,6 +481,57 @@ private fun byteProgressParts(task: Task): Pair<Long, Long>? {
     return (parts[1].toLongOrNull() ?: return null) to (parts[2].toLongOrNull() ?: return null)
 }
 private fun transferredBytes(task: Task): Long = byteProgressParts(task)?.first ?: 0L
+
+private const val WORKFLOW_CLEANUP_ATTEMPTS = 5
+
+private fun deleteWorkflowDirectory(
+    directory: Path,
+    windowsFileSystem: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true),
+    deleteTree: (Path) -> Unit = ::deleteWorkflowDirectoryTree,
+    pause: () -> Unit = { Thread.sleep(50) },
+) {
+    for (attempt in 1..WORKFLOW_CLEANUP_ATTEMPTS) {
+        try {
+            deleteTree(directory)
+            check(Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                "Workflow test directory still exists after cleanup: $directory"
+            }
+            return
+        } catch (error: FileSystemException) {
+            // Child processes have already exited. Windows can still reject a pending deletion;
+            // retry only its access/sharing cases, and retain the actual path and OS error on failure.
+            val recoverable = error is AccessDeniedException || error is DirectoryNotEmptyException ||
+                error.reason.orEmpty().contains("being used by another process", ignoreCase = true) ||
+                error.reason.orEmpty().contains("another process has locked", ignoreCase = true)
+            if (!windowsFileSystem || !recoverable || attempt == WORKFLOW_CLEANUP_ATTEMPTS) {
+                throw IOException("Could not remove workflow test directory $directory after $attempt attempt(s)", error)
+            }
+            pause()
+        }
+    }
+}
+
+private fun deleteWorkflowDirectoryTree(directory: Path) {
+    if (Files.notExists(directory, LinkOption.NOFOLLOW_LINKS)) return
+    // walkFileTree does not follow symbolic links unless FOLLOW_LINKS is explicitly requested.
+    Files.walkFileTree(directory, object : SimpleFileVisitor<Path>() {
+        override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+            Files.deleteIfExists(file)
+            return FileVisitResult.CONTINUE
+        }
+
+        override fun visitFileFailed(file: Path, error: IOException): FileVisitResult {
+            if (error is NoSuchFileException) return FileVisitResult.CONTINUE
+            throw error
+        }
+
+        override fun postVisitDirectory(dir: Path, error: IOException?): FileVisitResult {
+            if (error != null) throw error
+            Files.deleteIfExists(dir)
+            return FileVisitResult.CONTINUE
+        }
+    })
+}
 
 private suspend fun cleanupAll(primaryFailure: Throwable?, vararg actions: suspend () -> Unit) {
     var failure = primaryFailure
