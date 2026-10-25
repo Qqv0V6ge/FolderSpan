@@ -11,6 +11,9 @@ import com.russhwolf.settings.MapSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -18,6 +21,102 @@ import java.nio.file.Path
 import kotlin.test.*
 
 class WebUiDeviceStreamsTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun startWaitsForOpenToBeQueuedBeforeBrowserDataWithoutWaitingForPeerAck() = runTest {
+        withPendingOpen { fixture, streamId ->
+            val started = async(start = CoroutineStart.UNDISPATCHED) {
+                fixture.transport.operate(WebUiDeviceOperation("start", streamId))
+            }
+            // The opener is queued on the test dispatcher but has not resumed after ready yet.
+            assertFalse(started.isCompleted, "start must not return before OPEN is queued")
+            runCurrent()
+            started.await()
+
+            val content = byteArrayOf(1, 2, 3)
+            fixture.transport.operate(WebUiDeviceOperation("data", streamId, content))
+            runCurrent()
+            val open = DeviceSessionIo.readFrame(fixture.peer)
+            val data = DeviceSessionIo.readFrame(fixture.peer)
+            assertEquals(DeviceSessionFrameType.Open, open.type)
+            assertEquals(streamId, open.streamId)
+            assertEquals(DeviceSessionFrameType.Data, data.type)
+            assertEquals(streamId, data.streamId)
+            assertContentEquals(content, data.payload)
+            // No peer has replied or sent any ACK to this fixture.
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun resetAndCloseFailAStartWhoseOpenHasNotBeenQueued() = runTest {
+        for (reset in listOf(true, false)) {
+            withPendingOpen { fixture, streamId ->
+                val started = async(start = CoroutineStart.UNDISPATCHED) {
+                    runCatching { fixture.transport.operate(WebUiDeviceOperation("start", streamId)) }
+                }
+                assertFalse(started.isCompleted)
+                if (reset) fixture.transport.operate(WebUiDeviceOperation("reset", streamId))
+                else fixture.transport.close()
+                runCurrent()
+                assertTrue(started.await().isFailure, "reset/close must fail the waiting start")
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun cancellingAllocationOrStartDoesNotLeaveAPendingOpener() = runTest {
+        val fixture = PendingOpenFixture(backgroundScope)
+        try {
+            val allocation = async(start = CoroutineStart.UNDISPATCHED) {
+                fixture.transport.operate(WebUiDeviceOperation("allocate", payload = byteArrayOf()))
+            }
+            assertFalse(allocation.isCompleted)
+            allocation.cancelAndJoin()
+            runCurrent()
+            assertTrue(fixture.outgoing.tryReceive().isFailure)
+        } finally { fixture.close() }
+
+        withPendingOpen { active, streamId ->
+            val started = async(start = CoroutineStart.UNDISPATCHED) {
+                active.transport.operate(WebUiDeviceOperation("start", streamId))
+            }
+            assertFalse(started.isCompleted)
+            started.cancelAndJoin()
+            runCurrent()
+            assertFailsWith<IllegalArgumentException> {
+                active.transport.operate(WebUiDeviceOperation("start", streamId))
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun hostTransferInsideAllocationQueuesOpenBeforeDataAndAllowsLaterExplicitStart() = runTest {
+        withPendingOpen { fixture, streamId ->
+            val content = byteArrayOf(4, 5, 6)
+            val source = Files.createTempFile("pending-open-host-send", ".bin").toRealPath()
+            try {
+                Files.write(source, content)
+                fixture.transport.transfer(DeviceSessionHostTransfer(streamId, DeviceSessionHostTransferKind.SendFile,
+                    source.toString(), content.size.toLong(), 0, content.size.toLong()))
+                runCurrent()
+                val open = DeviceSessionIo.readFrame(fixture.peer)
+                val data = DeviceSessionIo.readFrame(fixture.peer)
+                assertEquals(DeviceSessionFrameType.Open, open.type)
+                assertEquals(streamId, open.streamId)
+                assertEquals(DeviceSessionFrameType.Data, data.type)
+                assertContentEquals(content, data.payload)
+                // The onStreamAllocated caller only reaches explicit start after hostTransfer returns.
+                fixture.transport.operate(WebUiDeviceOperation("start", streamId))
+            } finally {
+                fixture.close()
+                Files.deleteIfExists(source)
+            }
+        }
+    }
+
     @Test
     fun checkpointUploadResumesThroughRuntimeAndNeverProxiesFileBodies(): Unit = runBlocking {
         withTimeout(20_000) {
@@ -385,6 +484,36 @@ class WebUiDeviceStreamsTest {
         SettingsUtils.init(MapSettings())
         val pair = StreamPair(this)
         try { pair.start(); block(pair) } finally { pair.close() }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun TestScope.withPendingOpen(block: suspend (PendingOpenFixture, Int) -> Unit) {
+        val fixture = PendingOpenFixture(backgroundScope)
+        try {
+            val allocated = async { fixture.transport.operate(WebUiDeviceOperation("allocate", payload = byteArrayOf())) }
+            runCurrent()
+            val streamId = allocated.await().streamId
+            assertTrue(fixture.outgoing.tryReceive().isFailure, "allocation must wait for the browser to install its stream")
+            block(fixture, streamId)
+        } finally { fixture.close() }
+    }
+
+    private class PendingOpenFixture(scope: CoroutineScope) {
+        init { SettingsUtils.init(MapSettings()) }
+        private val session = WebUiPlatformSession("pending-open-order")
+        private val incoming = Channel<ByteArray>(64)
+        val outgoing = Channel<ByteArray>(64)
+        val peer = StreamTestChannel(outgoing, incoming)
+        private val plan = DeviceSessionWindowPlan(2 * 1024 * 1024, 1024 * 1024, 4)
+        val transport = PlatformDeviceTransport(PlatformDeviceChannel(StreamTestChannel(incoming, outgoing)), session,
+            WebUiDeviceTransportOpen(plan, plan, true), "pending-open-order", parentScope = scope)
+
+        suspend fun close() {
+            transport.close()
+            session.close()
+            incoming.cancel()
+            outgoing.cancel()
+        }
     }
 }
 
