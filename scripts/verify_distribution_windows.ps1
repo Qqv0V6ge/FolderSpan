@@ -20,6 +20,23 @@ function Download-Package([string]$Version, [string]$Kind) {
     return $path
 }
 
+function Deny-RunnerFirewallPrompt {
+    # Keep the runner firewall enabled and decline inbound-network permission.
+    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+    $automation = [System.Windows.Automation.AutomationElement]
+    $scope = [System.Windows.Automation.TreeScope]::Descendants
+    $dialogCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'Windows Security')
+    $dialog = $automation::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $dialogCondition)
+    if (!$dialog) { return }
+    $appCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'FolderSpan')
+    if (!$dialog.FindFirst($scope, $appCondition)) { return }
+    $cancelCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'Cancel')
+    $cancel = $dialog.FindFirst($scope, $cancelCondition)
+    if (!$cancel) { throw 'FolderSpan firewall prompt has no accessible Cancel action' }
+    $cancel.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $report.checks += 'Declined runner inbound firewall permission'
+}
+
 function Test-Launch([string]$Executable, [string]$Label) {
     $before = @(Get-Process | Select-Object -ExpandProperty Id)
     $directory = Get-Item (Split-Path $Executable -Parent)
@@ -30,6 +47,7 @@ function Test-Launch([string]$Executable, [string]$Label) {
         $deadline = (Get-Date).AddSeconds(60)
         do {
             Start-Sleep -Milliseconds 500
+            Deny-RunnerFirewallPrompt
             # The ARM64 launcher starts a Java child; its window does not belong to the launcher PID.
             $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
             $windows = @($owned | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Responding })
@@ -37,6 +55,9 @@ function Test-Launch([string]$Executable, [string]$Label) {
         if ($windows.Count -eq 0) { throw "$Label did not open a responding desktop window" }
         $report.checks += "$Label responding window: $($windows[0].MainWindowTitle)"
     } finally {
+        Get-Process | Where-Object { $_.ProcessName -in @('FolderSpan', 'java', 'javaw') } |
+            Select-Object Id, Path, SessionId, MainWindowHandle, MainWindowTitle, Responding |
+            ConvertTo-Json -Depth 4 | Set-Content "$results/$Label-processes.json"
         Add-Type -AssemblyName System.Windows.Forms, System.Drawing
         $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
         $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
