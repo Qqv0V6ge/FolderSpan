@@ -18,6 +18,11 @@ source=('folderspan.desktop' "folderspan-$pkgver.tar.gz::https://github.com/Qqv0
 sha256sums=('bc2bba3226a003eb759283519120db1a65e8e75b788dd81917f417f4e46b46a7'
             '58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8')
 
+prepare() {
+  # Gradle 9's archive defaults stripped these modes in the upstream v1.0.1 TAR.
+  chmod 755 "$srcdir/bin/FolderSpan" "$srcdir/lib/runtime/lib/jspawnhelper" "$srcdir/lib/runtime/lib/jexec"
+}
+
 package() {
   test -x "$srcdir/bin/FolderSpan"
   test -d "$srcdir/lib/runtime/legal"

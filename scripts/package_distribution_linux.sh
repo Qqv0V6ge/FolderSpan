@@ -14,6 +14,8 @@ curl --fail --location --retry 3 "${asset[0]}" -o "$work/payload.tar.gz"
 echo "${asset[1]}  $work/payload.tar.gz" | sha256sum --check
 mkdir -p "$work/FolderSpan.AppDir"
 tar -xzf "$work/payload.tar.gz" -C "$work/FolderSpan.AppDir"
+# Restore executable modes lost in the immutable v1.0.1 TAR.
+chmod 755 "$work/FolderSpan.AppDir/bin/FolderSpan" "$work/FolderSpan.AppDir/lib/runtime/lib/jspawnhelper" "$work/FolderSpan.AppDir/lib/runtime/lib/jexec"
 test -x "$work/FolderSpan.AppDir/bin/FolderSpan"
 for notice in LICENSE NOTICE LICENSING.md THIRD_PARTY_NOTICES.txt; do
   cmp "$notice" "$work/FolderSpan.AppDir/lib/app/resources/licenses/$notice"

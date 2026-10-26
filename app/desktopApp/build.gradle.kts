@@ -199,6 +199,8 @@ fun registerTarGzTask(
     tasks.register<Tar>(taskName) {
         dependsOn(appImageTaskName)
         from(appImageDirectory)
+        // Gradle 9 defaults archive files to 0644, which makes the launcher unusable.
+        useFileSystemPermissions()
         archiveBaseName.set(desktopPackageName)
         archiveVersion.set(desktopPackageVersion)
         archiveExtension.set("tar.gz")

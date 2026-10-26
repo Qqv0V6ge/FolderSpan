@@ -41,6 +41,9 @@ stdenv.mkDerivation {
   dontConfigure = true;
   dontBuild = true;
   dontStrip = true;
+  postUnpack = ''
+    chmod 755 bin/FolderSpan lib/runtime/lib/jspawnhelper lib/runtime/lib/jexec
+  '';
   installPhase = ''
     runHook preInstall
     test -x bin/FolderSpan

@@ -38,6 +38,7 @@ parts:
       - libsystemd0
     override-build: |
       craftctl default
+      chmod 755 "$CRAFT_PART_INSTALL/bin/FolderSpan" "$CRAFT_PART_INSTALL/lib/runtime/lib/jspawnhelper" "$CRAFT_PART_INSTALL/lib/runtime/lib/jexec"
       test -x "$CRAFT_PART_INSTALL/bin/FolderSpan"
       mkdir -p "$CRAFT_PART_INSTALL/share/applications" "$CRAFT_PART_INSTALL/share/pixmaps"
       cp "$CRAFT_PROJECT_DIR/local/folderspan.desktop" "$CRAFT_PART_INSTALL/share/applications/"
