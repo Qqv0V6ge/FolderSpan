@@ -64,6 +64,7 @@ try {
             Install-Module Microsoft.WinGet.Client -Repository PSGallery -Force -Scope CurrentUser
             Repair-WinGetPackageManager -AllUsers
         }
+        winget --version
         winget validate --manifest "$root/packaging/winget" --disable-interactivity
         Assert-NativeExit 'winget validate'
         $old = Download-Package '1.0.0' 'windows-x64'
@@ -110,7 +111,8 @@ try {
         git -C $repo add bucket
         git -C $repo -c user.name=FolderSpan -c user.email=572169725@qq.com commit -m 'Test fixture 1.0.0'
         Assert-NativeExit 'create local Scoop test bucket'
-        & $scoop bucket add folderspan-validation $repo
+        $bucketUri = ([System.Uri]::new($repo + '/')).AbsoluteUri.TrimEnd('/')
+        & $scoop bucket add folderspan-validation $bucketUri
         Assert-NativeExit 'scoop bucket add'
         & $scoop install folderspan-validation/folderspan
         Assert-NativeExit 'scoop install 1.0.0'
