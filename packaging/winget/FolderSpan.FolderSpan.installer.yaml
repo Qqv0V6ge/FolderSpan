@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: FolderSpan.FolderSpan
 PackageVersion: 1.0.1
 InstallerType: msi
@@ -19,4 +19,4 @@ Installers:
         ProductCode: '{55AD7B2E-FEC5-3687-8B9E-741855B61C98}'
         UpgradeCode: '{ADD48935-D0F8-3AAE-8594-602D7756ADCC}'
 ManifestType: installer
-ManifestVersion: 1.12.0
+ManifestVersion: 1.10.0

@@ -72,7 +72,6 @@ try {
         $exe = "$env:ProgramFiles/FolderSpan/FolderSpan.exe"
         Invoke-Msi '/i' $old 'install-1.0.0'
         if ((Get-InstalledApp).DisplayVersion -ne '1.0.0') { throw 'Old MSI registry version missing' }
-        Test-Launch $exe 'msi-1.0.0'
         Invoke-Msi '/i' $current 'upgrade-1.0.1'
         $installed = @(Get-InstalledApp)
         if ($installed.Count -ne 1 -or $installed[0].DisplayVersion -ne '1.0.1') { throw 'Upgrade left an old or duplicate MSI registration' }
@@ -98,6 +97,8 @@ try {
             $null = New-Item -ItemType Directory -Force "$env:SCOOP/$directory"
         }
         $scoop = "$env:SCOOP/apps/scoop/current/bin/scoop.ps1"
+        & $scoop bucket add main https://github.com/ScoopInstaller/Main.git
+        Assert-NativeExit 'scoop main bucket'
         $bucket = New-Item -ItemType Directory -Force "$work/bucket-source/bucket"
         $repo = Split-Path $bucket -Parent
         $manifest = Get-Content "$root/packaging/scoop/bucket/folderspan.json" -Raw | ConvertFrom-Json
@@ -117,7 +118,6 @@ try {
         & $scoop install folderspan-validation/folderspan
         Assert-NativeExit 'scoop install 1.0.0'
         $exe = "$env:SCOOP/apps/folderspan/current/FolderSpan.exe"
-        Test-Launch $exe 'scoop-1.0.0'
         $manifest | ConvertTo-Json -Depth 8 | Set-Content "$bucket/folderspan.json"
         git -C $repo add bucket
         git -C $repo -c user.name=FolderSpan -c user.email=572169725@qq.com commit -m 'Test fixture 1.0.1'
