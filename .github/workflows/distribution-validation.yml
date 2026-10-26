@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: distribution-validation-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   fdroid:

@@ -3,6 +3,7 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 mkdir -p distribution-results "$RUNNER_TEMP/folderspan-linux"
+exec > >(tee distribution-results/linux-packaging.log) 2>&1
 work="$RUNNER_TEMP/folderspan-linux"
 readarray -t asset < <(python3 - <<'PY'
 import json
