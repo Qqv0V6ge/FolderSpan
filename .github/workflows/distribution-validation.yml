@@ -1,0 +1,43 @@
+name: Validate distribution channels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/channel-validation]
+    paths:
+      - .github/workflows/distribution-validation.yml
+      - packaging/**
+      - scripts/verify_distribution*
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }} installation lifecycle
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-2025
+          - arch: arm64
+            os: windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify published packages without rebuilding the app
+        shell: pwsh
+        run: ./scripts/verify_distribution_windows.ps1 -Architecture '${{ matrix.arch }}'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-windows-${{ matrix.arch }}
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14

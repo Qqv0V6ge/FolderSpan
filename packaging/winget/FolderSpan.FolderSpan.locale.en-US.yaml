@@ -1,0 +1,17 @@
+PackageIdentifier: FolderSpan.FolderSpan
+PackageVersion: 1.0.1
+PackageLocale: en-US
+Publisher: FolderSpan
+PackageName: FolderSpan
+PackageUrl: https://github.com/Qqv0V6ge/FolderSpan
+License: Apache-2.0
+LicenseUrl: https://github.com/Qqv0V6ge/FolderSpan/blob/v1.0.1/LICENSE
+ReleaseNotesUrl: https://github.com/Qqv0V6ge/FolderSpan/releases/tag/v1.0.1
+ShortDescription: Cross-platform file manager and file sharing tool
+Description: Manage local and remote files and share files between connected devices.
+Tags:
+  - file-manager
+  - file-sharing
+  - cross-platform
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

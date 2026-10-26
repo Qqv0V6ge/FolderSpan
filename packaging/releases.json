@@ -1,0 +1,46 @@
+{
+  "1.0.0": {
+    "linux-arm64": {
+      "name": "desktop-linux-arm64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-linux-arm64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "sha256": "b84a7f785f96df97c4098b695c5aa54bcb4ffc4a1b3a94edcb6fb88918edc098"
+    },
+    "linux-x64": {
+      "name": "desktop-linux-x64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-linux-x64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "sha256": "438166fd28f930dd55c1fa1328a08d6d5371b75326d8086712ddc58b3e8e4a7e"
+    },
+    "windows-arm64": {
+      "name": "desktop-windows-arm64-no-pro-FolderSpan-1.0.0-windows-arm64.zip",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-windows-arm64-no-pro-FolderSpan-1.0.0-windows-arm64.zip",
+      "sha256": "de48e0011ba52fec21b865e9e929b87ec61c06c40d591e8fadbeaf73a8cc7f06"
+    },
+    "windows-x64": {
+      "name": "desktop-windows-x64-no-pro-FolderSpan-1.0.0.msi",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-windows-x64-no-pro-FolderSpan-1.0.0.msi",
+      "sha256": "57bc44d7feb3724205bce4abb25455d103a18b06189fc59818e212c0bf9f3173"
+    }
+  },
+  "1.0.1": {
+    "linux-arm64": {
+      "name": "desktop-linux-arm64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-linux-arm64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "sha256": "634a1a0e5dc77da81ac0582d610af1f715e04a295240b7b74d21c219edcff721"
+    },
+    "linux-x64": {
+      "name": "desktop-linux-x64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-linux-x64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "sha256": "58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8"
+    },
+    "windows-arm64": {
+      "name": "desktop-windows-arm64-no-pro-FolderSpan-1.0.1-windows-arm64.zip",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-arm64-no-pro-FolderSpan-1.0.1-windows-arm64.zip",
+      "sha256": "942ef0e0fa04fb2ae40746c10d023e83973e171eba6c4330aec7d8e3c05f0862"
+    },
+    "windows-x64": {
+      "name": "desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
+      "sha256": "3b570c9aa31c0dd20cadca98d6a695c4198e7af24d2eeee6fd0b3a4603b3d8a2"
+    }
+  }
+}
