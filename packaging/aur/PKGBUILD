@@ -1,0 +1,35 @@
+# Maintainer: FolderSpan <572169725@qq.com>
+pkgname=folderspan-bin
+pkgver=1.0.1
+pkgrel=1
+pkgdesc='Manage local and remote files and share across devices'
+arch=('x86_64')
+url='https://folderspan.com/'
+# Component licenses remain separate; their original texts are installed below.
+license=('Apache-2.0' 'GPL-2.0-only WITH Classpath-exception-2.0' 'LicenseRef-bundled-libraries')
+depends=('glibc' 'gcc-libs' 'alsa-lib' 'fontconfig' 'freetype2' 'libglvnd'
+         'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'libxcomposite'
+         'libxdamage' 'libxfixes' 'libxrandr' 'glib2' 'dbus' 'systemd-libs'
+         'libdrm' 'mesa' 'gtk3')
+provides=('folderspan')
+conflicts=('folderspan')
+options=('!strip' '!debug')
+source=('folderspan.desktop' "folderspan-$pkgver.tar.gz::https://github.com/Qqv0V6ge/FolderSpan/releases/download/v$pkgver/desktop-linux-x64-no-pro-com.folderspan-$pkgver.tar.gz")
+sha256sums=('bc2bba3226a003eb759283519120db1a65e8e75b788dd81917f417f4e46b46a7'
+            '58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8')
+
+package() {
+  test -x "$srcdir/bin/FolderSpan"
+  test -d "$srcdir/lib/runtime/legal"
+  for notice in LICENSE NOTICE LICENSING.md THIRD_PARTY_NOTICES.txt; do
+    test -s "$srcdir/lib/app/resources/licenses/$notice"
+  done
+  install -dm755 "$pkgdir/opt/folderspan" "$pkgdir/usr/bin"
+  cp -a "$srcdir/bin" "$srcdir/lib" "$pkgdir/opt/folderspan/"
+  ln -s /opt/folderspan/bin/FolderSpan "$pkgdir/usr/bin/folderspan"
+  install -Dm644 "$srcdir/folderspan.desktop" "$pkgdir/usr/share/applications/folderspan.desktop"
+  install -Dm644 "$srcdir/lib/FolderSpan.png" "$pkgdir/usr/share/pixmaps/folderspan.png"
+  install -dm755 "$pkgdir/usr/share/licenses/$pkgname"
+  cp -a "$srcdir/lib/app/resources/licenses/." "$pkgdir/usr/share/licenses/$pkgname/"
+  ln -s /opt/folderspan/lib/runtime/legal "$pkgdir/usr/share/licenses/$pkgname/runtime-legal"
+}

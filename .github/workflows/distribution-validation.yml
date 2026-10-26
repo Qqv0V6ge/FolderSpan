@@ -17,6 +17,127 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  appimage:
+    name: Linux TAR and AppImage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install desktop smoke-test dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          xvfb xauth xdotool imagemagick desktop-file-utils libasound2t64
+          libgl1 libx11-6 libxext6 libxi6 libxrender1 libxtst6 libxcomposite1
+          libxdamage1 libxfixes3 libxrandr2 libfontconfig1 libfreetype6
+          libgbm1 libdrm2 libgtk-3-0t64
+      - name: Build and verify AppImage from the published TAR
+        run: bash scripts/package_distribution_linux.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-appimage-x64
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  snap:
+    name: Build strict Snap candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Stage shared desktop metadata
+        run: |
+          mkdir -p packaging/snap/local
+          cp packaging/linux/folderspan.desktop packaging/snap/local/
+      - uses: snapcore/action-build@v1
+        id: build
+        with:
+          path: packaging/snap
+      - name: Install, launch and remove strict Snap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth xdotool imagemagick
+          mkdir -p distribution-results
+          sudo snap install --dangerous '${{ steps.build.outputs.snap }}'
+          trap 'sudo snap remove folderspan' EXIT
+          snap connections folderspan > distribution-results/snap-connections.txt
+          xvfb-run -a -f "$HOME/.Xauthority" python3 scripts/verify_distribution_linux.py snap snap run folderspan
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-snap-validation
+          path: distribution-results/
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        with:
+          name: distribution-snap-amd64
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
+          retention-days: 14
+
+  aur:
+    name: Arch package and desktop smoke check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and verify AUR candidate in Arch Linux
+        run: |
+          mkdir -p distribution-results
+          docker run --rm -v "$PWD:/work" archlinux:base-devel bash -euc '
+            pacman -Syu --noconfirm python imagemagick xdotool xorg-server-xvfb xorg-xauth \
+              alsa-lib fontconfig freetype2 libglvnd libx11 libxext libxi libxrender libxtst \
+              libxcomposite libxdamage libxfixes libxrandr glib2 dbus systemd-libs libdrm mesa gtk3
+            useradd -m builder
+            mkdir -p /build /results
+            cp /work/packaging/aur/PKGBUILD /work/packaging/linux/folderspan.desktop /build/
+            chown -R builder:builder /build /results
+            trap "cp -a /results/. /work/distribution-results/" EXIT
+            cd /build
+            su builder -c "cd /build && makepkg --noconfirm && makepkg --printsrcinfo > .SRCINFO"
+            cp PKGBUILD folderspan.desktop .SRCINFO /results/
+            pacman -U --noconfirm ./*.pkg.tar.zst
+            su builder -c "DISTRIBUTION_RESULTS=/results xvfb-run -a python /work/scripts/verify_distribution_linux.py aur /usr/bin/folderspan"
+            pacman -R --noconfirm folderspan-bin
+            test ! -e /usr/bin/folderspan
+            test ! -e /opt/folderspan/bin/FolderSpan
+          '
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-aur-x64
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  nix:
+    name: Nix derivation and desktop smoke check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-26.05
+      - name: Install desktop test tools
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth xdotool imagemagick
+      - name: Build and verify Nix candidate
+        run: |
+          mkdir -p distribution-results
+          nix-instantiate --parse packaging/nix/package.nix > distribution-results/nix-expression.txt
+          result=$(nix-build --no-out-link --expr 'let pkgs = import <nixpkgs> {}; in pkgs.callPackage ./packaging/nix/package.nix {}')
+          printf '%s\n' "$result" > distribution-results/nix-store-path.txt
+          xvfb-run -a python3 scripts/verify_distribution_linux.py nix "$result/bin/folderspan"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-nix-x64
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14
+
   windows:
     name: Windows ${{ matrix.arch }} installation lifecycle
     strategy:
