@@ -93,6 +93,9 @@ try {
         $env:SCOOP = "$work/scoop"
         git clone --depth 1 https://github.com/ScoopInstaller/Scoop.git "$env:SCOOP/apps/scoop/current"
         Assert-NativeExit 'clone official Scoop'
+        foreach ($directory in @('shims', 'cache', 'buckets', 'persist')) {
+            $null = New-Item -ItemType Directory -Force "$env:SCOOP/$directory"
+        }
         $scoop = "$env:SCOOP/apps/scoop/current/bin/scoop.ps1"
         $bucket = New-Item -ItemType Directory -Force "$work/bucket-source/bucket"
         $repo = Split-Path $bucket -Parent
