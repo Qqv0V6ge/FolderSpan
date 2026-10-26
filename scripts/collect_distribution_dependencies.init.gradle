@@ -1,0 +1,61 @@
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.maven.MavenModule
+import org.gradle.maven.MavenPomArtifact
+import java.security.MessageDigest
+
+gradle.projectsEvaluated {
+    rootProject.tasks.register('distributionDependencyInventory') {
+        doLast {
+            def output = new File(System.getenv('DISTRIBUTION_RESULTS') ?: 'distribution-results')
+            def pomDirectory = new File(output, 'poms')
+            pomDirectory.mkdirs()
+            def rows = [:]
+            [':app:androidApp': 'releaseRuntimeClasspath', ':app:desktopApp': 'runtimeClasspath'].each { path, configuration ->
+                def owner = rootProject.project(path)
+                def runtime = owner.configurations.getByName(configuration)
+                def componentIds = runtime.incoming.resolutionResult.allComponents.collect { it.id }.findAll {
+                    it instanceof ModuleComponentIdentifier
+                }
+                runtime.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                    if (!(artifact.id.componentIdentifier instanceof ModuleComponentIdentifier)) return
+                    def id = artifact.moduleVersion.id.toString()
+                    def row = rows.computeIfAbsent(id) { [component: id, configurations: [], artifacts: [], poms: []] }
+                    row.configurations.add("$path:$configuration".toString())
+                    row.artifacts.add([file: artifact.file.name,
+                        sha256: MessageDigest.getInstance('SHA-256').digest(artifact.file.bytes).encodeHex().toString()])
+                }
+                def query = owner.dependencies.createArtifactResolutionQuery().forComponents(componentIds)
+                    .withArtifacts(MavenModule, MavenPomArtifact).execute()
+                query.resolvedComponents.each { component ->
+                    def id = component.id.displayName
+                    def row = rows.computeIfAbsent(id) { [component: id, configurations: [], artifacts: [], poms: []] }
+                    row.configurations.add("$path:$configuration".toString())
+                    component.getArtifacts(MavenPomArtifact).each { pom ->
+                        if (!(pom instanceof ResolvedArtifactResult)) {
+                            throw new GradleException("Unresolved POM for $id: ${pom.failure.message}")
+                        }
+                        def name = id.replaceAll('[^A-Za-z0-9._-]', '_') + '.pom'
+                        new File(pomDirectory, name).bytes = pom.file.bytes
+                        row.poms.add([file: "poms/$name".toString(),
+                            sha256: MessageDigest.getInstance('SHA-256').digest(pom.file.bytes).encodeHex().toString()])
+                    }
+                }
+                if (!query.unresolvedComponents.empty) {
+                    throw new GradleException("Unresolved POM components: ${query.unresolvedComponents*.id}")
+                }
+            }
+            rows.values().each { row ->
+                row.configurations = row.configurations.unique().sort()
+                row.artifacts = row.artifacts.unique()
+                row.poms = row.poms.unique()
+            }
+            new File(output, 'resolved-dependencies.json').text = JsonOutput.prettyPrint(JsonOutput.toJson([
+                scope: 'Ordinary Android release plus host desktop runtime; POM metadata is not complete license clearance',
+                os: System.getProperty('os.name'), arch: System.getProperty('os.arch'),
+                components: rows.values().sort { it.component }
+            ])) + '\n'
+        }
+    }
+}

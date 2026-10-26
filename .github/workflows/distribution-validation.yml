@@ -8,6 +8,9 @@ on:
       - .github/workflows/distribution-validation.yml
       - packaging/**
       - scripts/verify_distribution*
+      - scripts/package_distribution_linux.sh
+      - scripts/collect_distribution_dependencies.init.gradle
+      - app/desktopApp/build.gradle.kts
 
 permissions:
   contents: read
@@ -17,12 +20,86 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  fdroid:
+    name: F-Droid scanner and unsigned source-build candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install official F-Droid tooling
+        id: tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic1 swig libssl-dev
+          python3 -m venv "$RUNNER_TEMP/fdroid-tools"
+          "$RUNNER_TEMP/fdroid-tools/bin/pip" install fdroidserver==2.4.5
+          echo "$RUNNER_TEMP/fdroid-tools/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/fdroiddata/metadata" distribution-results
+          cp packaging/fdroid/metadata/com.folderspan.yml "$RUNNER_TEMP/fdroiddata/metadata/"
+          printf 'sdk_path: %s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/fdroiddata/config.yml"
+      - name: Read and lint candidate metadata
+        run: |
+          cd "$RUNNER_TEMP/fdroiddata"
+          fdroid readmeta
+          fdroid lint com.folderspan 2>&1 | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-lint.log"
+      - name: Scan published source without exemptions
+        if: always() && steps.tools.outcome == 'success'
+        run: |
+          cd "$RUNNER_TEMP/fdroiddata"
+          fdroid scanner --force --json com.folderspan > "$GITHUB_WORKSPACE/distribution-results/fdroid-scanner.json"
+      - name: Build only if official lint and scanner pass
+        run: |
+          cd "$RUNNER_TEMP/fdroiddata"
+          fdroid build --force --verbose com.folderspan:5 2>&1 | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-build.log"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-fdroid-candidate
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  dependency-inventory:
+    name: Resolve current ordinary-edition dependency metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Resolve artifacts and original POM files without compiling the app
+        env:
+          DISTRIBUTION_RESULTS: ${{ github.workspace }}/distribution-results
+        run: >-
+          ./gradlew --no-daemon --no-configuration-cache
+          -I scripts/collect_distribution_dependencies.init.gradle distributionDependencyInventory
+          -PincludeProMain=false
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-current-dependencies
+          path: distribution-results/
+          if-no-files-found: error
+          retention-days: 14
+
   appimage:
     name: Linux TAR and AppImage
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
       - name: Install desktop smoke-test dependencies
         run: >-
           sudo apt-get update && sudo apt-get install -y
@@ -32,6 +109,23 @@ jobs:
           libgbm1 libdrm2 libgtk-3-0t64
       - name: Build and verify AppImage from the published TAR
         run: bash scripts/package_distribution_linux.sh
+      - name: Verify actual Gradle TAR task preserves executable modes
+        run: |
+          app=app/desktopApp/build/compose/binaries/main-release/app/FolderSpan
+          mkdir -p "$app"
+          cp -a "$RUNNER_TEMP/folderspan-linux/FolderSpan.AppDir/bin" "$RUNNER_TEMP/folderspan-linux/FolderSpan.AppDir/lib" "$app/"
+          ./gradlew --no-daemon :app:desktopApp:packageReleaseTarGz \
+            -x :app:desktopApp:packageReleaseAppImage -PincludeProMain=false -PreleaseVersion=1.0.1
+          python3 - <<'PY'
+          import json, tarfile
+          from pathlib import Path
+          archive = next(Path('app/desktopApp/build/compose/binaries/main-release/targz').glob('*.tar.gz'))
+          with tarfile.open(archive) as tar:
+              modes = {name: tar.getmember(name).mode for name in
+                       ('bin/FolderSpan', 'lib/runtime/lib/jspawnhelper', 'lib/runtime/lib/jexec')}
+          assert all(mode & 0o111 for mode in modes.values()), modes
+          Path('distribution-results/gradle-tar-permissions.json').write_text(json.dumps(modes, indent=2))
+          PY
       - uses: actions/upload-artifact@v7
         if: always()
         with:

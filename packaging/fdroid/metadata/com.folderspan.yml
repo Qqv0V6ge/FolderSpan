@@ -1,0 +1,47 @@
+Disabled: Candidate pending scanner, native-source review, build and development-history qualification
+Categories:
+  - File Manager
+  - File Transfer
+License: Apache-2.0
+AuthorName: FolderSpan
+AuthorEmail: 572169725@qq.com
+WebSite: https://folderspan.com
+SourceCode: https://github.com/Qqv0V6ge/FolderSpan
+IssueTracker: https://github.com/Qqv0V6ge/FolderSpan/issues
+Name: FolderSpan
+Summary: Manage local and remote files and share across devices
+Description: |-
+  FolderSpan standard edition is a free file manager and sharing tool.
+  Browse local files, connect remote storage and share files between devices.
+  Network connections and transfers exchange the data needed by the services
+  selected by the user. Available capabilities depend on platform permissions.
+  No FolderSpan account is required. The standard edition has no ads or in-app
+  purchases. Third-party components retain their own license terms.
+RepoType: git
+Repo: https://github.com/Qqv0V6ge/FolderSpan.git
+
+Builds:
+  - versionName: 1.0.1
+    versionCode: 5
+    commit: acbdb206b638141544d224bca7287d64cbf15c80
+    subdir: app/androidApp
+    gradle:
+      - 'yes'
+    gradleprops:
+      - includeProMain=false
+      - folderspanBuildType=release
+      - androidEnableAbiSplits=false
+      - releaseVersion=1.0.1
+      - androidVersionCode=5
+
+MaintainerNotes: |-
+  This is a disabled candidate, not a claim of F-Droid eligibility.
+  Published v1.0.1 verifies the package ID, version and ordinary-edition license.
+  Historical code, artwork and documentation include generative-AI output.
+  Public FolderSpan Git history begins on 2026-10-12; no development-history
+  exception has been obtained. Inspect all native dependencies and source assets.
+  No scanignore/scandelete exemptions or upstream-signature reproducibility claims
+  have been added. F-Droid would normally use its own signing key.
+
+AutoUpdateMode: None
+UpdateCheckMode: Static
