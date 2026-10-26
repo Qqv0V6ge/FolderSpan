@@ -21,16 +21,22 @@ function Download-Package([string]$Version, [string]$Kind) {
 }
 
 function Test-Launch([string]$Executable, [string]$Label) {
+    $before = @(Get-Process | Select-Object -ExpandProperty Id)
+    $directory = Get-Item (Split-Path $Executable -Parent)
+    $target = $directory.ResolveLinkTarget($true)
+    $appRoot = $(if ($target) { $target.FullName } else { $directory.FullName }).TrimEnd('\') + '\'
     $process = Start-Process $Executable -PassThru -RedirectStandardOutput "$results/$Label-stdout.txt" -RedirectStandardError "$results/$Label-stderr.txt"
     try {
         $deadline = (Get-Date).AddSeconds(60)
         do {
             Start-Sleep -Milliseconds 500
-            $process.Refresh()
-            if ($process.HasExited) { throw "$Label exited before opening a window: $($process.ExitCode)" }
-        } until ($process.MainWindowHandle -ne 0 -or (Get-Date) -gt $deadline)
-        if ($process.MainWindowHandle -eq 0 -or !$process.Responding) { throw "$Label did not open a responding desktop window" }
-        $report.checks += "$Label responding window: $($process.MainWindowTitle)"
+            # The ARM64 launcher starts a Java child; its window does not belong to the launcher PID.
+            $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
+            $windows = @($owned | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Responding })
+        } until ($windows.Count -gt 0 -or (Get-Date) -gt $deadline)
+        if ($windows.Count -eq 0) { throw "$Label did not open a responding desktop window" }
+        $report.checks += "$Label responding window: $($windows[0].MainWindowTitle)"
+    } finally {
         Add-Type -AssemblyName System.Windows.Forms, System.Drawing
         $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
         $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
@@ -39,11 +45,12 @@ function Test-Launch([string]$Executable, [string]$Label) {
             $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
             $bitmap.Save("$results/$Label.png")
         } finally { $graphics.Dispose(); $bitmap.Dispose() }
-    } finally {
-        if (!$process.HasExited) {
-            $null = $process.CloseMainWindow()
-            if (!$process.WaitForExit(5000)) { Stop-Process -Id $process.Id -Force }
+        $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
+        foreach ($child in $owned) {
+            $null = $child.CloseMainWindow()
+            if (!$child.WaitForExit(5000)) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
         }
+        if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -72,6 +79,7 @@ try {
         $exe = "$env:ProgramFiles/FolderSpan/FolderSpan.exe"
         Invoke-Msi '/i' $old 'install-1.0.0'
         if ((Get-InstalledApp).DisplayVersion -ne '1.0.0') { throw 'Old MSI registry version missing' }
+        Test-Launch $exe 'msi-1.0.0'
         Invoke-Msi '/i' $current 'upgrade-1.0.1'
         $installed = @(Get-InstalledApp)
         if ($installed.Count -ne 1 -or $installed[0].DisplayVersion -ne '1.0.1') { throw 'Upgrade left an old or duplicate MSI registration' }
@@ -118,6 +126,7 @@ try {
         & $scoop install folderspan-validation/folderspan
         Assert-NativeExit 'scoop install 1.0.0'
         $exe = "$env:SCOOP/apps/folderspan/current/FolderSpan.exe"
+        Test-Launch $exe 'scoop-1.0.0'
         $manifest | ConvertTo-Json -Depth 8 | Set-Content "$bucket/folderspan.json"
         git -C $repo add bucket
         git -C $repo -c user.name=FolderSpan -c user.email=572169725@qq.com commit -m 'Test fixture 1.0.1'
