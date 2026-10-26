@@ -20,34 +20,20 @@ function Download-Package([string]$Version, [string]$Kind) {
     return $path
 }
 
-function Deny-RunnerFirewallPrompt {
-    # Keep the runner firewall enabled and decline inbound-network permission.
-    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-    $automation = [System.Windows.Automation.AutomationElement]
-    $scope = [System.Windows.Automation.TreeScope]::Descendants
-    $dialogCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'Windows Security')
-    $dialog = $automation::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $dialogCondition)
-    if (!$dialog) { return }
-    $appCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'FolderSpan')
-    if (!$dialog.FindFirst($scope, $appCondition)) { return }
-    $cancelCondition = [System.Windows.Automation.PropertyCondition]::new($automation::NameProperty, 'Cancel')
-    $cancel = $dialog.FindFirst($scope, $cancelCondition)
-    if (!$cancel) { throw 'FolderSpan firewall prompt has no accessible Cancel action' }
-    $cancel.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-    $report.checks += 'Declined runner inbound firewall permission'
-}
-
 function Test-Launch([string]$Executable, [string]$Label) {
     $before = @(Get-Process | Select-Object -ExpandProperty Id)
     $directory = Get-Item (Split-Path $Executable -Parent)
     $target = $directory.ResolveLinkTarget($true)
     $appRoot = $(if ($target) { $target.FullName } else { $directory.FullName }).TrimEnd('\') + '\'
+    # A fresh Windows 11 runner otherwise shows a modal firewall prompt.
+    # Explicitly deny inbound access for this smoke check; never allow a port or disable the firewall.
+    $firewallName = "FolderSpan-validation-$Label"
+    $null = New-NetFirewallRule -Name $firewallName -DisplayName $firewallName -Direction Inbound -Action Block -Program (Join-Path $appRoot (Split-Path $Executable -Leaf)) -Profile Any
     $process = Start-Process $Executable -PassThru -RedirectStandardOutput "$results/$Label-stdout.txt" -RedirectStandardError "$results/$Label-stderr.txt"
     try {
         $deadline = (Get-Date).AddSeconds(60)
         do {
             Start-Sleep -Milliseconds 500
-            Deny-RunnerFirewallPrompt
             # The ARM64 launcher starts a Java child; its window does not belong to the launcher PID.
             $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
             $windows = @($owned | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Responding })
@@ -72,6 +58,7 @@ function Test-Launch([string]$Executable, [string]$Label) {
             if (!$child.WaitForExit(5000)) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
         }
         if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+        Remove-NetFirewallRule -Name $firewallName
     }
 }
 
