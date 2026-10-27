@@ -25,6 +25,28 @@ Builds:
     versionCode: 5
     commit: acbdb206b638141544d224bca7287d64cbf15c80
     subdir: app/androidApp
+    rm:
+      - app/shared/src/jsMain/resources/sql-wasm.wasm
+      - app/shared/src/wasmJsMain/resources/sql-wasm.wasm
+      - third-party/maven/okhttp-publicsuffix-source/publicsuffixes.gz
+      - core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin
+    prebuild: sed -i '/org.gradle.toolchains.foojay-resolver-convention/d' ../../settings.gradle.kts
+    build: |-
+      python3 - <<'PY'
+      import hashlib, importlib.util
+      from pathlib import Path
+      relative = Path('third-party/resources/tools/verify_gbk_mapping.py')
+      root = next(path for path in (Path.cwd(), *Path.cwd().parents) if (path / relative).is_file())
+      spec = importlib.util.spec_from_file_location('gbk_mapping_source', root / relative)
+      mapping = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(mapping)
+      source = root / 'third-party/resources/upstream/unicode/CP936.TXT'
+      data = mapping.encode_delta(mapping.ordered_table(mapping.read_source(source.read_bytes())))
+      assert hashlib.sha256(data).hexdigest() == mapping.RESOURCE_SHA256
+      output = root / 'core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin'
+      output.write_bytes(data)
+      print('GBK resource rebuilt from verified Unicode CP936 source:', hashlib.sha256(data).hexdigest())
+      PY
     gradle:
       - 'yes'
     gradleprops:
@@ -40,6 +62,11 @@ MaintainerNotes: |-
   Historical code, artwork and documentation include generative-AI output.
   Public FolderSpan Git history begins on 2026-10-12; no development-history
   exception has been obtained. Inspect all native dependencies and source assets.
+  The two WebAssembly files are only JS/wasm target resources, unused on Android.
+  The gzip is an audit copy; editable MPL source rules and exceptions are kept.
+  GBK data is regenerated after scanning from the archived, checksum-pinned Unicode
+  CP936 text using the existing verified encoder; the output must match the APK
+  resource SHA-256. Foojay auto-provisioning is removed; the builder supplies Java.
   No scanignore/scandelete exemptions or upstream-signature reproducibility claims
   have been added. F-Droid would normally use its own signing key.
 

@@ -45,12 +45,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fdroiddata/metadata" distribution-results
           cp packaging/fdroid/metadata/com.folderspan.yml "$RUNNER_TEMP/fdroiddata/metadata/"
           "$RUNNER_TEMP/fdroid-tools/bin/python" - <<'PY'
-          import os, pathlib, yaml
+          import os, pathlib
           path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'fdroiddata/metadata/com.folderspan.yml'
-          metadata = yaml.safe_load(path.read_text())
-          metadata.pop('Disabled')  # Only the temporary test copy; public candidate remains disabled.
-          path.write_text(yaml.safe_dump(metadata, sort_keys=False))
+          # Only the temporary test copy; retain the upstream YAML formatting.
+          path.write_text('\n'.join(line for line in path.read_text().splitlines() if not line.startswith('Disabled:')) + '\n')
           PY
+          mkdir -p "$RUNNER_TEMP/fdroiddata/config"
+          curl --fail --location --retry 3 'https://gitlab.com/fdroid/fdroiddata/-/raw/087664f1acb77a87de15e1156ea3a30217bb9a3d/config/categories.yml' -o "$RUNNER_TEMP/fdroiddata/config/categories.yml"
+          echo "edf68d8d70073fe52a52c6a33f490399ce9dc884acff3a761a3a1e34acf9d541  $RUNNER_TEMP/fdroiddata/config/categories.yml" | sha256sum --check
           printf 'sdk_path: %s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/fdroiddata/config.yml"
       - name: Read and lint candidate metadata
         run: |
@@ -62,6 +64,14 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/fdroiddata"
           fdroid scanner --json com.folderspan > "$GITHUB_WORKSPACE/distribution-results/fdroid-scanner.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ['GITHUB_WORKSPACE']) / 'distribution-results/fdroid-scanner.json').read_text())
+          result = data['com.folderspan']['5']
+          assert not result.get('errors'), json.dumps(result['errors'], indent=2)
+          print('Official F-Droid scanner: no fatal findings for com.folderspan versionCode 5')
+          PY
       - name: Build only if official lint and scanner pass
         run: |
           cd "$RUNNER_TEMP/fdroiddata"

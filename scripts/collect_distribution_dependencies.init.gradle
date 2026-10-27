@@ -1,6 +1,7 @@
 import groovy.json.JsonOutput
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.api.artifacts.result.UnresolvedComponentResult
 import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 import java.security.MessageDigest
@@ -44,8 +45,9 @@ gradle.projectsEvaluated {
                             sha256: MessageDigest.getInstance('SHA-256').digest(pom.file.bytes).encodeHex().toString()])
                     }
                 }
-                if (!query.unresolvedComponents.empty) {
-                    throw new GradleException("Unresolved POM components: ${query.unresolvedComponents*.id}")
+                def unresolved = query.components.findAll { it instanceof UnresolvedComponentResult }
+                if (!unresolved.empty) {
+                    throw new GradleException("Unresolved POM components: ${unresolved*.id}")
                 }
             }
             rows.values().each { row ->
