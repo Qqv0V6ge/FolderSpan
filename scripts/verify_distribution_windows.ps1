@@ -99,8 +99,29 @@ try {
         choco pack "$root/packaging/chocolatey/folderspan.nuspec" --output-directory "$work"
         Assert-NativeExit 'choco pack'
         Copy-Item "$work/folderspan.1.0.1.nupkg" $results
-        choco install folderspan --version 1.0.1 --source "$work" --yes --no-progress --limit-output
-        Assert-NativeExit 'choco install'
+        # Build an unpublished old-version fixture from the same package wrapper.
+        # This tests Chocolatey's upgrade orchestration as well as MSI continuity.
+        $oldFixture = "$work/chocolatey-old-fixture"
+        Copy-Item "$root/packaging/chocolatey" $oldFixture -Recurse
+        [xml]$oldSpec = Get-Content "$oldFixture/folderspan.nuspec" -Raw
+        $oldSpec.package.metadata.version = '1.0.0'
+        $oldSpec.Save("$oldFixture/folderspan.nuspec")
+        $entries = Get-Content "$root/packaging/releases.json" -Raw | ConvertFrom-Json
+        $newEntry = $entries.'1.0.1'.'windows-x64'
+        $oldEntry = $entries.'1.0.0'.'windows-x64'
+        $installScript = Get-Content "$oldFixture/tools/chocolateyInstall.ps1" -Raw
+        $installScript.Replace($newEntry.url, $oldEntry.url).Replace($newEntry.sha256.ToUpperInvariant(), $oldEntry.sha256.ToUpperInvariant()) |
+            Set-Content "$oldFixture/tools/chocolateyInstall.ps1"
+        choco pack "$oldFixture/folderspan.nuspec" --output-directory "$work"
+        Assert-NativeExit 'choco pack unpublished old-version fixture'
+        choco install folderspan --version 1.0.0 --source "$work" --yes --no-progress --limit-output
+        Assert-NativeExit 'choco install 1.0.0'
+        if ((Get-InstalledApp).DisplayVersion -ne '1.0.0') { throw 'Chocolatey old-version fixture did not install the old MSI' }
+        Test-Launch $exe 'chocolatey-1.0.0'
+        choco upgrade folderspan --version 1.0.1 --source "$work" --yes --no-progress --limit-output
+        Assert-NativeExit 'choco upgrade 1.0.1'
+        $installed = @(Get-InstalledApp)
+        if ($installed.Count -ne 1 -or $installed[0].DisplayVersion -ne '1.0.1') { throw 'Chocolatey upgrade left an old or duplicate MSI registration' }
         Test-Launch $exe 'chocolatey-1.0.1'
         choco uninstall folderspan --yes --no-progress --limit-output
         Assert-NativeExit 'choco uninstall'

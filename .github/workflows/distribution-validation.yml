@@ -7,7 +7,7 @@ on:
         description: Validate all channels or rerun one independent check
         type: choice
         default: all
-        options: [all, fdroid, dependency-inventory, linux]
+        options: [all, fdroid, dependency-inventory, linux, windows]
   push:
     branches: [codex/channel-validation]
     paths:
@@ -317,7 +317,7 @@ jobs:
           retention-days: 14
 
   windows:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'windows'
     name: Windows ${{ matrix.arch }} installation lifecycle
     strategy:
       fail-fast: false
