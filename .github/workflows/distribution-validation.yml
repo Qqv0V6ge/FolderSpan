@@ -7,7 +7,7 @@ on:
         description: Validate all channels or rerun one independent check
         type: choice
         default: all
-        options: [all, fdroid, dependency-inventory]
+        options: [all, fdroid, dependency-inventory, linux]
   push:
     branches: [codex/channel-validation]
     paths:
@@ -26,7 +26,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: distribution-validation-${{ github.ref }}
+  group: distribution-validation-${{ github.ref }}-${{ inputs.channel || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -139,7 +139,7 @@ jobs:
           retention-days: 14
 
   appimage:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux'
     name: Linux TAR and AppImage
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -184,8 +184,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  appimage-compat:
+    name: Ubuntu 22.04 AppImage offline smoke check
+    needs: appimage
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: distribution-appimage-x64
+          path: distribution-results
+      - name: Install test tools
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth xdotool imagemagick
+      - name: Launch as ordinary user without external network
+        run: |
+          chmod 755 distribution-results/FolderSpan-1.0.1-x86_64.AppImage
+          sudo unshare --net bash -euc '
+            ip link set lo up
+            exec runuser -u "$1" -- xvfb-run -a python3 scripts/verify_distribution_linux.py \
+              appimage-ubuntu22-offline "$2" --appimage-extract-and-run
+          ' -- "$(id -un)" "$PWD/distribution-results/FolderSpan-1.0.1-x86_64.AppImage"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: distribution-appimage-ubuntu22-offline
+          path: |
+            distribution-results/appimage-ubuntu22-offline*
+          if-no-files-found: error
+          retention-days: 14
+
   snap:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux'
     name: Build strict Snap candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -223,7 +253,7 @@ jobs:
           retention-days: 14
 
   aur:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux'
     name: Arch package and desktop smoke check
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -260,7 +290,7 @@ jobs:
           retention-days: 14
 
   nix:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux'
     name: Nix derivation and desktop smoke check
     runs-on: ubuntu-24.04
     timeout-minutes: 35

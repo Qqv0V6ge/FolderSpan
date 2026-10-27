@@ -14,9 +14,11 @@ depends=('glibc' 'gcc-libs' 'alsa-lib' 'fontconfig' 'freetype2' 'ttf-dejavu' 'li
 provides=('folderspan')
 conflicts=('folderspan')
 options=('!strip' '!debug')
-source=('folderspan.desktop' "folderspan-$pkgver.tar.gz::https://github.com/Qqv0V6ge/FolderSpan/releases/download/v$pkgver/desktop-linux-x64-no-pro-com.folderspan-$pkgver.tar.gz")
+source=('folderspan.desktop' "folderspan-$pkgver.tar.gz::https://github.com/Qqv0V6ge/FolderSpan/releases/download/v$pkgver/desktop-linux-x64-no-pro-com.folderspan-$pkgver.tar.gz"
+        'https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/THIRD_PARTY_NOTICES-2026-10-27.txt')
 sha256sums=('bc2bba3226a003eb759283519120db1a65e8e75b788dd81917f417f4e46b46a7'
-            '58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8')
+            '58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8'
+            'd81da23f22a5bd68b4c9ef773f5a018c404a9d5f9a52ec79e01f526343ad8e86')
 
 prepare() {
   # Gradle 9's archive defaults stripped these modes in the upstream v1.0.1 TAR.
@@ -36,5 +38,6 @@ package() {
   install -Dm644 "$srcdir/lib/FolderSpan.png" "$pkgdir/usr/share/pixmaps/folderspan.png"
   install -dm755 "$pkgdir/usr/share/licenses/$pkgname"
   cp -a "$srcdir/lib/app/resources/licenses/." "$pkgdir/usr/share/licenses/$pkgname/"
+  install -m644 "$srcdir/THIRD_PARTY_NOTICES-2026-10-27.txt" "$pkgdir/usr/share/licenses/$pkgname/"
   ln -s /opt/folderspan/lib/runtime/legal "$pkgdir/usr/share/licenses/$pkgname/runtime-legal"
 }

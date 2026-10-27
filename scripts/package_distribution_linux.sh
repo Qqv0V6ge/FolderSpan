@@ -19,8 +19,15 @@ tar -xzf "$work/payload.tar.gz" -C "$work/FolderSpan.AppDir"
 chmod 755 "$work/FolderSpan.AppDir/bin/FolderSpan" "$work/FolderSpan.AppDir/lib/runtime/lib/jspawnhelper" "$work/FolderSpan.AppDir/lib/runtime/lib/jexec"
 test -x "$work/FolderSpan.AppDir/bin/FolderSpan"
 for notice in LICENSE NOTICE LICENSING.md THIRD_PARTY_NOTICES.txt; do
-  cmp "$notice" "$work/FolderSpan.AppDir/lib/app/resources/licenses/$notice"
+  python3 - "$notice" "$work/FolderSpan.AppDir/lib/app/resources/licenses/$notice" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+expected = json.load(open('packaging/releases.json'))['1.0.1']['original-notice-sha256'][sys.argv[1]]
+assert hashlib.sha256(Path(sys.argv[2]).read_bytes()).hexdigest() == expected, sys.argv[1]
+PY
 done
+# Keep the immutable release's original notice and also deliver the refreshed one.
+cp THIRD_PARTY_NOTICES.txt "$work/FolderSpan.AppDir/lib/app/resources/licenses/THIRD_PARTY_NOTICES-2026-10-27.txt"
 xvfb-run -a python3 scripts/verify_distribution_linux.py linux-tar "$work/FolderSpan.AppDir/bin/FolderSpan"
 
 install -m755 packaging/appimage/AppRun "$work/FolderSpan.AppDir/AppRun"

@@ -3,12 +3,12 @@
 本目录保存普通版声明生成所需的组件索引、上游许可原文、版权和本地修改说明。项目Apache-2.0仅覆盖FolderSpan有权授权的普通版自有代码，第三方条款独立适用。
 
 - [manifest.json](manifest.json)：每份原文的来源URL、适用范围和SHA-256；相同字节在输出中合并展示，但各组件关联保留。
-- [Maven组件清单](maven/components.csv)：普通版Android release和macOS ARM64桌面的555个已解析组件，包括Kotlin元数据变体；不是全部目标的最终SBOM。
+- [Maven组件清单](maven/components.csv)：2026-10-27远程解析的普通版Android release和Linux x64桌面的557个组件，包括Kotlin元数据变体；原始POM/归档摘要见[current-runtime.json](maven/current-runtime.json)，不是全部目标的最终SBOM。
 - [根第三方声明](../THIRD_PARTY_NOTICES.txt)：由上述输入离线生成。每个发行目标还需核对实际嵌入内容和平台范围。
 - [OkHttp公共后缀数据源码](maven/okhttp-publicsuffix-source/README.md)：保留4.12.0对应MPL数据、可编辑规则/例外及精确来源。
 - [未来iOS重链接条件](native/IOS-RELINK-REQUIREMENTS.md)：静态LGPL等条件须按实际发行另行完成。
 
-原生包装层的Apache声明不替代WebRTC、Skia/Adobe DNG SDK或其他嵌入代码的条件。实际随包JRE须保留完整runtime/legal，并按实际发行商/build提供完整对应源码或有效提供方式；仅有src.zip或总声明不等于源码交付完成。声明集合不代表桌面WebRTC实际core/GN依赖图、未来iOS重链接或所有目标的二进制对应已验证。旧公开v1.0.0资产未在本次重建。
+原生包装层的Apache声明不替代WebRTC、Skia/Adobe DNG SDK或其他嵌入代码的条件。实际随包JRE须保留完整runtime/legal，并按实际发行商/build提供完整对应源码或有效提供方式；仅有src.zip或总声明不等于源码交付完成。声明集合不代表桌面WebRTC实际core/GN依赖图、未来iOS重链接或所有目标的二进制对应已验证。旧公开v1.0.0/v1.0.1安装包未在本次重建；新版补充声明独立发布，不改变原安装包内容。
 
 ## v1.0.1 已核对运行时的源码
 

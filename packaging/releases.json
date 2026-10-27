@@ -41,6 +41,17 @@
       "name": "desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
       "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
       "sha256": "3b570c9aa31c0dd20cadca98d6a695c4198e7af24d2eeee6fd0b3a4603b3d8a2"
+    },
+    "supplemental-notices": {
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/THIRD_PARTY_NOTICES-2026-10-27.txt",
+      "sha256": "d81da23f22a5bd68b4c9ef773f5a018c404a9d5f9a52ec79e01f526343ad8e86",
+      "scope": "Current Android/Linux Maven metadata and collected upstream terms; native/version review limits remain stated in the document."
+    },
+    "original-notice-sha256": {
+      "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "NOTICE": "e399249d2bfd3592bef3a2653f4bf9eaf46472483b4c0e3fba4dba4d518a26be",
+      "LICENSING.md": "95e2304219f85ee88e72c2b74af4b696f4b47047c99daeaee131de69ccea3130",
+      "THIRD_PARTY_NOTICES.txt": "f1e7de3eca810b7fe2dcb82410fa7febbf5c5c1d33a0e9d8b8230e2efd232b5a"
     }
   }
 }

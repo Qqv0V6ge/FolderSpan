@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "prepared_date": "2026-10-21",
-  "scope": "This inventory was captured for the 2026-10-21 dependency snapshot. Source-code synchronization from FileManager e71042a0 updates dependency declarations, including webrtc-java 0.20.0; the component table and native correspondence have NOT been refreshed or revalidated for those new versions. Refresh the affected inventory, upstream terms and actual binary correspondence before a new distribution. Maven metadata inventory: standard-edition Android release and current macOS ARM64 desktop runtime; includes Kotlin metadata variants. Additional native/resource notices are conditional on the indicated platform (including a future iOS route). This is a notice collection, not a claim that every listed component ships on every platform. Existing public v1.0.0 assets have not been rebuilt by this change.",
+  "prepared_date": "2026-10-27",
+  "scope": "Maven metadata refreshed on 2026-10-27 from ordinary-edition Android release and Linux x64 host desktop runtime, resolved without compiling by GitHub Actions run 40427232575. This 557-component inventory includes Kotlin metadata variants; it is not a complete all-platform SBOM. Windows/macOS-specific variants and embedded native dependency/source correspondence still require separate review. Upstream license and notice entries include the earlier 2026-10-21 collection and current artifact texts, where applicable; historical native entries are not a claim that a newer native build was fully audited. Existing v1.0.0/v1.0.1 installer bytes and their embedded early notices have not been replaced. Current POM/artifact hashes and upstream declarations are recorded in third-party/maven/current-runtime.json. Bundled JRE source delivery for the two verified v1.0.1 runtimes is indexed at https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_SOURCES.json .",
   "maven_inventory_source": "third-party/maven/components.csv",
-  "maven_components": 555,
+  "maven_components": 557,
   "texts": [
     {
       "file": "LICENSE",
@@ -1173,6 +1173,41 @@
       "source_url": "https://raw.githubusercontent.com/sahlberg/libsmb2/libsmb2-6.2/LICENCE-LGPL-2.1.txt",
       "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
       "applies_to": "ios-future"
+    },
+    {
+      "file": "third-party/maven/notice-texts/c86a782ee845b52472dae9b9d79fb915d333628ac0efe49cdce63644814931de.txt",
+      "name": "dev.onvoid.webrtc:webrtc-java:0.20.0 — META-INF/licenses/libva/COPYING",
+      "source_url": "Maven runtime archive webrtc-java-0.20.0-linux-x86_64.jar (SHA-256 b2f58cf5e8d27d0488ab3c5ab6e03261549850c92ed1e73527a138510df43137)",
+      "sha256": "c86a782ee845b52472dae9b9d79fb915d333628ac0efe49cdce63644814931de",
+      "applies_to": "Current ordinary Android/Linux dependency where included; native subcomponents retain independent terms"
+    },
+    {
+      "file": "third-party/maven/notice-texts/e9c43d83c592dd15c84453cef9e04378a8ff49c17315ed90f8e30e212269eafc.txt",
+      "name": "dev.onvoid.webrtc:webrtc-java:0.20.0 — META-INF/licenses/nvdec/LICENSE",
+      "source_url": "Maven runtime archive webrtc-java-0.20.0-linux-x86_64.jar (SHA-256 b2f58cf5e8d27d0488ab3c5ab6e03261549850c92ed1e73527a138510df43137)",
+      "sha256": "e9c43d83c592dd15c84453cef9e04378a8ff49c17315ed90f8e30e212269eafc",
+      "applies_to": "Current ordinary Android/Linux dependency where included; native subcomponents retain independent terms"
+    },
+    {
+      "file": "third-party/maven/notice-texts/bfba0824ea00059f55c24b110214c1fa14a5952873e5987e1fbb0b9a0e08fb0f.txt",
+      "name": "dev.onvoid.webrtc:webrtc-java:0.20.0 — META-INF/licenses/nvenc/LICENSE",
+      "source_url": "Maven runtime archive webrtc-java-0.20.0-linux-x86_64.jar (SHA-256 b2f58cf5e8d27d0488ab3c5ab6e03261549850c92ed1e73527a138510df43137)",
+      "sha256": "bfba0824ea00059f55c24b110214c1fa14a5952873e5987e1fbb0b9a0e08fb0f",
+      "applies_to": "Current ordinary Android/Linux dependency where included; native subcomponents retain independent terms"
+    },
+    {
+      "file": "third-party/maven/notice-texts/3637ae45fdfb8e1d4eb30ca9e5f107c99e8a39b6c5b1e9068e853e4c308bd24b.txt",
+      "name": "dev.onvoid.webrtc:webrtc-java:0.20.0 — META-INF/licenses/webrtc/LICENSE.md",
+      "source_url": "Maven runtime archive webrtc-java-0.20.0-linux-x86_64.jar (SHA-256 b2f58cf5e8d27d0488ab3c5ab6e03261549850c92ed1e73527a138510df43137)",
+      "sha256": "3637ae45fdfb8e1d4eb30ca9e5f107c99e8a39b6c5b1e9068e853e4c308bd24b",
+      "applies_to": "Current ordinary Android/Linux dependency where included; native subcomponents retain independent terms"
+    },
+    {
+      "file": "third-party/maven/notice-texts/01462e2068d1a04c2274f3389773014c14ed9bc3446b28303543bd3e3c064145.txt",
+      "name": "dev.onvoid.webrtc:webrtc-java:0.20.0 — META-INF/licenses/webrtc/PATENTS",
+      "source_url": "Maven runtime archive webrtc-java-0.20.0-linux-x86_64.jar (SHA-256 b2f58cf5e8d27d0488ab3c5ab6e03261549850c92ed1e73527a138510df43137)",
+      "sha256": "01462e2068d1a04c2274f3389773014c14ed9bc3446b28303543bd3e3c064145",
+      "applies_to": "Current ordinary Android/Linux dependency where included; native subcomponents retain independent terms"
     }
   ],
   "selection_notes": [
@@ -1234,5 +1269,6 @@
     "dependency_resolution_run": false,
     "application_build_run": false,
     "inventory_refreshed_for_new_graph": false
-  }
+  },
+  "current_maven_evidence": "third-party/maven/current-runtime.json"
 }

@@ -20,6 +20,10 @@
   zlib,
 }:
 let
+  supplementalNotices = fetchurl {
+    url = "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/THIRD_PARTY_NOTICES-2026-10-27.txt";
+    sha256 = "d81da23f22a5bd68b4c9ef773f5a018c404a9d5f9a52ec79e01f526343ad8e86";
+  };
   runtimeLibraries = [
     stdenv.cc.cc.lib alsa-lib fontconfig freetype libGL
     xorg.libX11 xorg.libXext xorg.libXi xorg.libXrender xorg.libXtst
@@ -49,6 +53,7 @@ stdenv.mkDerivation {
     test -x bin/FolderSpan
     mkdir -p "$out/opt/folderspan" "$out/bin" "$out/share/applications" "$out/share/pixmaps"
     cp -a bin lib "$out/opt/folderspan/"
+    cp ${supplementalNotices} "$out/opt/folderspan/lib/app/resources/licenses/THIRD_PARTY_NOTICES-2026-10-27.txt"
     cp ${../linux/folderspan.desktop} "$out/share/applications/folderspan.desktop"
     cp lib/FolderSpan.png "$out/share/pixmaps/folderspan.png"
     makeWrapper "$out/opt/folderspan/bin/FolderSpan" "$out/bin/folderspan" \
