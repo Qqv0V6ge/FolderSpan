@@ -71,7 +71,10 @@ jobs:
                   url = 'https://gitlab.com/fdroid/fdroiddata/-/raw/087664f1acb77a87de15e1156ea3a30217bb9a3d/config/' + icon
                   (config / icon).write_bytes(urllib.request.urlopen(url, timeout=30).read())
           PY
-          printf 'sdk_path: %s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/fdroiddata/config.yml"
+          curl --fail --location --retry 3 'https://services.gradle.org/distributions/gradle-9.6.1-bin.zip' -o "$RUNNER_TEMP/fdroid-gradle.zip"
+          echo "9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14  $RUNNER_TEMP/fdroid-gradle.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/fdroid-gradle.zip" -d "$RUNNER_TEMP/fdroid-gradle"
+          printf 'sdk_path: %s\ngradle: %s\nscan_binary: true\n' "$ANDROID_HOME" "$RUNNER_TEMP/fdroid-gradle/gradle-9.6.1/bin/gradle" > "$RUNNER_TEMP/fdroiddata/config.yml"
       - name: Read and lint candidate metadata
         run: |
           cd "$RUNNER_TEMP/fdroiddata"
@@ -94,6 +97,10 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/fdroiddata"
           fdroid build --verbose com.folderspan:5 2>&1 | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-build.log"
+          # fdroid build can report failures while returning exit status zero.
+          test -s unsigned/com.folderspan_5.apk
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging unsigned/com.folderspan_5.apk | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-apk-badging.txt"
+          sha256sum unsigned/com.folderspan_5.apk > "$GITHUB_WORKSPACE/distribution-results/fdroid-apk-sha256.txt"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
