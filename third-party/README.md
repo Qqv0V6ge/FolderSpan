@@ -10,6 +10,10 @@
 
 原生包装层的Apache声明不替代WebRTC、Skia/Adobe DNG SDK或其他嵌入代码的条件。实际随包JRE须保留完整runtime/legal，并按实际发行商/build提供完整对应源码或有效提供方式；仅有src.zip或总声明不等于源码交付完成。声明集合不代表桌面WebRTC实际core/GN依赖图、未来iOS重链接或所有目标的二进制对应已验证。旧公开v1.0.0资产未在本次重建。
 
+## v1.0.1 已核对运行时的源码
+
+[同版本发布页的源码与摘要索引](https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_SOURCES.json)提供两份完整上游源码归档：Linux x64 包中识别的 Temurin 17.0.20.1+1，以及 Windows ARM64 包中识别的 Microsoft OpenJDK 17.0.19+10。每份归档保留上游许可；其他目标和第三方组件继续按实际嵌入版本核对。
+
 ## 离线维护与核验
 
 在仓库根目录运行：

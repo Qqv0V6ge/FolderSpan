@@ -42,3 +42,5 @@ server/keystore.p12
 .codebase-memory/
 output/
 docs/distribution-kit/
+/distribution-results/
+/packaging/snap/local/
