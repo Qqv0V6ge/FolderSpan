@@ -60,7 +60,13 @@ stdenv.mkDerivation {
     description = "Manage local and remote files and share across devices";
     homepage = "https://folderspan.com/";
     # Application and bundled JRE; each library's terms remain in the payload.
-    license = [ lib.licenses.asl20 lib.licenses.gpl2Classpath ];
+    license = [ lib.licenses.asl20 {
+      fullName = "GNU GPL version 2 with Classpath exception";
+      spdxId = "GPL-2.0-only WITH Classpath-exception-2.0";
+      url = "https://openjdk.org/legal/gplv2+ce.html";
+      free = true;
+      redistributable = true;
+    } ];
     sourceProvenance = with lib.sourceTypes; [ binaryNativeCode binaryBytecode ];
     mainProgram = "folderspan";
     platforms = [ "x86_64-linux" ];

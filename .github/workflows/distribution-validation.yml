@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: distribution-validation-${{ github.ref }}
   cancel-in-progress: true
@@ -40,6 +44,13 @@ jobs:
           echo "$RUNNER_TEMP/fdroid-tools/bin" >> "$GITHUB_PATH"
           mkdir -p "$RUNNER_TEMP/fdroiddata/metadata" distribution-results
           cp packaging/fdroid/metadata/com.folderspan.yml "$RUNNER_TEMP/fdroiddata/metadata/"
+          "$RUNNER_TEMP/fdroid-tools/bin/python" - <<'PY'
+          import os, pathlib, yaml
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'fdroiddata/metadata/com.folderspan.yml'
+          metadata = yaml.safe_load(path.read_text())
+          metadata.pop('Disabled')  # Only the temporary test copy; public candidate remains disabled.
+          path.write_text(yaml.safe_dump(metadata, sort_keys=False))
+          PY
           printf 'sdk_path: %s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/fdroiddata/config.yml"
       - name: Read and lint candidate metadata
         run: |
@@ -50,16 +61,18 @@ jobs:
         if: always() && steps.tools.outcome == 'success'
         run: |
           cd "$RUNNER_TEMP/fdroiddata"
-          fdroid scanner --force --json com.folderspan > "$GITHUB_WORKSPACE/distribution-results/fdroid-scanner.json"
+          fdroid scanner --json com.folderspan > "$GITHUB_WORKSPACE/distribution-results/fdroid-scanner.json"
       - name: Build only if official lint and scanner pass
         run: |
           cd "$RUNNER_TEMP/fdroiddata"
-          fdroid build --force --verbose com.folderspan:5 2>&1 | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-build.log"
+          fdroid build --verbose com.folderspan:5 2>&1 | tee "$GITHUB_WORKSPACE/distribution-results/fdroid-build.log"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: distribution-fdroid-candidate
-          path: distribution-results/
+          path: |
+            distribution-results/
+            ${{ runner.temp }}/fdroiddata/unsigned/
           if-no-files-found: error
           retention-days: 14
 
@@ -182,7 +195,7 @@ jobs:
           mkdir -p distribution-results
           docker run --rm -v "$PWD:/work" archlinux:base-devel bash -euc '
             pacman -Syu --noconfirm python imagemagick xdotool xorg-server-xvfb xorg-xauth \
-              alsa-lib fontconfig freetype2 libglvnd libx11 libxext libxi libxrender libxtst \
+              alsa-lib fontconfig freetype2 ttf-dejavu libglvnd libx11 libxext libxi libxrender libxtst \
               libxcomposite libxdamage libxfixes libxrandr glib2 dbus systemd-libs libdrm mesa gtk3
             useradd -m builder
             mkdir -p /build /results

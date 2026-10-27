@@ -7,7 +7,7 @@ arch=('x86_64')
 url='https://folderspan.com/'
 # Component licenses remain separate; their original texts are installed below.
 license=('Apache-2.0' 'GPL-2.0-only WITH Classpath-exception-2.0' 'LicenseRef-bundled-libraries')
-depends=('glibc' 'gcc-libs' 'alsa-lib' 'fontconfig' 'freetype2' 'libglvnd'
+depends=('glibc' 'gcc-libs' 'alsa-lib' 'fontconfig' 'freetype2' 'ttf-dejavu' 'libglvnd'
          'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst' 'libxcomposite'
          'libxdamage' 'libxfixes' 'libxrandr' 'glib2' 'dbus' 'systemd-libs'
          'libdrm' 'mesa' 'gtk3')

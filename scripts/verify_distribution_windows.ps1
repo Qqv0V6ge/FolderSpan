@@ -24,7 +24,8 @@ function Test-Launch([string]$Executable, [string]$Label) {
     $before = @(Get-Process | Select-Object -ExpandProperty Id)
     $directory = Get-Item (Split-Path $Executable -Parent)
     $target = $directory.ResolveLinkTarget($true)
-    $appRoot = $(if ($target) { $target.FullName } else { $directory.FullName }).TrimEnd('\') + '\'
+    $appRoot = $directory.FullName.TrimEnd('\') + '\'
+    $resolvedRoot = $(if ($target) { $target.FullName } else { $directory.FullName }).TrimEnd('\') + '\'
     # A fresh Windows 11 runner otherwise shows a modal firewall prompt.
     # Explicitly deny inbound access for this smoke check; never allow a port or disable the firewall.
     $firewallName = "FolderSpan-validation-$Label"
@@ -35,7 +36,7 @@ function Test-Launch([string]$Executable, [string]$Label) {
         do {
             Start-Sleep -Milliseconds 500
             # The ARM64 launcher starts a Java child; its window does not belong to the launcher PID.
-            $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
+            $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and ($_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) })
             $windows = @($owned | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Responding })
         } until ($windows.Count -gt 0 -or (Get-Date) -gt $deadline)
         if ($windows.Count -eq 0) { throw "$Label did not open a responding desktop window" }
@@ -52,7 +53,7 @@ function Test-Launch([string]$Executable, [string]$Label) {
             $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
             $bitmap.Save("$results/$Label.png")
         } finally { $graphics.Dispose(); $bitmap.Dispose() }
-        $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and $_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) })
+        $owned = @(Get-Process | Where-Object { $_.Id -notin $before -and $_.Path -and ($_.Path.StartsWith($appRoot, [StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) })
         foreach ($child in $owned) {
             $null = $child.CloseMainWindow()
             if (!$child.WaitForExit(5000)) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }

@@ -18,9 +18,11 @@ gradle.projectsEvaluated {
                 def componentIds = runtime.incoming.resolutionResult.allComponents.collect { it.id }.findAll {
                     it instanceof ModuleComponentIdentifier
                 }
-                runtime.resolvedConfiguration.resolvedArtifacts.each { artifact ->
-                    if (!(artifact.id.componentIdentifier instanceof ModuleComponentIdentifier)) return
-                    def id = artifact.moduleVersion.id.toString()
+                def external = runtime.incoming.artifactView {
+                    componentFilter { it instanceof ModuleComponentIdentifier }
+                }
+                external.artifacts.artifacts.each { artifact ->
+                    def id = artifact.id.componentIdentifier.displayName
                     def row = rows.computeIfAbsent(id) { [component: id, configurations: [], artifacts: [], poms: []] }
                     row.configurations.add("$path:$configuration".toString())
                     row.artifacts.add([file: artifact.file.name,
