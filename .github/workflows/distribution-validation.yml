@@ -2,6 +2,12 @@ name: Validate distribution channels
 
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Validate all channels or rerun one independent check
+        type: choice
+        default: all
+        options: [all, fdroid, dependency-inventory]
   push:
     branches: [codex/channel-validation]
     paths:
@@ -25,6 +31,7 @@ concurrency:
 
 jobs:
   fdroid:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'fdroid'
     name: F-Droid scanner and unsigned source-build candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -53,6 +60,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fdroiddata/config"
           curl --fail --location --retry 3 'https://gitlab.com/fdroid/fdroiddata/-/raw/087664f1acb77a87de15e1156ea3a30217bb9a3d/config/categories.yml' -o "$RUNNER_TEMP/fdroiddata/config/categories.yml"
           echo "edf68d8d70073fe52a52c6a33f490399ce9dc884acff3a761a3a1e34acf9d541  $RUNNER_TEMP/fdroiddata/config/categories.yml" | sha256sum --check
+          "$RUNNER_TEMP/fdroid-tools/bin/python" - <<'PY'
+          import os, pathlib, urllib.request, yaml
+          config = pathlib.Path(os.environ['RUNNER_TEMP']) / 'fdroiddata/config'
+          categories = yaml.safe_load((config / 'categories.yml').read_text())
+          for category in categories.values():
+              icon = category.get('icon')
+              if icon:
+                  assert pathlib.Path(icon).name == icon
+                  url = 'https://gitlab.com/fdroid/fdroiddata/-/raw/087664f1acb77a87de15e1156ea3a30217bb9a3d/config/' + icon
+                  (config / icon).write_bytes(urllib.request.urlopen(url, timeout=30).read())
+          PY
           printf 'sdk_path: %s\n' "$ANDROID_HOME" > "$RUNNER_TEMP/fdroiddata/config.yml"
       - name: Read and lint candidate metadata
         run: |
@@ -87,6 +105,7 @@ jobs:
           retention-days: 14
 
   dependency-inventory:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'dependency-inventory'
     name: Resolve current ordinary-edition dependency metadata
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -113,6 +132,7 @@ jobs:
           retention-days: 14
 
   appimage:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
     name: Linux TAR and AppImage
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -158,6 +178,7 @@ jobs:
           retention-days: 14
 
   snap:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
     name: Build strict Snap candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -195,6 +216,7 @@ jobs:
           retention-days: 14
 
   aur:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
     name: Arch package and desktop smoke check
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -226,10 +248,12 @@ jobs:
         with:
           name: distribution-aur-x64
           path: distribution-results/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
 
   nix:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
     name: Nix derivation and desktop smoke check
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -256,6 +280,7 @@ jobs:
           retention-days: 14
 
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all'
     name: Windows ${{ matrix.arch }} installation lifecycle
     strategy:
       fail-fast: false
