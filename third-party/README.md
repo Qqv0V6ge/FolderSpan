@@ -14,6 +14,8 @@
 
 [同版本发布页的源码与摘要索引](https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_SOURCES.json)提供两份完整上游源码归档：Linux x64 包中识别的 Temurin 17.0.20.1+1，以及 Windows ARM64 包中识别的 Microsoft OpenJDK 17.0.19+10。每份归档保留上游许可；其他目标和第三方组件继续按实际嵌入版本核对。
 
+另已从 Windows x64 MSI 静态提取 JRE，核对 DLL 的供应商、完整版本与 PE 架构及 `VersionProps` 常量为 Eclipse Adoptium 17.0.20.1+1，可对应同一份已公开 Temurin 源码，见[Windows x64 对应证据](https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_WINDOWS_X64-2026-10-27.json)。该检查不在本机运行安装器或应用。
+
 ## 离线维护与核验
 
 在仓库根目录运行：

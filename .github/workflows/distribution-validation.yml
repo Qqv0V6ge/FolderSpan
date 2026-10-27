@@ -7,7 +7,7 @@ on:
         description: Validate all channels or rerun one independent check
         type: choice
         default: all
-        options: [all, fdroid, dependency-inventory, linux, windows]
+        options: [all, fdroid, dependency-inventory, linux, windows, nix]
   push:
     branches: [codex/channel-validation]
     paths:
@@ -290,7 +290,7 @@ jobs:
           retention-days: 14
 
   nix:
-    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux'
+    if: github.event_name != 'workflow_dispatch' || inputs.channel == 'all' || inputs.channel == 'linux' || inputs.channel == 'nix'
     name: Nix derivation and desktop smoke check
     runs-on: ubuntu-24.04
     timeout-minutes: 35

@@ -16,11 +16,18 @@ MSI UpgradeCode: {ADD48935-D0F8-3AAE-8594-602D7756ADCC}
 ProductName / Manufacturer: FolderSpan / FolderSpan
 ProductVersion: 1.0.1
 Authored default scope: machine (ALLUSERS=1; ProgramFiles64Folder/FolderSpan)
-This scope and these registry candidates were not observed after installation.
+The machine scope and single-version registry state were subsequently verified
+in an isolated Windows x64 GitHub Actions runner.
 
 No outer MSI digital-signature stream was found in the static inspection.
-Windows Authenticode trust-chain checks, silent install, launch, update and
-uninstall tests have not been run. No signature policy bypass is included.
+Windows Authenticode trust-chain checks remain separate. No signature policy
+bypass is included. Actual silent MSI installation of 1.0.0, upgrade to 1.0.1,
+responding launch windows, and uninstall passed. Chocolatey pack, install of an
+unpublished 1.0.0 fixture, upgrade to this 1.0.1 wrapper, launch and uninstall
+also passed in Actions run 40430000925:
+https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40430000925
+The fixture tests upgrade orchestration; it is not a previously published
+Chocolatey community package. These are smoke checks, not full feature tests.
 
 This is a download-only wrapper candidate: the MSI is not embedded in the package.
 This file is not an application license or a grant of redistribution rights.
@@ -28,9 +35,18 @@ The publisher has adopted Apache-2.0 for standard-edition own code, publicly
 verified at tag v1.0.1:
 https://github.com/Qqv0V6ge/FolderSpan/blob/v1.0.1/LICENSE
 The publisher confirmed the public copyright/author credit FolderSpan.
-Third-party notices still contain an older dependency snapshot and require
-refreshing for the actual v1.0.1 dependencies; exact bundled-runtime source
-delivery also remains open. The package sources are maintained in this repository under packaging/chocolatey.
+The original MSI retains its early dependency notice snapshot. Refreshed
+Android/Linux metadata and collected terms are published as a supplement:
+https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/THIRD_PARTY_NOTICES-2026-10-27.txt
+https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/DEPENDENCY_METADATA-2026-10-27.json
+Those are not complete Windows-specific native license clearance. Source
+delivery for the explicitly verified Linux x64 and Windows ARM64 JREs is at:
+https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_SOURCES.json
+The Windows x64 MSI runtime was subsequently extracted and matched to the same
+Temurin 17.0.20.1+1 source archive using DLL resources, x64 PE machine and
+VersionProps constants. Static evidence:
+https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/JRE_WINDOWS_X64-2026-10-27.json
+The package sources are maintained in this repository under packaging/chocolatey.
 Community account ownership and package-ID collision checks remain separate
 from the automated checks in Validate distribution channels. Do not infer
 community approval or complete license clearance from a successful test.
