@@ -52,6 +52,23 @@
       "NOTICE": "e399249d2bfd3592bef3a2653f4bf9eaf46472483b4c0e3fba4dba4d518a26be",
       "LICENSING.md": "95e2304219f85ee88e72c2b74af4b696f4b47047c99daeaee131de69ccea3130",
       "THIRD_PARTY_NOTICES.txt": "f1e7de3eca810b7fe2dcb82410fa7febbf5c5c1d33a0e9d8b8230e2efd232b5a"
+    },
+    "linux-x64-appimage": {
+      "name": "FolderSpan-1.0.1-x86_64.AppImage",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/FolderSpan-1.0.1-x86_64.AppImage",
+      "sha256": "a53281e97b645a488a6510b17a30854adb69f6fcab96ab1e15272914b032e558",
+      "bytes": 190351864,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470"
+    },
+    "linux-amd64-snap-candidate": {
+      "name": "folderspan-1.0.1-amd64-candidate.snap",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/folderspan-1.0.1-amd64-candidate.snap",
+      "sha256": "ad5a83ecba684496cf41c979b0882f7c4339e94c8ebfe66017557a5a53b2b8e7",
+      "bytes": 187408384,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470",
+      "confinement": "strict",
+      "grade": "devel",
+      "store_status": "not submitted"
     }
   }
 }

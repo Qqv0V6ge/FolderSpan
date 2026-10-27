@@ -1,0 +1,135 @@
+{
+  "checked_date": "2026-10-27",
+  "application_release": "v1.0.1 ordinary edition",
+  "branch": "codex/channel-validation",
+  "local_application_builds": false,
+  "official_channel_submissions_in_this_update": [],
+  "windows_x64": {
+    "run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40432101989",
+    "passed": true,
+    "checks": [
+      "winget validate",
+      "SHA256 desktop-windows-x64-no-pro-FolderSpan-1.0.0.msi",
+      "SHA256 desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
+      "install-1.0.0 MSI exit 0",
+      "msi-1.0.0 responding window: FolderSpan",
+      "upgrade-1.0.1 MSI exit 0",
+      "msi-1.0.1 responding window: FolderSpan",
+      "uninstall-1.0.1 MSI exit 0",
+      "choco pack",
+      "choco pack unpublished old-version fixture",
+      "choco install 1.0.0",
+      "chocolatey-1.0.0 responding window: FolderSpan",
+      "choco upgrade 1.0.1",
+      "chocolatey-1.0.1 responding window: FolderSpan",
+      "choco uninstall"
+    ],
+    "scope": "Installation, upgrade, launch-window and uninstall smoke checks; not full feature certification",
+    "old_chocolatey_package": "Unpublished fixture made from same wrapper; not an existing community package"
+  },
+  "windows_arm64_scoop": {
+    "run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40427232575",
+    "passed": true,
+    "checks": [
+      "clone official Scoop",
+      "scoop main bucket",
+      "create local Scoop test bucket",
+      "scoop bucket add",
+      "scoop install 1.0.0",
+      "scoop-1.0.0 responding window: FolderSpan",
+      "update local Scoop test bucket",
+      "scoop update buckets",
+      "scoop upgrade 1.0.1",
+      "scoop-1.0.1 responding window: FolderSpan",
+      "scoop uninstall"
+    ],
+    "scope": "Installation, upgrade, launch-window and uninstall smoke checks; not full feature certification",
+    "latest_repeat_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40432101989"
+  },
+  "linux": {
+    "run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470",
+    "source_commit": "3b2627a46c6fb70d97746bd390df3bccc4675cd0",
+    "passed": true,
+    "checks": [
+      "AUR: makepkg, install, GUI window, uninstall",
+      "Nix: derivation, ELF patching, fonts, GUI window",
+      "Strict Snap: build, install, GUI window, remove",
+      "Type 2 AppImage: ELF/AI magic, GUI window, Ubuntu 22.04 network-isolated GUI window",
+      "Actual Gradle TAR task: launcher/jspawnhelper/jexec executable modes retained",
+      "Refreshed supplemental notices included with original payload notices"
+    ],
+    "scope": "Desktop startup smoke checks, including first-run welcome screen; not full file-operation/sandbox tests or FUSE integration certification"
+  },
+  "fdroid": {
+    "run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40430519982",
+    "source_commit": "3b2627a46c6fb70d97746bd390df3bccc4675cd0",
+    "passed": true,
+    "package": "com.folderspan",
+    "version_name": "1.0.1",
+    "version_code": 5,
+    "checks": [
+      "Official metadata read and lint",
+      "Source scanner JSON has a version result and no errors",
+      "GBK data regenerated from pinned Unicode text with identical SHA-256",
+      "Real unsigned APK produced by fdroid build",
+      "Official APK non-free class scan and extra-signing-block scan",
+      "aapt badging and APK SHA-256 saved"
+    ],
+    "scope": "Build and scan feasibility; not main-repository eligibility, reproducibility, user-key signing, Android feature/device certification or complete native-source/license clearance"
+  },
+  "flathub": {
+    "submitted": false,
+    "ai_manifest_generated": false,
+    "policy": "https://docs.flathub.org/docs/for-app-authors/requirements#generative-ai-policy",
+    "remaining": "Human-written restricted manifest/submission and review interactions; known AI participation disclosure"
+  },
+  "nix_standalone": {
+    "run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40431981098",
+    "source_commit": "ddfb82800f7c94cb549d967bb39c08b7283e6011",
+    "passed": true,
+    "scope": "Standalone Nix expression, generated desktop item, real derivation build and GUI window smoke check"
+  },
+  "name_checks": {
+    "WinGet": {
+      "url": "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/f/FolderSpan",
+      "status": 404
+    },
+    "Scoop Extras": {
+      "url": "https://raw.githubusercontent.com/ScoopInstaller/Extras/master/bucket/folderspan.json",
+      "status": 404
+    },
+    "AppImageHub": {
+      "url": "https://raw.githubusercontent.com/AppImage/appimage.github.io/master/data/FolderSpan",
+      "status": 404
+    },
+    "AUR": {
+      "url": "https://aur.archlinux.org/rpc/v5/info?arg[]=folderspan-bin",
+      "status": 200,
+      "resultcount": 0
+    },
+    "Nixpkgs": {
+      "url": "https://api.github.com/repos/NixOS/nixpkgs/contents/pkgs/by-name/fo/folderspan-bin/package.nix",
+      "status": 404
+    }
+  },
+  "name_checks_scope": "Point-in-time exact path/RPC lookups only; not reservations, global trademark clearance or community approval",
+  "published_channel_packages": {
+    "appimage": {
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/FolderSpan-1.0.1-x86_64.AppImage",
+      "sha256": "a53281e97b645a488a6510b17a30854adb69f6fcab96ab1e15272914b032e558",
+      "asset_id": 680010111,
+      "bytes": 190351864,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470"
+    },
+    "snap_candidate": {
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/folderspan-1.0.1-amd64-candidate.snap",
+      "sha256": "ad5a83ecba684496cf41c979b0882f7c4339e94c8ebfe66017557a5a53b2b8e7",
+      "asset_id": 680038503,
+      "bytes": 187408384,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470",
+      "confinement": "strict",
+      "grade": "devel",
+      "store_status": "not submitted"
+    }
+  }
+}
