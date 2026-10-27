@@ -1,4 +1,4 @@
-Disabled: Candidate pending scanner, native-source review, build and development-history qualification
+Disabled: Candidate pending dependency/source inclusion review and development-history qualification
 Categories:
   - File Manager
   - File Transfer
@@ -23,7 +23,7 @@ Repo: https://github.com/Qqv0V6ge/FolderSpan.git
 Builds:
   - versionName: 1.0.1
     versionCode: 5
-    commit: acbdb206b638141544d224bca7287d64cbf15c80
+    commit: 3b2627a46c6fb70d97746bd390df3bccc4675cd0
     subdir: app/androidApp
     rm:
       - app/shared/src/jsMain/resources/sql-wasm.wasm
@@ -59,6 +59,11 @@ Builds:
 MaintainerNotes: |-
   This is a disabled candidate, not a claim of F-Droid eligibility.
   Published v1.0.1 verifies the package ID, version and ordinary-edition license.
+  The pinned follow-up commit refreshes Android/Linux third-party notice metadata
+  and distribution tooling without changing Android application features.
+  The original release commit passed official lint, source and APK scanning and
+  an unsigned build in upstream Actions run 40428761641; the refreshed candidate
+  is independently checked. This is not a signature-reproducibility claim.
   Historical code, artwork and documentation include generative-AI output.
   Public FolderSpan Git history begins on 2026-10-12; no development-history
   exception has been obtained. Inspect all native dependencies and source assets.
