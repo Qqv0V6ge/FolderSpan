@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Candidate for automated installation validation; not yet submitted to Chocolatey. -->
+<!-- Format baseline: Chocolatey CLI 2.7.4 official NuspecTemplate.cs. -->
+<!-- https://raw.githubusercontent.com/chocolatey/choco/2.7.4/src/chocolatey/infrastructure.app/templates/NuspecTemplate.cs -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>folderspan</id>
+    <version>1.0.1</version>
+    <title>FolderSpan</title>
+    <authors>FolderSpan</authors>
+    <owners>FolderSpan</owners>
+    <projectUrl>https://folderspan.com</projectUrl>
+    <!-- Standard-edition own code: Apache-2.0 publicly verified at tag v1.0.1; third-party terms apply separately. -->
+    <licenseUrl>https://github.com/Qqv0V6ge/FolderSpan/blob/v1.0.1/LICENSE</licenseUrl>
+    <!-- Decide requireLicenseAcceptance from the actual approved application terms; do not infer it from price. -->
+    <projectSourceUrl>https://github.com/Qqv0V6ge/FolderSpan</projectSourceUrl>
+    <packageSourceUrl>https://github.com/Qqv0V6ge/FolderSpan/tree/codex/channel-validation/packaging/chocolatey</packageSourceUrl>
+    <bugTrackerUrl>https://github.com/Qqv0V6ge/FolderSpan/issues</bugTrackerUrl>
+    <summary>Manage files, connect remote storage, and share across devices.</summary>
+    <description><![CDATA[FolderSpan is a cross-platform file manager and sharing tool. Browse local files, access connected devices and remote storage, share files through links, and create file sync tasks.
+
+Features
+- Manage files: browse, search, filter, switch between list and grid views, and copy, move, rename or delete files and folders.
+- Return to frequently used locations with bookmarks, favorites and recent history.
+- Connect to FTP, SFTP, SMB, WebDAV and S3 storage.
+- Discover devices on your local network, browse shared files and transfer files between devices.
+- Share files or folders through a local address or QR code so recipients can browse them in a web browser.
+- Create and manage file sync tasks and view their progress.
+- Connect devices across networks through WebRTC after configuring a signaling source.
+
+The standard edition is permanently free, contains no ads or in-app purchases, and does not require a FolderSpan account. FolderSpan does not proactively send usage statistics or crash logs to the developer. Connections and transfers you initiate still exchange the data needed by the receiving device or remote storage service.
+
+Available protocols, file access and native capabilities vary by platform. Local link sharing requires the devices to be on the same local network and the sender to keep the sharing service running. The web frontend requires Headless Runtime. Headless tasks are managed through the browser; continued execution is not guaranteed after closing the page or disconnecting the session.
+
+Current standard-edition releases support Android, Windows, macOS and Linux. See the download page for package choices and known limitations.
+
+This Chocolatey package targets the standard-edition Windows x64 MSI. Other platforms and package formats are not installed by this package.]]></description>
+    <releaseNotes>https://github.com/Qqv0V6ge/FolderSpan/releases/tag/v1.0.1</releaseNotes>
+    <tags>folderspan file-manager file-transfer lan remote-storage sync ftp sftp smb webdav s3</tags>
+  </metadata>
+  <files>
+    <!-- Exact staged filenames are intentional: the .in drafts are not packaged automatically. -->
+    <file src="tools\chocolateyInstall.ps1" target="tools" />
+    <file src="tools\VERIFICATION.txt" target="tools" />
+  </files>
+</package>

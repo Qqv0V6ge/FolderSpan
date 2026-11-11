@@ -41,6 +41,14 @@ object NotificationDeepLinkHandler : KoinComponent {
             val actionId = data[NotificationActionKeys.ACTION_ID]?.trim()
                 ?: NotificationActionKeys.ACTION_DEFAULT
             val requestId = data[RequestNotificationFactory.META_REQUEST_ID]?.trim().orEmpty()
+            if (data[RequestNotificationFactory.META_NOTIFICATION_KIND] == SYNC_RUN_NOTIFICATION_KIND) {
+                val syncTarget = syncNotificationTarget(data) ?: return@addClickListener
+                if (actionId in setOf(NotificationActionKeys.ACTION_DEFAULT, NotificationActionKeys.ACTION_OPEN, NotificationActionKeys.ACTION_VIEW)) {
+                    notificationState.markAsRead(RequestNotificationFactory.notificationIdFor(requestId))
+                    mainState.requestOpenScreen(syncTarget.screen())
+                }
+                return@addClickListener
+            }
             if (RequestNotificationFactory.consumeAppUpdateNotificationAction(data, actionId, ::openUrl)) {
                 notificationState.markAsRead(
                     RequestNotificationFactory.notificationIdFor(

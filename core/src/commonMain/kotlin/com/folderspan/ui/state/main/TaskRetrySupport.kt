@@ -2,6 +2,9 @@ package com.folderspan.ui.state.main
 
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.service.network.StorageReference
+import com.folderspan.utils.ProtoBufCodec
+import kotlin.io.encoding.Base64
 import com.folderspan.localization.LocalizedMessage
 import com.folderspan.localization.renderOrLegacy
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -39,6 +42,8 @@ data class TaskRetryEntry(
     @ProtoNumber(12) val state: TaskRetryState = TaskRetryState.PENDING,
     @ProtoNumber(13) val failureMessage: String = "",
     @ProtoNumber(14) val localizedFailureMessage: LocalizedMessage? = null,
+    @ProtoNumber(15) val srcStorageReference: StorageReference? = null,
+    @ProtoNumber(16) val destStorageReference: StorageReference? = null,
 ) {
     val resultPath: String
         get() = when (stage) {
@@ -75,6 +80,8 @@ fun buildTaskRetryEntryKey(
     destPath: String,
     destProtocol: FileProtocol,
     destProtocolId: String,
+    srcStorageReference: StorageReference? = null,
+    destStorageReference: StorageReference? = null,
 ): String {
     return listOf(
         stage.name,
@@ -84,7 +91,10 @@ fun buildTaskRetryEntryKey(
         destProtocol.name,
         destProtocolId,
         destPath,
-    ).joinToString("|")
+    ).let { fields ->
+        if (srcStorageReference == null && destStorageReference == null) fields
+        else fields + listOf(srcStorageReference?.let { Base64.encode(ProtoBufCodec.encode(it)) }.orEmpty(), destStorageReference?.let { Base64.encode(ProtoBufCodec.encode(it)) }.orEmpty())
+    }.joinToString("|")
 }
 
 fun buildCopyRetryEntry(
@@ -101,6 +111,8 @@ fun buildCopyRetryEntry(
             destPath = dest.path,
             destProtocol = dest.protocol,
             destProtocolId = dest.protocolId,
+            srcStorageReference = src.storageReference,
+            destStorageReference = dest.storageReference,
         ),
         taskType = taskType,
         stage = TaskRetryStage.COPY,
@@ -112,6 +124,8 @@ fun buildCopyRetryEntry(
         destProtocolId = dest.protocolId,
         isDirectory = src.isDirectory,
         size = src.size,
+        srcStorageReference = src.storageReference,
+        destStorageReference = dest.storageReference,
     )
 }
 
@@ -129,6 +143,7 @@ fun buildDeleteRetryEntry(
             destPath = "",
             destProtocol = FileProtocol.Local,
             destProtocolId = "",
+            srcStorageReference = target.storageReference,
         ),
         taskType = taskType,
         stage = stage,
@@ -136,6 +151,7 @@ fun buildDeleteRetryEntry(
         srcProtocol = target.protocol,
         srcProtocolId = target.protocolId,
         isDirectory = target.isDirectory,
+        srcStorageReference = target.storageReference,
     )
 }
 
@@ -145,6 +161,7 @@ fun buildRetryFileSimpleInfo(
     protocolId: String,
     isDirectory: Boolean,
     size: Long = 0L,
+    storageReference: StorageReference? = null,
 ): FileSimpleInfo {
     val name = path.substringAfterLast('/').substringAfterLast('\\').ifBlank { path }
     return FileSimpleInfo.nullFileSimpleInfo().copy(
@@ -154,5 +171,11 @@ fun buildRetryFileSimpleInfo(
         size = size,
         protocol = protocol,
         protocolId = protocolId,
+        storageReference = storageReference,
     )
 }
+
+internal fun TaskRetryEntry.toSourceFileSimpleInfo(): FileSimpleInfo = buildRetryFileSimpleInfo(
+    path = srcPath, protocol = srcProtocol, protocolId = srcProtocolId,
+    isDirectory = isDirectory, size = size, storageReference = srcStorageReference,
+)

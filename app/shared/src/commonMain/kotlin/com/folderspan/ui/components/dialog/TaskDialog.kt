@@ -19,6 +19,11 @@ import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.main.Task
 import com.folderspan.ui.state.main.TaskResidualSummary
 import com.folderspan.ui.state.main.TaskState
+import com.folderspan.ui.state.main.TaskUploadProgress
+import com.folderspan.ui.state.main.loadRuntimeUploadProgress
+import com.folderspan.extensions.formatBytes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.folderspan.ui.state.main.formatTaskResultDisplay
 import com.folderspan.ui.state.main.normalizeTaskResultDisplay
 import com.folderspan.utils.scrollToAfterFrame
@@ -33,6 +38,7 @@ data class TaskInfoDialogUiState(
     val failureSummary: Pair<String, String>?,
     val queueResults: List<Pair<String, String>>,
     val residualSummary: TaskResidualSummary? = null,
+    val uploadProgress: List<TaskUploadProgress> = emptyList(),
 )
 
 @Composable
@@ -44,6 +50,13 @@ fun TaskInfoDialogContainer(
     val taskState = koinInject<TaskState>()
     val fileState = koinInject<FileState>()
     val residuals by taskState.residuals.collectAsState()
+    var uploadProgress by remember(task.key) { mutableStateOf(emptyList<TaskUploadProgress>()) }
+    LaunchedEffect(task.key, taskState) {
+        while (true) {
+            uploadProgress = withContext(Dispatchers.Default) { taskState.loadRuntimeUploadProgress(task.key) }
+            delay(1000.milliseconds)
+        }
+    }
     val latestTask = rememberRefreshingTask(
         task = task,
         taskState = taskState,
@@ -85,6 +98,7 @@ fun TaskInfoDialogContainer(
             failureSummary = failureSummary,
             queueResults = queueResults,
             residualSummary = residuals[latestTask.key],
+            uploadProgress = uploadProgress,
         ),
         onDismiss = onDismiss,
         onToResult = onToResult,
@@ -251,6 +265,17 @@ private fun FileOperation(uiState: TaskInfoDialogUiState, onCleanup: () -> Unit)
             Text(AppStrings.ui_task_residual_cleanup_notice, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = onCleanup) { Text(AppStrings.ui_task_residual_delete) }
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
+        }
+        if (uiState.uploadProgress.isNotEmpty()) {
+            Text(AppStrings.storage_upload_resume, style = MaterialTheme.typography.titleSmall)
+            uiState.uploadProgress.forEach { upload ->
+                Text(upload.path, maxLines = 2, style = MaterialTheme.typography.bodySmall)
+                Text(AppStrings.storage_upload_confirmed.format(
+                    arg0 = upload.confirmedOffset.formatBytes(), arg1 = upload.fileSize.formatBytes()),
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Text(AppStrings.storage_upload_resume_notice, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(12.dp))
         }
         LinearProgressIndicator(
             progress = { progress },

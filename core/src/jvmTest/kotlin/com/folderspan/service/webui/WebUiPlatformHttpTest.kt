@@ -1,6 +1,15 @@
 package com.folderspan.service.webui
 
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.data.main.network.CloudDriveExtras
+import com.folderspan.data.main.network.StorageContentLocationReference
+import com.folderspan.data.main.network.NetworkDriveExtras
+import com.folderspan.service.network.NetworkConnectionConfig
+import com.folderspan.service.network.StorageContentHostContext
+import com.folderspan.service.network.StorageContentKeyStore
+import com.folderspan.service.network.StorageContentStatus
+import com.folderspan.service.network.TestStorageContentProvider
+import com.folderspan.service.network.TestStorageContentVaultStore
 import com.folderspan.service.http.server.linkshare.*
 import com.folderspan.service.mcp.file.FileEndpointErrorCode
 import com.folderspan.service.mcp.file.FileEndpointException
@@ -84,6 +93,8 @@ class WebUiPlatformHttpTest {
         handler.start()
         try {
             assertEquals(401, request("POST", "$WEB_UI_PLATFORM_PATH/files/create").statusCode)
+            assertEquals(401, request("POST", "$WEB_UI_PLATFORM_PATH/networks/advanced/upload-start").statusCode)
+            assertEquals(401, request("PUT", "$WEB_UI_PLATFORM_PATH/networks/advanced/upload-chunk?handle=foreign&offset=0").statusCode)
             assertEquals(426, request("POST", WEB_UI_LOGIN_PATH, bytes = json.encodeToString(WebUiLoginRequest(secret, 3)).encodeToByteArray()).statusCode)
             val first = login()
             val second = login()
@@ -300,4 +311,101 @@ class WebUiPlatformHttpTest {
         assertEquals(0, first.size)
         assertEquals("/second", second.getString("bookmark", ""))
     }
+    @Test
+    fun handlerReleaseLogoutAndIdleExpiryLockContentAndDeletePlaintext(): Unit = runBlocking {
+        var now = 0L
+        val directory = Files.createTempDirectory("content-handler-lifecycle")
+        val settings = MapSettings()
+        val credentials = WebUiCredentialStore(settings)
+        val secret = checkNotNull(credentials.ensureInitialized().oneTimeSecret)
+        val sessions = WebUiSessionStore(nowMillis = { now }, idleTimeoutMs = 1_000)
+        val contexts = mutableListOf<StorageContentHostContext>()
+        // Remote authenticated catalog persists while individual HTTP session contexts close.
+        val contentProvider = TestStorageContentVaultStore().provider()
+        val platform = object : WebUiPlatform by JvmWebUiPlatform() {
+            override suspend fun hostInfo(session: WebUiPlatformSession) = WebUiHostInfo(
+                separator = "/", home = directory.toString(), cache = directory.toString(),
+                app = directory.toString(), roots = emptyList())
+            override suspend fun handle(request: LinkShareHttpRequest, session: WebUiPlatformSession) =
+                storageContentPlatformRequest(request, session, createContext = {
+                    StorageContentHostContext(StorageContentKeyStore(settings), settings, directory,
+                        providerFactory = { contentProvider }).also(contexts::add)
+                }, resolveTask = { task, _ -> task })
+        }
+        val handler = WebUiRequestHandler(credentials, sessions, WebUiSecurityPolicy { setOf("127.0.0.1") },
+            PlaceholderWebUiDocumentRoot(), platform)
+        var config = NetworkConnectionConfig("FTP", "fixture.invalid", "alice", "protocol-login")
+        suspend fun command(path: String, token: String = "", bytes: ByteArray = byteArrayOf()) =
+            handler.handleCommand(LinkShareHttpRequest.from("POST", path, remoteHost = "127.0.0.1",
+                headers = buildMap {
+                    put("Host", listOf("127.0.0.1:12043"))
+                    put("Origin", listOf("http://127.0.0.1:12043"))
+                    put(WEB_UI_PROTOCOL_HEADER, listOf(WEB_UI_PROTOCOL_VERSION.toString()))
+                    if (token.isNotEmpty()) put(WEB_UI_SESSION_HEADER, listOf(token))
+                }, body = LinkShareHttpRequestBody.Bytes(bytes)))
+        fun LinkShareHttpResponse.bytes() = (body as LinkShareHttpResponseBody.Bytes).bytes
+        suspend fun login(): String {
+            val response = command(WEB_UI_LOGIN_PATH, bytes =
+                platformJson.encodeToString(WebUiLoginRequest(secret, WEB_UI_PROTOCOL_VERSION)).encodeToByteArray())
+            assertEquals(200, response.statusCode)
+            return platformJson.decodeFromString<WebUiLoginResponse>(response.bytes().decodeToString()).sessionToken
+        }
+        suspend fun content(token: String, operation: String, input: WebUiStorageContentRequest) =
+            command("$WEB_UI_PLATFORM_PATH/storage/content/$operation", token, platformJson.encodeToString(input).encodeToByteArray())
+        handler.start()
+        try {
+            var oldHandle: String? = null
+            for ((index, closeMode) in listOf("release", "logout", "idle-expiry").withIndex()) {
+                val token = login()
+                oldHandle?.let { handle ->
+                    assertEquals(400, content(token, "status", WebUiStorageContentRequest(handle, config)).statusCode)
+                }
+                val opened = content(token, "open", WebUiStorageContentRequest(""))
+                assertEquals(200, opened.statusCode)
+                val handle = platformJson.decodeFromString<WebUiHandle>(opened.bytes().decodeToString()).id
+                var base = WebUiStorageContentRequest(handle, config)
+                val context = contexts.last()
+                assertFalse(context.status(config).getOrThrow().unlocked)
+                if (index == 0) {
+                    val configured = content(token, "setup-password", base.copy(password = "runtime content password"))
+                    assertEquals(200, configured.statusCode)
+                    val reference = platformJson.decodeFromString<StorageContentLocationReference>(configured.bytes().decodeToString())
+                    config = config.copy(extras = config.extras.copy(contentEncryption = reference))
+                    base = base.copy(config = config)
+                } else assertEquals(200, content(token, "unlock-password", base.copy(password = "runtime content password")).statusCode)
+                val enabledStatus = context.status(config).getOrThrow()
+                assertTrue(enabledStatus.unlocked)
+                assertTrue(enabledStatus.enabled && enabledStatus.metadataProtectionAvailable)
+                val staged = content(token, "stage", base.copy(taskKey = index.toLong() + 1, entryId = "plain",
+                    taskReference = java.util.UUID.randomUUID().toString()))
+                assertEquals(200, staged.statusCode)
+                val stage = Path.of(platformJson.decodeFromString<String>(staged.bytes().decodeToString()))
+                Files.writeString(stage, "session-owned plaintext")
+                when (closeMode) {
+                    "release" -> handler.release(token)
+                    "logout" -> assertEquals(200, command(WEB_UI_LOGOUT_PATH, token).statusCode)
+                    else -> {
+                        now += 1_000
+                        assertNull(sessions.get(token, touch = false))
+                        // Exercise the actual handler reaper and its release path.
+                        withTimeout(10_000) { while (Files.exists(stage)) delay(25) }
+                    }
+                }
+                assertFalse(Files.exists(stage))
+                assertFalse(context.status(config).getOrThrow().unlocked)
+                assertEquals(401, content(token, "status", base).statusCode)
+                oldHandle = handle
+            }
+            val token = login()
+            assertEquals(400, content(token, "status", WebUiStorageContentRequest(checkNotNull(oldHandle), config)).statusCode)
+            val opened = content(token, "open", WebUiStorageContentRequest(""))
+            assertEquals(200, opened.statusCode)
+            val handle = platformJson.decodeFromString<WebUiHandle>(opened.bytes().decodeToString()).id
+            val status = content(token, "status", WebUiStorageContentRequest(handle, config))
+            val restored = platformJson.decodeFromString<StorageContentStatus>(status.bytes().decodeToString())
+            assertTrue(restored.enabled)
+            assertFalse(restored.unlocked)
+        } finally { handler.stop(); directory.toFile().deleteRecursively() }
+    }
+
 }

@@ -7,6 +7,7 @@ import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.network.NetworkAccess
+import com.folderspan.service.network.StoragePath
 import com.folderspan.data.main.share.Share
 import com.folderspan.editor.FileEditorContentSource
 import com.folderspan.editor.FileEditorSourceCapabilities
@@ -221,7 +222,7 @@ private suspend fun openCachedNetworkEditorContentSource(
             ),
             snapshotBlock = {
                 withContext(Dispatchers.Default) {
-                    networkAccess.getFile(file.path).map(FileSimpleInfo::toEditorSourceSnapshot)
+                    networkAccess.getFile(file).map(FileSimpleInfo::toEditorSourceSnapshot)
                 }
             },
             readBlock = { start, end -> readLocalRange(activeCachePath, start, end) },
@@ -241,7 +242,7 @@ private suspend fun openCachedNetworkEditorContentSource(
                 val uploaded = uploadCachedEditorContent(
                     networkAccess = networkAccess,
                     localPath = stagedPath,
-                    remotePath = file.path,
+                    remotePath = file.storagePath,
                     size = newSize,
                     onProgress = onProgress,
                 )
@@ -268,7 +269,7 @@ private suspend fun openCachedNetworkEditorContentSource(
 private suspend fun uploadCachedEditorContent(
     networkAccess: NetworkAccess,
     localPath: String,
-    remotePath: String,
+    remotePath: StoragePath,
     size: Long,
     onProgress: suspend (writtenBytes: Long, totalBytes: Long) -> Unit,
 ): Result<Boolean> = coroutineScope {

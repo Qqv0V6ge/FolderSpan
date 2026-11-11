@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.service.http.NetworkInterfaceInfo
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.http.client.DEVICE_HEARTBEAT_STALE_DISCONNECT_MS
@@ -14,6 +15,11 @@ internal const val REMOTE_DEVICE_CONNECTION_CHECK_INTERVAL_MS = 5_000L
 private const val REMOTE_DEVICE_CONNECTION_STALE_GRACE_MS = 60_000L
 internal const val REMOTE_DEVICE_CONNECTION_STALE_AFTER_MS =
     DEVICE_HEARTBEAT_STALE_DISCONNECT_MS + REMOTE_DEVICE_CONNECTION_STALE_GRACE_MS
+
+internal fun localNetworkSignature(interfaces: List<NetworkInterfaceInfo>): Set<String> =
+    interfaces.filter { it.isUp && !it.isLoopback }.flatMap { network ->
+        network.addresses.map { address -> "${network.name}/${address.address}/${address.prefixLength}" }
+    }.toSet()
 
 internal fun sessionPresenceProbeTargets(devices: List<SocketDevice>): List<SocketDevice> =
     devices.filter { device -> device.transportType == DeviceTransportType.Session }

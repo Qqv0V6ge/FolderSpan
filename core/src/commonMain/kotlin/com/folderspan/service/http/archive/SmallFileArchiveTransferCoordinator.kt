@@ -1,5 +1,8 @@
 package com.folderspan.service.http.archive
 
+import com.folderspan.service.operation.withOperationTransferControl
+import com.folderspan.service.session.withDeviceTransferBudgets
+import kotlinx.coroutines.delay
 import com.folderspan.service.file.DeviceFileClient
 import com.folderspan.service.session.*
 import com.folderspan.utils.ProtoBufCodec
@@ -29,6 +32,7 @@ internal class SmallFileArchiveTransferCoordinator(
     private val transportPreference: SmallFileArchiveTransportPreference,
     private val managedLocalFileWriter: (suspend (String, Long, suspend (String) -> Boolean) -> Boolean)? = null,
     private val isPaused: suspend () -> Boolean = { false },
+    private val ensureRunning: suspend () -> Unit = { while (isPaused()) delay(50) },
 ) {
     suspend fun negotiate(): FolderSpanArchiveStreamOptions {
         val sourceCapabilities = (
@@ -82,6 +86,18 @@ internal class SmallFileArchiveTransferCoordinator(
         entries: List<FolderSpanArchiveEntryRequest>,
         destinationRootPath: String,
         onFileBytes: suspend (relativePath: String, bytes: Int) -> Unit = { _, _ -> },
+    ): Result<FolderSpanArchiveTransferResult> {
+        return withOperationTransferControl(ensureRunning) {
+            withDeviceTransferBudgets(sourceClient, targetClient) {
+                transferBatchWithPermits(entries, destinationRootPath, onFileBytes)
+            }
+        }
+    }
+
+    private suspend fun transferBatchWithPermits(
+        entries: List<FolderSpanArchiveEntryRequest>,
+        destinationRootPath: String,
+        onFileBytes: suspend (relativePath: String, bytes: Int) -> Unit,
     ): Result<FolderSpanArchiveTransferResult> {
         val options = try {
             negotiate()

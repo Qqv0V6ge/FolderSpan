@@ -3,10 +3,17 @@ package com.folderspan.service.network
 import strings.AppStrings
 
 import com.folderspan.data.main.network.NetworkProtocol
+import com.folderspan.service.network.nfs.NfsNetworkClient
 
 actual object NetworkClientFactory {
-    actual fun create(network: NetworkConnectionConfig): NetworkClient {
+    actual fun create(network: NetworkConnectionConfig): StorageProvider {
         return when (network.protocol) {
+            NetworkProtocol.Seafile.name -> SeafileNetworkClient(network)
+            NetworkProtocol.Nextcloud.name -> NextcloudNetworkClient(network)
+            NetworkProtocol.Dropbox.name -> DropboxNetworkClient(network)
+            NetworkProtocol.GoogleDrive.name -> GoogleDriveNetworkClient(network)
+            NetworkProtocol.NFS.name -> NfsNetworkClient(network)
+            NetworkProtocol.HttpDirectory.name -> HttpDirectoryNetworkClient(network)
             NetworkProtocol.FTP.name -> FtpNetworkClient(network)
             NetworkProtocol.SFTP.name -> SftpNetworkClient(network)
             NetworkProtocol.SMB.name -> SmbNetworkClient(network)

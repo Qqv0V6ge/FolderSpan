@@ -53,8 +53,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flow
@@ -74,6 +76,40 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DeviceSessionSymmetricControlTest {
+    @Test fun blockedFeedbackDoesNotBlockOtherControlRequestsOnEitherCarrier() = runSuspendTest {
+        for (carrier in TestDeviceSessionCarrier.entries) DeviceSessionPeerTestPair(carrier).use { client, server ->
+            val scope = CoroutineScope(currentCoroutineContext())
+            val activity = MutableStateFlow(0)
+            val blockFeedback = MutableStateFlow(false)
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val limits = HttpTransferStatus(maxParallelRequests = 4, recommendedParallelRequests = 4,
+                maxChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES, recommendedChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES)
+            val clientFeedback = DeviceSessionTransferFeedback(scope, limits, activity, client::rpc)
+            val serverFeedback = DeviceSessionTransferFeedback(scope, limits, server.transferActivity(), server::rpc)
+            client.setRequestHandler { request -> clientFeedback.handle(request)
+                ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_NOT_FOUND) }
+            server.setRequestHandler { request ->
+                if (request.method == DEVICE_SESSION_RPC_TRANSFER_FEEDBACK && blockFeedback.value) {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                serverFeedback.handle(request) ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_OK)
+            }
+            try {
+                assertTrue(clientFeedback.subscribe())
+                withTimeout(2_000) {
+                    while (clientFeedback.current().sampledAtMillis == 0L || serverFeedback.current().sampledAtMillis == 0L) delay(1)
+                }
+                blockFeedback.value = true
+                activity.value = 1
+                withTimeout(2_000) { entered.await() }
+                assertEquals(DEVICE_SESSION_RPC_OK,
+                    withTimeout(1_000) { client.rpc(DEVICE_SESSION_RPC_ROOT_PATHS, byteArrayOf()) }.status)
+            } finally { release.complete(Unit); clientFeedback.close(); serverFeedback.close() }
+        }
+    }
+
     @Test
     fun publicClientBehaviorMatchesContinuousAndWebRtcCarriers() = runSuspendTest {
         TestDeviceSessionCarrier.entries.forEach { carrier ->

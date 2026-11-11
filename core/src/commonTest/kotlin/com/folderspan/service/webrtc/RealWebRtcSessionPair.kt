@@ -122,6 +122,8 @@ internal suspend fun <T> withRealWebRtcDataChannelPair(
                 delay(10L)
             }
             stage = "running DataChannel checks"
+            // The block may close owned peers; setup forwarders must stop before ownership changes.
+            if (blockOwnsConnections) jobs.forEach { it.cancelAndJoin() }
             handedToBlock = true
             block(outgoing, accepted, initiator, responder)
         }

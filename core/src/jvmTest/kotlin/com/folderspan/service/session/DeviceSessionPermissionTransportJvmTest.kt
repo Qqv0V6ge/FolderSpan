@@ -88,6 +88,47 @@ class DeviceSessionPermissionTransportJvmTest {
         verifyPermissionMatrix(PermissionTestCarrier.FakeWebRtcDataChannel)
     }
 
+    @Test fun unsupportedWriteCheckIsOptionalButPermissionDenialsRemainFatal() = runBlocking {
+        for (status in listOf(DEVICE_SESSION_RPC_NOT_FOUND, DEVICE_SESSION_RPC_FORBIDDEN)) {
+            var requests = 0
+            withPermissionSession(PermissionTestCarrier.ContinuousBytes, DeviceSessionRequestHandler { request ->
+                requests++
+                DeviceSessionControlResponse(request.requestId, status, errorMessage = "CheckDirectoryWriteAccess")
+            }) { peer ->
+                val clients = createDeviceSessionClients(peer, com.folderspan.service.operation.HttpTransferStatus.default(),
+                    com.folderspan.service.http.archive.FolderSpanArchiveStreamCapabilities.unsupported())
+                val device = com.folderspan.data.main.device.Device("legacy", "Legacy", "/", mutableMapOf(), DeviceType.JVM, "token", fileClient = clients)
+                try {
+                    repeat(2) {
+                        val access = device.files.checkDirectoryWriteAccess("/home/test")
+                        if (status == DEVICE_SESSION_RPC_NOT_FOUND) {
+                            assertTrue(access.isSuccess)
+                            kotlin.test.assertNull(access.getOrThrow())
+                        } else assertIs<AuthorityException>(access.exceptionOrNull())
+                    }
+                    assertEquals(if (status == DEVICE_SESSION_RPC_NOT_FOUND) 1 else 2, requests)
+                } finally { clients.transferBudget.close() }
+            }
+        }
+    }
+
+    @Test fun supportedWriteCheckKeepsExplicitReadOnlyResultsAndRechecksPermissionChanges() = runBlocking {
+        var writable = false
+        withPermissionSession(PermissionTestCarrier.ContinuousBytes, DeviceSessionRequestHandler { request ->
+            DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_OK,
+                ProtoBufCodec.encode(SerializableResult.success(writable)))
+        }) { peer ->
+            val clients = createDeviceSessionClients(peer, com.folderspan.service.operation.HttpTransferStatus.default(),
+                com.folderspan.service.http.archive.FolderSpanArchiveStreamCapabilities.unsupported())
+            val device = com.folderspan.data.main.device.Device("current", "Current", "/", mutableMapOf(), DeviceType.JVM, "token", fileClient = clients)
+            try {
+                assertEquals(false, device.files.checkDirectoryWriteAccess("/home/test").getOrThrow())
+                writable = true
+                assertEquals(true, device.files.checkDirectoryWriteAccess("/home/test").getOrThrow())
+            } finally { clients.transferBudget.close() }
+        }
+    }
+
     private suspend fun verifyPermissionMatrix(carrier: PermissionTestCarrier) {
         PermissionFixture().use { fixture ->
             assertFalse(

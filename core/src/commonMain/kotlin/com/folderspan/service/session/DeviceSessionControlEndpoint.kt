@@ -12,8 +12,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Clock
 
 internal enum class DeviceSessionEndpointRole(
     val firstRequestId: Int,
@@ -55,12 +59,25 @@ internal class DeviceSessionControlEndpoint(
     private var nextRequestId = role.firstRequestId
     private var handler = requestHandler
     private var closed = false
+    private val activeTransfers = MutableStateFlow(0)
+    val activeTransferRequests: StateFlow<Int> get() = activeTransfers
+
+    private suspend inline fun <T> withTransferActivity(method: String, block: () -> T): T {
+        val transfer = isDeviceSessionTransferRpc(method)
+        if (transfer) activeTransfers.update { it + 1 }
+        try { return block() }
+        finally { if (transfer) activeTransfers.update { (it - 1).coerceAtLeast(0) } }
+    }
 
     suspend fun setRequestHandler(requestHandler: DeviceSessionRequestHandler?) {
         mutex.withLock { handler = requestHandler }
     }
 
-    suspend fun rpc(method: String, payload: ByteArray): DeviceSessionControlResponse {
+    suspend fun rpc(method: String, payload: ByteArray): DeviceSessionControlResponse = withTransferActivity(method) {
+        requestRpc(method, payload)
+    }
+
+    private suspend fun requestRpc(method: String, payload: ByteArray): DeviceSessionControlResponse {
         val waiter = CompletableDeferred<DeviceSessionControlResponse>()
         val requestId = mutex.withLock {
             ensureOpenLocked()
@@ -80,13 +97,18 @@ internal class DeviceSessionControlEndpoint(
         }
     }
 
-    suspend fun handle(payload: ByteArray) {
+    suspend fun handle(payload: ByteArray) = handle(payload, null)
+
+    suspend fun handle(payload: ByteArray, receivedAtMillis: Long?) {
         when (val decoded = DeviceSessionProtocol.decodeControlMessage(payload)) {
             is DeviceSessionControlResponse -> {
                 val waiter = mutex.withLock { pending.remove(decoded.requestId) }
                 waiter?.complete(decoded)
             }
-            is DeviceSessionControlRequest -> dispatchRequest(decoded)
+            is DeviceSessionControlRequest -> {
+                decoded.receivedAtMillis = receivedAtMillis ?: Clock.System.now().toEpochMilliseconds()
+                dispatchRequest(decoded)
+            }
         }
     }
 
@@ -113,7 +135,7 @@ internal class DeviceSessionControlEndpoint(
                 handler
             }
         }
-        val job = scope.launch {
+        val job = scope.launch { withTransferActivity(request.method) {
             val response = if (requestHandler == null) {
                 DeviceSessionControlResponse(
                     requestId = request.requestId,
@@ -137,7 +159,7 @@ internal class DeviceSessionControlEndpoint(
                 connection.sendControl(DeviceSessionProtocol.encodeControlResponse(response))
             }
             if (sent.isSuccess) onResponseSent(request, response)
-        }
+        } }
         mutex.withLock {
             if (closed) {
                 job.cancel()

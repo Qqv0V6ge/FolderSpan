@@ -74,7 +74,11 @@ class WebUiPlatformSession(
     }
 
     internal suspend fun emitBytes(handle: String, type: String, bytes: ByteArray) {
-        publish(handle, type, "", null, bytes)
+        emitBytes(handle, type, bytes, "")
+    }
+
+    internal suspend fun emitBytes(handle: String, type: String, bytes: ByteArray, data: String) {
+        publish(handle, type, data, null, bytes)
     }
 
     suspend fun <T> runOperation(block: suspend () -> T): T {

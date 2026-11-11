@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import platform.CoreFoundation.*
 import platform.Foundation.*
@@ -68,9 +69,10 @@ import platform.curl.curl_slist_append
 import platform.curl.curl_slist_free_all
 import platform.posix.*
 import kotlin.text.equals
+import kotlin.time.Instant
 import kotlin.time.Clock
 
-internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : NetworkClient {
+internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : StorageProvider {
     override suspend fun list(
         path: String,
         requestId: String?,
@@ -220,6 +222,14 @@ internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : 
             ),
             unsupportedReplyCodes = setOf(202L, 500L, 502L, 504L),
         )
+    }
+
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> {
+        if (millis <= 0 || '\r' in path || '\n' in path) return Result.failure(IllegalArgumentException("Invalid modification time or path"))
+        val date = Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC)
+        val timestamp = listOf(date.year.toString().padStart(4, '0'), date.month.number, date.day,
+            date.hour, date.minute, date.second).joinToString("") { it.toString().padStart(2, '0') }
+        return performQuote(listOf("MFMT $timestamp ${normalizePath(path)}"), unsupportedReplyCodes = setOf(202L, 500L, 502L, 504L))
     }
 
     override suspend fun rename(path: String, newPath: String): Result<Boolean> {

@@ -12,17 +12,18 @@ actual fun getNetworkInterfacesInfo(): List<NetworkInterfaceInfo> {
         val isLoopback = runCatching { nif.isLoopback }.getOrDefault(false)
 
         val ips = mutableListOf<IpAddressInfo>()
-        nif.interfaceAddresses.forEach { interfaceAddress ->
+        for (interfaceAddress in nif.interfaceAddresses) {
+            val hostAddress = interfaceAddress.address?.hostAddress ?: continue
             when (val inetAddress = interfaceAddress.address) {
                 is Inet4Address -> ips.add(
                     IpAddressInfo(
-                        inetAddress.hostAddress,
+                        hostAddress,
                         isIPv6 = false,
                         prefixLength = interfaceAddress.networkPrefixLength.toInt(),
                     ),
                 )
                 is Inet6Address -> {
-                    val pure = inetAddress.hostAddress.replace("%.*$".toRegex(), "")
+                    val pure = hostAddress.replace("%.*$".toRegex(), "")
                     ips.add(IpAddressInfo(pure, isIPv6 = true, prefixLength = interfaceAddress.networkPrefixLength.toInt()))
                 }
             }

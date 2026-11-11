@@ -1,4 +1,16 @@
 import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.Optional
+import org.gradle.process.ExecOperations
+import org.gradle.api.file.FileSystemOperations
+import java.io.ByteArrayOutputStream
+import javax.inject.Inject
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
@@ -11,6 +23,90 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+abstract class PrepareMacStoreNatives : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val runtimeJars: ConfigurableFileCollection
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val script: RegularFileProperty
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val folderAccessSource: RegularFileProperty
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val compatibilityClasses: DirectoryProperty
+    @get:Input
+    abstract val architecture: Property<String>
+    @get:OutputDirectory
+    abstract val resourceDirectory: DirectoryProperty
+    @get:OutputDirectory
+    abstract val patchedRuntimeDirectory: DirectoryProperty
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @TaskAction
+    fun prepare() {
+        val arch = architecture.get()
+        execOperations.exec {
+            commandLine(listOf("python3", script.get().asFile.absolutePath,
+                resourceDirectory.get().dir("macos-$arch/native").asFile.absolutePath,
+                if (arch == "arm64") "arm64" else "x86_64", folderAccessSource.get().asFile.absolutePath,
+                compatibilityClasses.get().asFile.absolutePath, patchedRuntimeDirectory.get().asFile.absolutePath) +
+                runtimeJars.files.map { it.absolutePath }.sorted())
+        }
+    }
+}
+
+abstract class FinalizeMacStoreImage : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceApp: DirectoryProperty
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val privacyManifest: RegularFileProperty
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val entitlements: RegularFileProperty
+    @get:Input
+    abstract val requireDistributionSignature: Property<Boolean>
+    @get:Input
+    @get:Optional
+    abstract val signingKeychain: Property<String>
+    @get:OutputDirectory
+    abstract val appDirectory: DirectoryProperty
+    @get:Inject
+    abstract val execOperations: ExecOperations
+    @get:Inject
+    abstract val fileOperations: FileSystemOperations
+
+    @TaskAction
+    fun finalizeImage() {
+        val source = sourceApp.get().asFile
+        val destination = appDirectory.get().asFile
+        fileOperations.delete { delete(destination) }
+        execOperations.exec { commandLine("/usr/bin/ditto", source.absolutePath, destination.absolutePath) }
+        val resources = destination.resolve("Contents/Resources").apply { mkdirs() }
+        privacyManifest.get().asFile.copyTo(resources.resolve("PrivacyInfo.xcprivacy"), overwrite = true)
+        val signature = ByteArrayOutputStream()
+        execOperations.exec {
+            commandLine("/usr/bin/codesign", "--display", "--verbose=2", source.absolutePath)
+            errorOutput = signature
+            standardOutput = ByteArrayOutputStream()
+        }
+        val authority = signature.toString().lineSequence().firstOrNull { it.startsWith("Authority=") }?.substringAfter('=')
+        check(!requireDistributionSignature.get() || authority != null) { "Missing Mac App Distribution signature" }
+        execOperations.exec {
+            commandLine(listOf("/usr/bin/codesign", "--force", "--sign", authority ?: "-", "--options", "runtime",
+                "--entitlements", entitlements.get().asFile.absolutePath) +
+                (signingKeychain.orNull?.let { listOf("--keychain", it) } ?: emptyList()) + destination.absolutePath)
+        }
+        execOperations.exec {
+            commandLine("/usr/bin/codesign", "--verify", "--deep", "--strict", destination.absolutePath)
+        }
+    }
+}
+
 val desktopPackageName = "com.folderspan"
 val desktopAppName = "FolderSpan"
 val desktopPackageVersion = providers.gradleProperty("releaseVersion")
@@ -19,6 +115,31 @@ val desktopPackageVersion = providers.gradleProperty("releaseVersion")
     .get()
 val desktopPackageDescription = "FolderSpan"
 val desktopPackageVendor = "FolderSpan"
+val macAppStoreEnabled = providers.gradleProperty("macAppStore")
+    .map(String::toBooleanStrict).orElse(false).get()
+val macAppStoreResources = layout.buildDirectory.dir("generated/mac-appstore-resources")
+val macAppStoreRuntime = layout.buildDirectory.dir("generated/mac-appstore-runtime")
+val macNativeArch = if (System.getProperty("os.arch").lowercase() in setOf("aarch64", "arm64")) "arm64" else "x64"
+val macStoreClasspath = files(configurations.named("runtimeClasspath"))
+val macNativeScript = layout.projectDirectory.file("scripts/prepare-mac-app-store-native-libraries.py").asFile
+val macFolderAccessSource = layout.projectDirectory.file("src/main/native/macos/FolderAccess.m").asFile
+val compileMacAppStoreLoaders = tasks.register<JavaCompile>("compileMacAppStoreLoaders") {
+    enabled = macAppStoreEnabled
+    source(fileTree("src/macAppStoreCompat/java") { include("**/*.java") })
+    classpath = files()
+    destinationDirectory.set(layout.buildDirectory.dir("classes/mac-appstore-compat"))
+    options.release.set(11)
+}
+val prepareMacAppStoreNativeLibraries = tasks.register<PrepareMacStoreNatives>("prepareMacAppStoreNativeLibraries") {
+    enabled = macAppStoreEnabled
+    runtimeJars.from(macStoreClasspath)
+    script.set(macNativeScript)
+    folderAccessSource.set(macFolderAccessSource)
+    compatibilityClasses.set(compileMacAppStoreLoaders.flatMap { it.destinationDirectory })
+    architecture.set(macNativeArch)
+    resourceDirectory.set(macAppStoreResources)
+    patchedRuntimeDirectory.set(macAppStoreRuntime)
+}
 
 require(Regex("""\d+\.\d+\.\d+""").matches(desktopPackageVersion)) {
     "releaseVersion must use MAJOR.MINOR.PATCH format, but was '$desktopPackageVersion'."
@@ -111,11 +232,28 @@ compose.desktop {
         desktopJavaHome?.let { item -> javaHome = item }
         jvmArgs += "--enable-native-access=ALL-UNNAMED"
         jvmArgs += desktopNoProxyJvmArgs
+        if (macAppStoreEnabled) {
+            disableDefaultConfiguration()
+            fromFiles(macStoreClasspath.filter { it.name !in setOf("webrtc-java-0.20.0.jar", "zstd-kmp-jvm-0.4.0.jar") },
+                macAppStoreRuntime.map { it.asFileTree.matching { include("*.jar") } })
+            mainJar.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
+            fromFiles(tasks.named<Jar>("jar").flatMap { it.archiveFile })
+            dependsOn("jar")
+            dependsOn(prepareMacAppStoreNativeLibraries.name)
+            jvmArgs += listOf(
+                "-Dfolderspan.macAppStore=true",
+                "-Djava.library.path=\$APPDIR/resources/native",
+                "-Djna.boot.library.path=\$APPDIR/resources/native",
+                "-Djna.nounpack=true",
+                "-Dskiko.library.path=\$APPDIR/resources/native",
+                "-Dorg.sqlite.lib.path=\$APPDIR/resources/native",
+            )
+        }
 
         nativeDistributions {
             val hostOs = System.getProperty("os.name").lowercase()
             val hostFormats = when {
-                hostOs.contains("mac") -> listOf(TargetFormat.Dmg, TargetFormat.Pkg)
+                hostOs.contains("mac") -> if (macAppStoreEnabled) listOf(TargetFormat.Pkg) else listOf(TargetFormat.Dmg, TargetFormat.Pkg)
                 hostOs.contains("win") -> listOf(TargetFormat.Msi, TargetFormat.Exe)
                 else -> listOf(TargetFormat.AppImage, TargetFormat.Deb, TargetFormat.Rpm)
             }
@@ -128,7 +266,11 @@ compose.desktop {
                 licenseFile.set(rootProject.file("LICENSE"))
                 appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
             }
-            modules("java.sql")
+            if (macAppStoreEnabled) {
+                appResourcesRootDir.set(prepareMacAppStoreNativeLibraries.flatMap { it.resourceDirectory })
+                outputBaseDir.set(layout.buildDirectory.dir("compose/appstore"))
+            }
+            modules("java.sql", "java.net.http")
 
             linux {
                 iconFile.set(packagingResourcesDir.file("icon-512.png"))
@@ -149,7 +291,21 @@ compose.desktop {
             macOS {
                 iconFile.set(packagingResourcesDir.file("icon.icns"))
                 installationPath = "/Applications"
-                bundleID = desktopPackageName
+                bundleID = if (macAppStoreEnabled) "com.folderspan.FolderSpan" else desktopPackageName
+                appStore = macAppStoreEnabled
+                if (macAppStoreEnabled) {
+                    minimumSystemVersion = "12.0"
+                    packageVersion = providers.gradleProperty("macAppStoreVersion").orElse("1.0").get()
+                    packageBuildVersion = providers.gradleProperty("macAppStoreBuild").orElse("2").get()
+                    entitlementsFile.set(packagingResourcesDir.file("appstore-entitlements.plist"))
+                    runtimeEntitlementsFile.set(packagingResourcesDir.file("appstore-runtime-entitlements.plist"))
+                    providers.gradleProperty("macAppStoreProvisioningProfile").orNull?.let {
+                        provisioningProfile.set(file(it))
+                    }
+                    providers.gradleProperty("macAppStoreRuntimeProvisioningProfile").orNull?.let {
+                        runtimeProvisioningProfile.set(file(it))
+                    }
+                }
                 appCategory = "public.app-category.utilities"
                 infoPlist {
                     extraKeysRawXml = macPermissionUsagePlist
@@ -185,6 +341,24 @@ compose.desktop {
     }
 }
 
+if (macAppStoreEnabled) {
+    val finalizeMacAppStoreImage = tasks.register<FinalizeMacStoreImage>("finalizeMacAppStoreImage") {
+        dependsOn("createDistributable")
+        sourceApp.set(layout.buildDirectory.dir("compose/appstore/main/app/FolderSpan.app"))
+        privacyManifest.set(packagingResourcesDir.file("appstore-privacy.xcprivacy"))
+        entitlements.set(packagingResourcesDir.file("appstore-entitlements.plist"))
+        requireDistributionSignature.set(providers.gradleProperty("compose.desktop.mac.sign").map(String::toBoolean).orElse(false))
+        signingKeychain.set(providers.gradleProperty("compose.desktop.mac.signing.keychain"))
+        appDirectory.set(layout.buildDirectory.dir("compose/appstore/store-ready/FolderSpan.app"))
+    }
+    afterEvaluate {
+        tasks.named<AbstractJPackageTask>("packagePkg") {
+            dependsOn(finalizeMacAppStoreImage)
+            appImage.set(layout.buildDirectory.dir("compose/appstore/store-ready"))
+        }
+    }
+}
+
 fun registerTarGzTask(
     taskName: String,
     appImageTaskName: String,
@@ -199,6 +373,8 @@ fun registerTarGzTask(
     tasks.register<Tar>(taskName) {
         dependsOn(appImageTaskName)
         from(appImageDirectory)
+        // Gradle 9 defaults archive files to 0644, which makes the launcher unusable.
+        useFileSystemPermissions()
         archiveBaseName.set(desktopPackageName)
         archiveVersion.set(desktopPackageVersion)
         archiveExtension.set("tar.gz")
@@ -243,7 +419,7 @@ fun registerGuidedDmgTask(taskName: String, distributableTaskName: String, binar
     }
 }
 
-if (System.getProperty("os.name").lowercase().contains("mac")) {
+if (System.getProperty("os.name").lowercase().contains("mac") && !macAppStoreEnabled) {
     registerGuidedDmgTask("packageGuidedDmg", "createDistributable", "main")
     registerGuidedDmgTask("packageReleaseGuidedDmg", "createReleaseDistributable", "main-release")
     // Keep existing local/CI commands and Compose's notarization input directory.

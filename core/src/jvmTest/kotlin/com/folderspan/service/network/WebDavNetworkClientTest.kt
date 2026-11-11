@@ -28,6 +28,21 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class WebDavNetworkClientTest {
+    @Test fun moveIsCrossDirectoryAndUsesServerSideNoOverwrite(): Unit = runBlocking {
+        val network = Network("WebDAV", "/", "WebDAV", "https://example.test", "", "")
+        var exists = false
+        HttpClient(MockEngine { request ->
+            assertEquals(HttpMethod("MOVE"), request.method)
+            assertEquals("F", request.headers["Overwrite"])
+            assertTrue(request.headers[HttpHeaders.Destination]!!.endsWith("/archive/report.txt"))
+            respond("", if (exists) HttpStatusCode.PreconditionFailed else HttpStatusCode.Created)
+        }).use { http ->
+            val client = WebDavNetworkClient(network.connectionConfig(), http)
+            assertTrue(client.move(StoragePath("/docs/report.txt"), StoragePath("/archive/report.txt")).getOrThrow())
+            exists = true
+            assertTrue(client.move(StoragePath("/docs/report.txt"), StoragePath("/archive/report.txt")).isFailure)
+        }
+    }
     @Test
     fun copyFileUsesWebDavCopyWithoutDownloadOrUploadFallback() = runBlocking {
         val requests = mutableListOf<HttpRequestData>()

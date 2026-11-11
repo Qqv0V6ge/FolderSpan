@@ -1,6 +1,8 @@
 package com.folderspan.ui.thumbnail
 
 import androidx.compose.ui.graphics.ImageBitmap
+import com.folderspan.PlatformType
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.editor.FileEditorContentSource
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertNotNull
@@ -96,17 +99,30 @@ class FileThumbnailLoaderTest {
     }
 
     @Test
-    fun removesNativeStagingFileAfterDecode() = runTest {
+    fun usesPlatformSourceAndCleansUpAfterDecode() = runTest {
         var stagedPath: String? = null
+        var decoded = false
         val loader = testLoader { source, _ ->
-            stagedPath = source.localPath
-            assertTrue(FileUtils.getFile(FileAccessPermission.Allowed, source.localPath!!).isSuccess)
+            if (PlatformType == DeviceType.JS) {
+                assertNull(source.localPath)
+                assertContentEquals(byteArrayOf(1, 2, 3), source.bytes)
+            } else {
+                stagedPath = source.localPath
+                assertTrue(FileUtils.getFile(FileAccessPermission.Allowed, source.localPath!!).isSuccess)
+            }
+            decoded = true
             ImageBitmap(16, 16)
         }
 
-        assertNotNull(loader.load(imageFile(FileProtocol.Device), 40))
-        assertTrue(FileUtils.getFile(FileAccessPermission.Allowed, stagedPath!!).isFailure)
-        loader.close()
+        try {
+            assertNotNull(loader.load(imageFile(FileProtocol.Device), 40))
+            assertTrue(decoded)
+            stagedPath?.let { path ->
+                assertTrue(FileUtils.getFile(FileAccessPermission.Allowed, path).isFailure)
+            }
+        } finally {
+            loader.close()
+        }
     }
 }
 

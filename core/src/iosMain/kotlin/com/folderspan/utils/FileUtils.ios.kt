@@ -154,6 +154,81 @@ internal actual object NativeFileUtils {
         }
     }
 
+    actual fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        if (path.split('/').any { it == "." || it == ".." }) return Result.failure(IllegalArgumentException("Invalid directory path"))
+        val normalized = normalizePathForSecurityBoundary(path, "/")
+            ?.takeIf { it != "/" } ?: return Result.failure(IllegalArgumentException("Invalid directory path"))
+        return IosSecurityScopeStore.withSecurityScopeIfNeeded(normalized) {
+            var current = ""
+            for (component in normalized.split('/').filter { it.isNotEmpty() }) {
+                current += "/$component"
+                if (current != "/var" && NativePathUtils.isSymbolicLink(permission, current)) {
+                    return@withSecurityScopeIfNeeded symbolicLinkAccessFailure()
+                }
+            }
+            if (NativePathUtils.isSymbolicLink(permission, normalized)) return@withSecurityScopeIfNeeded symbolicLinkAccessFailure()
+            if (platform.posix.rmdir(normalized) == 0) Result.success(true)
+            else Result.failure(posixFileException("Cannot delete empty directory"))
+        }
+    }
+
+    actual fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        if (listOf(from, to).any { path -> path.split('/').any { it == "." || it == ".." } }) {
+            return Result.failure(IllegalArgumentException("Invalid move path"))
+        }
+        val source = normalizePathForSecurityBoundary(from, "/")
+            ?: return Result.failure(IllegalArgumentException("Invalid source path"))
+        val target = normalizePathForSecurityBoundary(to, "/")
+            ?: return Result.failure(IllegalArgumentException("Invalid target path"))
+        if (source == target || target.startsWith(source.trimEnd('/') + "/")) {
+            return Result.failure(IllegalArgumentException("Invalid move destination"))
+        }
+        return IosSecurityScopeStore.withSecurityScopeIfNeeded(source) {
+            IosSecurityScopeStore.withSecurityScopeIfNeeded(target) targetScope@{
+                for (path in listOf(source, target)) {
+                    var current = ""
+                    for (component in path.split('/').filter { it.isNotEmpty() }) {
+                        current += "/$component"
+                        // Darwin's system /var alias is part of normal sandbox paths.
+                        if (current == "/var") continue
+                        if (NativePathUtils.isSymbolicLink(permission, current)) return@targetScope symbolicLinkAccessFailure()
+                    }
+                }
+                if (NativePathUtils.isSymbolicLink(permission, source) || NativePathUtils.isSymbolicLink(permission, target)) {
+                    return@targetScope symbolicLinkAccessFailure()
+                }
+                if (!pathExistsNoFollow(permission, source) || pathExistsNoFollow(permission, target)) {
+                    return@targetScope Result.failure(IllegalStateException("Source missing or target already exists"))
+                }
+                memScoped {
+                    val error = alloc<ObjCObjectVar<NSError?>>()
+                    if (fileManager.moveItemAtPath(source, target, error.ptr)) Result.success(true)
+                    else Result.failure(Exception(error.value?.localizedDescription ?: "Move failed"))
+                }
+            }
+        }
+    }
+
+    actual fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return IosSecurityScopeStore.withSecurityScopeIfNeeded(path) {
+            if (NativePathUtils.isSymbolicLink(permission, path)) return@withSecurityScopeIfNeeded symbolicLinkAccessFailure()
+            runCatching {
+                require(millis > 0) { "Invalid modification time" }
+                memScoped {
+                    val error = alloc<ObjCObjectVar<NSError?>>()
+                    check(fileManager.setAttributes(
+                        mapOf(NSFileModificationDate to NSDate.dateWithTimeIntervalSince1970(millis / 1000.0)),
+                        ofItemAtPath = path, error = error.ptr,
+                    )) { error.value?.localizedDescription ?: "Cannot set modification time" }
+                    true
+                }
+            }
+        }
+    }
+
     actual fun rename(
         permission: FileAccessPermission,
         path: String,

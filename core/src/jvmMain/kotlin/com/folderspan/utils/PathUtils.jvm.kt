@@ -155,6 +155,14 @@ internal actual object NativePathUtils {
         return try {
             val rootCandidates = linkedMapOf<String, FileStoreInfo>()
 
+            if (MacAppStoreAccess.isEnabled) {
+                val paths = (listOf(getHomePath()) + MacAppStoreAccess.accessibleDirectories()).distinct()
+                return Result.success(paths.map { path ->
+                    val file = File(path)
+                    PathInfo(path, file.totalSpace, file.freeSpace)
+                })
+            }
+
             File.listRoots()?.forEach { item ->  item.tryAddAsRoot(rootCandidates) }
 
             discoverMountedRoots().forEach { item ->  item.tryAddAsRoot(rootCandidates) }

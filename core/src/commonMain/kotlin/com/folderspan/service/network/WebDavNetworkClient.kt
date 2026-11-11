@@ -26,7 +26,7 @@ private const val WEBDAV_CHUNK_SIZE = 1024L * 1024L
 internal class WebDavNetworkClient(
     private val network: NetworkConnectionConfig,
     overrideClient: HttpClient? = null,
-) : NetworkClient, ChunkReadableNetworkClient {
+) : StorageProvider, ChunkReadableNetworkClient {
     private val extras = network.extras.webdav
     private val hasCustomAuthorization = extras.headers.keys.any { key ->
         key.trim().equals(HttpHeaders.Authorization, ignoreCase = true)
@@ -330,9 +330,17 @@ internal class WebDavNetworkClient(
         }
     }
 
-    override suspend fun rename(path: String, newPath: String): Result<Boolean> {
+    override suspend fun rename(path: String, newPath: String): Result<Boolean> = movePath(path, newPath, overwrite = true)
+
+    override suspend fun move(from: StoragePath, to: StoragePath): Result<Boolean> = movePath(from.path, to.path, overwrite = false)
+
+    private suspend fun movePath(path: String, newPath: String, overwrite: Boolean): Result<Boolean> {
         val sourcePath = normalizeRemotePath(path)
         val destPath = normalizeRemotePath(newPath)
+        if (!overwrite && (containsUnsafeNetworkPathSegment(path) || containsUnsafeNetworkPathSegment(newPath) ||
+                sourcePath == "/" || sourcePath == destPath || destPath.startsWith(sourcePath.trimEnd('/') + "/"))) {
+            return Result.failure(IllegalArgumentException("Invalid move destination"))
+        }
         LogKit.i(AppStrings.ui_webdav_rename_start_arg0_arg1.format(arg0 = (sourcePath), arg1 = (destPath)))
         val baseUrlValue = baseUrlParsed ?: return Result.failure(IllegalArgumentException(AppStrings.ui_link_address_invalid))
         return try {
@@ -340,7 +348,7 @@ internal class WebDavNetworkClient(
                 method = HttpMethod("MOVE")
                 url(buildUrl(baseUrlValue, sourcePath))
                 headers.append(HttpHeaders.Destination, buildUrl(baseUrlValue, destPath))
-                headers.append("Overwrite", "T")
+                headers.append("Overwrite", if (overwrite) "T" else "F")
                 applyWebDavHeaders(this)
             }
             if (!response.status.isSuccess()) {
@@ -492,7 +500,12 @@ internal class WebDavNetworkClient(
         return if (encoded.startsWith("/")) encoded else "/$encoded"
     }
 
-    private fun parsePropfindResponse(xml: String, requestedPath: String): List<NetworkFileEntry> {
+    internal fun parsePropfindResponse(
+        xml: String, requestedPath: String, includeNextcloudIds: Boolean = false,
+    ): List<NetworkFileEntry> {
+        if (includeNextcloudIds) require(!xml.contains("<!DOCTYPE", true) && !xml.contains("<!ENTITY", true)) {
+            "Invalid Nextcloud XML"
+        }
         val responses = RESPONSE_REGEX.findAll(xml)
         val items = mutableListOf<NetworkFileEntry>()
         val requestedComparable = normalizeComparablePath(requestedPath)
@@ -518,7 +531,18 @@ internal class WebDavNetworkClient(
             val isDirectory = COLLECTION_REGEX.containsMatchIn(block) || hrefPath.endsWith("/")
             val size = extractTagValue(block, "getcontentlength")?.trim()?.toLongOrNull() ?: 0L
             val createdDate = parseInstant(extractTagValue(block, "creationdate"))
-            val updatedDate = parseInstant(extractTagValue(block, "getlastmodified"))
+            val updatedDate = if (includeNextcloudIds) {
+                runCatching { extractTagValue(block, "getlastmodified")?.fromHttpToGmtDate()?.timestamp ?: 0L }
+                    .getOrDefault(0L)
+            } else parseInstant(extractTagValue(block, "getlastmodified"))
+            val reference = if (includeNextcloudIds) {
+                val properties = Regex("(?is)<(?:\\w+:)?propstat\\b[^>]*>(.*?)</(?:\\w+:)?propstat>")
+                    .findAll(block).map { it.groupValues[1] }
+                    .filter { extractTagValue(it, "status")?.contains(" 200 ") == true }.joinToString("")
+                val id = extractTagValue(properties, "fileid").orEmpty()
+                require(id.matches(Regex("[0-9]+"))) { "Nextcloud directory entry has no stable file ID" }
+                StorageReference(id)
+            } else null
             val displayPath = toDisplayPath(normalizedPath)
 
             items += NetworkFileEntry(
@@ -528,7 +552,8 @@ internal class WebDavNetworkClient(
                 size = if (isDirectory) -1 else size,
                 createdDate = if(isDirectory) -1 else createdDate,
                 updatedDate = if (isDirectory) -1 else updatedDate,
-                isHidden = name.startsWith(".")
+                isHidden = name.startsWith("."),
+                reference = reference,
             )
         }
         return items

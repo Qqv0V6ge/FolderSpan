@@ -42,7 +42,7 @@ import platform.smb2.smb2_set_user
 import platform.smb2.smb2_unlink
 import platform.smb2.smb2_write
 
-internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : NetworkClient {
+internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : StorageProvider {
     override suspend fun list(
         path: String,
         requestId: String?,

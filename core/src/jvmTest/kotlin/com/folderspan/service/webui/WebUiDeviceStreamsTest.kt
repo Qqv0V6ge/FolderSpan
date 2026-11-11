@@ -11,6 +11,7 @@ import com.russhwolf.settings.MapSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -21,6 +22,68 @@ import java.nio.file.Path
 import kotlin.test.*
 
 class WebUiDeviceStreamsTest {
+    @Test fun cachedFeedbackEventsKeepTheirOriginalReceiptAcrossTheHostBridge(): Unit = runBlocking {
+        withStreams { pair ->
+            val captured = CompletableDeferred<Unit>()
+            val staleProcessed = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var delayed = false
+            pair.bridge.beforeEvent = { event ->
+                if (!delayed && event.type == "device-frames" && DeviceSessionFrames.decodeAll(event.bytes).any { frame ->
+                    frame.type == DeviceSessionFrameType.Data && frame.streamId == 0 &&
+                        DeviceSessionControlAssembler().push(frame.payload).any { payload ->
+                            (DeviceSessionProtocol.decodeControlMessage(payload) as? DeviceSessionControlRequest)?.method == DEVICE_SESSION_RPC_TRANSFER_FEEDBACK
+                        }
+                }) {
+                    delayed = true
+                    captured.complete(Unit)
+                    release.await()
+                }
+            }
+            withTimeout(2_000) { while (!pair.browser.connection.supportsFeedbackTiming) delay(1) }
+            val activity = MutableStateFlow(0)
+            val limits = HttpTransferStatus(maxParallelRequests = 4, recommendedParallelRequests = 4,
+                maxChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES, recommendedChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES)
+            val browserFeedback = DeviceSessionTransferFeedback(pair.scope, limits, MutableStateFlow(0), pair.browser::rpc)
+            val nativeFeedback = DeviceSessionTransferFeedback(pair.scope, limits, activity, pair.native::rpc)
+            pair.browser.setRequestHandler { request ->
+                val response = browserFeedback.handle(request)
+                    ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_NOT_FOUND)
+                if (request.method == DEVICE_SESSION_RPC_TRANSFER_FEEDBACK) staleProcessed.complete(Unit)
+                response
+            }
+            pair.native.setRequestHandler { request -> nativeFeedback.handle(request)
+                ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_NOT_FOUND) }
+            val subscription = pair.scope.async { browserFeedback.subscribe() }
+            try {
+                withTimeout(2_000) { captured.await() }
+                delay(5_100)
+                release.complete(Unit)
+                assertTrue(withTimeout(2_000) { subscription.await() })
+                withTimeout(2_000) { staleProcessed.await() }
+                assertEquals(0L, browserFeedback.current().sampledAtMillis)
+                activity.value = 1
+                withTimeout(2_000) { while (browserFeedback.current().sampledAtMillis == 0L) delay(1) }
+                assertTrue(browserFeedback.current().sampledAtMillis > 0)
+            } finally {
+                release.complete(Unit)
+                subscription.cancelAndJoin()
+                browserFeedback.close(); nativeFeedback.close()
+            }
+        }
+    }
+
+    @Test fun legacyHostKeepsBooleanOpenResponseAndDoesNotClaimReceiptTiming(): Unit = runBlocking {
+        withStreams(stripTimingHeaders = true) { pair ->
+            assertFalse(pair.browser.connection.supportsFeedbackTiming)
+            val contents = byteArrayOf(1, 2, 3)
+            pair.browser.openWriteStream(path = "/legacy-timing.bin", fileSize = contents.size.toLong(), startOffset = 0,
+                data = flow { emit(contents) })
+            assertContentEquals(contents, pair.remoteFiles.getValue("/legacy-timing.bin"))
+            assertFalse(pair.browser.connection.supportsFeedbackTiming)
+        }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun startWaitsForOpenToBeQueuedBeforeBrowserDataWithoutWaitingForPeerAck() = runTest {
@@ -480,9 +543,10 @@ class WebUiDeviceStreamsTest {
         }
     }
 
-    private suspend fun withStreams(block: suspend (StreamPair) -> Unit) = coroutineScope {
+    private suspend fun withStreams(stripTimingHeaders: Boolean = false, block: suspend (StreamPair) -> Unit) = coroutineScope {
         SettingsUtils.init(MapSettings())
         val pair = StreamPair(this)
+        pair.stripTimingHeaders = stripTimingHeaders
         try { pair.start(); block(pair) } finally { pair.close() }
     }
 
@@ -522,6 +586,7 @@ private class StreamPair(val scope: CoroutineScope, val session: WebUiPlatformSe
     val root: Path = Files.createTempDirectory("host-device-streams").toRealPath()
     val remoteFiles = mutableMapOf<String, ByteArray>()
     var readDelay = 0L
+    var stripTimingHeaders = false
     var forcedCallbackId: String? = null
     var lastTransfer: String? = null
     var managementBytes = 0
@@ -557,7 +622,9 @@ private class StreamPair(val scope: CoroutineScope, val session: WebUiPlatformSe
             managementBytes += (body?.size ?: 0) + bytes.size
             if (method == "GET" && path.contains("operation=body")) managementFileBytes += bytes.size
             if (method == "POST" && path.contains("operation=transfer")) lastTransfer = WebUiPlatformClient.json.decodeFromString<WebUiHandle>(bytes.decodeToString()).id
-            WebUiHttpExchange(response.statusCode, response.headers.associate { it.name to it.value }, bytes)
+            val headers = response.headers.filterNot { stripTimingHeaders &&
+                (it.name == WEB_UI_DEVICE_FEEDBACK_TIMING_HEADER || it.name == WEB_UI_DEVICE_HOST_TIME_HEADER) }
+            WebUiHttpExchange(response.statusCode, headers.associate { it.name to it.value }, bytes)
         }, subscribe = bridge::register, unsubscribe = bridge::unregister)
         val browserChannel = object : DeviceSessionPlatformChannel {
             override fun frameTransport(sendPlan: DeviceSessionWindowPlan, receivePlan: DeviceSessionWindowPlan, isClient: Boolean, onPing: (suspend (ByteArray) -> Unit)?) = proxy
@@ -652,6 +719,7 @@ private class StreamTestChannel(private val input: Channel<ByteArray>, private v
 }
 
 private class StreamEventBridge(scope: CoroutineScope, private val session: WebUiPlatformSession) {
+    var beforeEvent: suspend (WebUiPlatformEvent) -> Unit = {}
     val unclaimed = Channel<WebUiPlatformEvent>(32)
     private val callbacks = java.util.concurrent.ConcurrentHashMap<String, Channel<WebUiPlatformEvent>>()
     private val workers = java.util.concurrent.ConcurrentHashMap<String, Job>()
@@ -672,6 +740,7 @@ private class StreamEventBridge(scope: CoroutineScope, private val session: WebU
             try {
                 for (event in queue) {
                     try {
+                        beforeEvent(event)
                         val reply = listener(event)
                         if (event.requiresReply) session.reply(event.id, reply)
                     } catch (failure: Exception) {

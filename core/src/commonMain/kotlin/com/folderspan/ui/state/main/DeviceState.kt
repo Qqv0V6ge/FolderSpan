@@ -46,6 +46,7 @@ import com.folderspan.service.file.DeviceFileCopyService
 import com.folderspan.service.file.DeviceFileService
 import com.folderspan.service.http.client.*
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.CONNECT_TIMEOUT
+import com.folderspan.service.http.getNetworkInterfacesInfo
 import com.folderspan.service.http.server.SocketClientIPEnum
 import com.folderspan.service.http.server.getAllIPAddresses
 import com.folderspan.service.http.server.getLocalIpv4Set
@@ -573,9 +574,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             }
         },
         onStale = ::handleStaleHttpDevices,
-        getNetworkSignature = {
-            getAllIPAddresses(SocketClientIPEnum.IPV4_UP).toSet()
-        },
+        getNetworkSignature = { localNetworkSignature(getNetworkInterfacesInfo()) },
         onNetworkChanged = ::handleLocalNetworkChanged,
     )
 
@@ -583,7 +582,11 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         removeSessionSocketDevices(candidateIds = staleIds)
     }
 
+    private val localNetworkRevision = MutableStateFlow(0L)
+    internal val networkChanges: StateFlow<Long> = localNetworkRevision
+
     private suspend fun handleLocalNetworkChanged() {
+        localNetworkRevision.update { it + 1 }
         val removedIds = removeSessionSocketDevices(onlyInactive = true)
         removedIds.forEach { deviceId -> presenceMonitor.forget(deviceId) }
     }

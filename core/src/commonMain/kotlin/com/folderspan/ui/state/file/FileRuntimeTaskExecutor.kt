@@ -1,5 +1,7 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.service.operation.withOperationTransferControl
+import com.folderspan.service.session.withDeviceTransferBudgets
 import strings.AppStrings
 import com.folderspan.ui.state.main.TaskArtifact
 import com.folderspan.ui.state.main.TaskArtifactPurpose
@@ -89,7 +91,8 @@ internal fun shouldContinueRuntimeQueueAfterFailure(
     taskType: TaskType,
     stage: TaskRuntimeStage,
     failure: Throwable?,
-): Boolean = !failure.isTaskLevelTransferFailure() &&
+    stopOnFailure: Boolean = false,
+): Boolean = !stopOnFailure && !failure.isTaskLevelTransferFailure() &&
     !(taskType == TaskType.Move && stage == TaskRuntimeStage.COPY)
 
 internal suspend fun copyLocalRangeToContinuousDevice(
@@ -167,6 +170,7 @@ internal class FileRuntimeTaskExecutor(
     private val updateFileAndFolder: suspend () -> Unit,
     private val resolveDevice: (DiskBase?, String) -> Device?,
     private val resolveNetworkAccess: (DiskBase?, String) -> NetworkAccess?,
+    private val validateCopyDestination: suspend (Task, FileSimpleInfo?) -> Unit = { _, _ -> },
 ) {
     fun continueTask(task: Task) {
         val latestTask = taskState.getTask(task.key) ?: task
@@ -246,6 +250,14 @@ internal class FileRuntimeTaskExecutor(
         task: Task,
         meta: TaskRuntimeMeta,
         resumedFromRecovery: Boolean = false,
+    ): Result<Boolean> = try {
+        taskState.withTransferWaitObservation(task) { executePendingTaskWithObservation(task, meta, resumedFromRecovery) }
+    } catch (cancelled: CancellationException) { Result.failure(cancelled) }
+
+    private suspend fun executePendingTaskWithObservation(
+        task: Task,
+        meta: TaskRuntimeMeta,
+        resumedFromRecovery: Boolean,
     ): Result<Boolean> {
         var runtimeMeta = taskState.loadRuntimeMeta(task.key) ?: meta
         var runState = taskState.loadRuntimeRunState(task.key) ?: buildInitialRunState(task, runtimeMeta)
@@ -397,13 +409,9 @@ internal class FileRuntimeTaskExecutor(
                     return Result.success(true)
                 }
                 val queueEntries = queuedEntries.map { item -> item.entry }
-                val endpointKind = resolveCopyQueueOperationEndpointKind(queueEntries)
-                val operationConfig = resolveOperationParallelism(
-                    endpointKind = endpointKind,
-                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                    remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                )
-                val canBatchDeviceDirectoryCreates = queueEntries.isNotEmpty() &&
+                val tuning = copyQueueTuning(queueEntries)
+                val operationConfig = tuning.config()
+                val canBatchDeviceDirectoryCreates = !task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE) && queueEntries.isNotEmpty() &&
                     queueEntries.all { entry ->
                         entry.kind == TaskRuntimeEntryKind.DIRECTORY_CREATE &&
                             entry.destProtocol == FileProtocol.Device
@@ -413,13 +421,7 @@ internal class FileRuntimeTaskExecutor(
                     queuedEntries = queuedEntries,
                     operationConfig = operationConfig,
                     ensureRunning = { ensureQueuedTaskRunning(task) },
-                    dynamicMaxParallelismProvider = {
-                        resolveOperationRuntimeMaxParallelism(
-                            endpointKind = endpointKind,
-                            remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                            remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                        )
-                    },
+                    dynamicMaxParallelismProvider = tuning::currentMaxParallelism,
                     createDirectory = { entry ->
                         val result = executeCopyQueueEntry(task, entry)
                         if (taskState.isTaskCancelled(task.key)) {
@@ -490,6 +492,7 @@ internal class FileRuntimeTaskExecutor(
                         shouldContinueRuntimeQueueAfterFailure(
                             taskType = task.taskType,
                             stage = currentQueue.stage,
+                            stopOnFailure = task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE),
                             failure = failure,
                         )
                     },
@@ -531,23 +534,13 @@ internal class FileRuntimeTaskExecutor(
                     return Result.success(true)
                 }
                 val queueEntries = queuedEntries.map { item -> item.entry }
-                val endpointKind = resolveCopyQueueOperationEndpointKind(queueEntries)
-                val operationConfig = resolveOperationParallelism(
-                    endpointKind = endpointKind,
-                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                    remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                )
+                val tuning = copyQueueTuning(queueEntries)
+                val operationConfig = tuning.config()
                 val result = executeDirectoryCreateQueueAdaptiveBatch(
                     queuedEntries = queuedEntries,
                     operationConfig = operationConfig,
                     ensureRunning = { ensureQueuedTaskRunning(task) },
-                    dynamicMaxParallelismProvider = {
-                        resolveOperationRuntimeMaxParallelism(
-                            endpointKind = endpointKind,
-                            remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                            remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                        )
-                    },
+                    dynamicMaxParallelismProvider = tuning::currentMaxParallelism,
                     createDirectory = { entry ->
                         val result = executeCopyQueueEntry(task, entry)
                         if (taskState.isTaskCancelled(task.key)) {
@@ -609,6 +602,7 @@ internal class FileRuntimeTaskExecutor(
                         shouldContinueRuntimeQueueAfterFailure(
                             taskType = task.taskType,
                             stage = currentQueue.stage,
+                            stopOnFailure = task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE),
                             failure = failure,
                         )
                     },
@@ -648,25 +642,15 @@ internal class FileRuntimeTaskExecutor(
                     return Result.success(true)
                 }
                 val queueEntries = queuedEntries.map { item -> item.entry }
-                val endpointKind = resolveCopyQueueOperationEndpointKind(queueEntries)
-                val operationConfig = resolveOperationParallelism(
-                    endpointKind = endpointKind,
-                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                    remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                )
+                val tuning = copyQueueTuning(queueEntries)
+                val operationConfig = tuning.config()
                 try {
                     suspend fun processCopyFileQueueEntries(entriesToProcess: List<TaskRuntimeQueuedEntry>) {
                         processItemsAdaptive(
                             items = entriesToProcess,
                             config = operationConfig,
                             ensureRunning = { ensureQueuedTaskRunning(task) },
-                            dynamicMaxParallelismProvider = {
-                                resolveOperationRuntimeMaxParallelism(
-                                    endpointKind = endpointKind,
-                                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                                    remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                                )
-                            },
+                            dynamicMaxParallelismProvider = tuning::currentMaxParallelism,
                             onActiveParallelismChanged = { activeCount ->
                                 stateMutex.withLock {
                                     reportRuntimeParallelCount(activeCount)
@@ -703,11 +687,13 @@ internal class FileRuntimeTaskExecutor(
                                 throw CancellationException(AppStrings.message_task_cancelled)
                             }
                             if (result.getOrNull() != true) {
+                                reportOperationFailure()
                                 val message = failure?.message ?: AppStrings.ui_task_execution_failed
                                 if (
                                     shouldContinueRuntimeQueueAfterFailure(
                                         taskType = task.taskType,
                                         stage = currentQueue.stage,
+                                        stopOnFailure = task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE),
                                         failure = failure,
                                     )
                                 ) {
@@ -763,13 +749,7 @@ internal class FileRuntimeTaskExecutor(
                             updateActiveParallelism = { activeCount -> reportRuntimeParallelCount(activeCount) },
                             ackQueuedEntry = ::ackQueuedEntry,
                             ensureRunning = { ensureQueuedTaskRunning(task) },
-                            currentRuntimeMaxParallelism = {
-                                resolveOperationRuntimeMaxParallelism(
-                                    endpointKind = endpointKind,
-                                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(queueEntries),
-                                    remoteBusy = resolveCopyQueueRemoteBusy(queueEntries),
-                                )
-                            },
+                            currentRuntimeMaxParallelism = tuning::currentMaxParallelism,
                         )
                     } else {
                         emptySet()
@@ -871,6 +851,7 @@ internal class FileRuntimeTaskExecutor(
                                 shouldContinueRuntimeQueueAfterFailure(
                                     taskType = task.taskType,
                                     stage = currentQueue.stage,
+                                    stopOnFailure = task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE),
                                     failure = failure,
                                 )
                             ) {
@@ -1057,6 +1038,7 @@ internal class FileRuntimeTaskExecutor(
                         shouldContinueRuntimeQueueAfterFailure(
                             taskType = task.taskType,
                             stage = currentStage,
+                            stopOnFailure = task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE),
                             failure = failure,
                         )
                     ) {
@@ -1164,6 +1146,14 @@ internal class FileRuntimeTaskExecutor(
             (status.maxParallelRequests > 0 && status.activeRequests >= status.maxParallelRequests)
     }
 
+    private fun copyQueueTuning(entries: List<TaskRuntimeQueueEntry>): CopyOperationTuning {
+        val endpoints = entries.flatMap { it.copyEndpointRefs() }.distinctBy { it.protocol to it.protocolId }
+        return CopyOperationTuning(
+            endpointKinds = endpoints.mapTo(mutableSetOf()) { it.protocol.toTraversalEndpointKind() },
+            remoteStatuses = { endpoints.mapNotNull(::currentCopyQueueFileTransferStatus) },
+        )
+    }
+
     private fun currentCopyQueueFileTransferStatus(ref: TaskRuntimeEndpointRef) = when (ref.protocol) {
         FileProtocol.Device -> currentDeviceFileTransferStatus(ref.protocolId)
         FileProtocol.Share -> resolveShareFileClient(ref.protocolId)
@@ -1205,35 +1195,6 @@ internal class FileRuntimeTaskExecutor(
         )
     }
 
-    private fun resolveCopyQueueOperationEndpointKind(entries: List<TaskRuntimeQueueEntry>): TraversalEndpointKind {
-        val protocols = entries.flatMap { entry -> entry.copyEndpointRefs() }.map { ref -> ref.protocol }.toSet()
-        return when {
-            FileProtocol.Device in protocols || FileProtocol.Share in protocols -> TraversalEndpointKind.Device
-            FileProtocol.Network in protocols -> TraversalEndpointKind.Network
-            else -> TraversalEndpointKind.Local
-        }
-    }
-
-    private fun resolveCopyQueueRemoteRecommendedParallelism(entries: List<TaskRuntimeQueueEntry>): Int? {
-        return entries
-            .asSequence()
-            .flatMap { entry -> entry.copyEndpointRefs().asSequence() }
-            .mapNotNull { ref -> currentCopyQueueFileTransferStatus(ref) }
-            .minOfOrNull { status -> status.recommendedParallelRequests }
-    }
-
-    private fun resolveCopyQueueRemoteBusy(entries: List<TaskRuntimeQueueEntry>): Boolean {
-        return entries
-            .asSequence()
-            .flatMap { entry -> entry.copyEndpointRefs().asSequence() }
-            .mapNotNull { ref -> currentCopyQueueFileTransferStatus(ref) }
-            .any { status ->
-                status.busy ||
-                    (status.maxParallelRequests > 0 && status.activeRequests >= status.maxParallelRequests)
-            }
-    }
-
-
     private fun resolveDeleteQueueOperationEndpointKind(entries: List<TaskRuntimeQueueEntry>): TraversalEndpointKind {
         val protocols = entries.flatMap { entry -> entry.deleteEndpointRefs() }.map { ref -> ref.protocol }.toSet()
         return when {
@@ -1249,6 +1210,8 @@ internal class FileRuntimeTaskExecutor(
         queuedEntries: List<TaskRuntimeQueuedEntry>,
         queueEntries: List<TaskRuntimeQueueEntry>,
     ): RuntimeSmallFileArchiveSelection? {
+        // shortcut: batch copies validate each source version individually; add batch validation before enabling archives here.
+        if (task.values.containsKey(COPY_DESTINATION_REQUEST_TASK_VALUE)) return null
         if (queuedEntries.size < 2) return null
         val sourceProtocol = queueEntries.map { entry -> entry.srcProtocol }.distinct().singleOrNull() ?: return null
         val destinationProtocol = queueEntries.map { entry -> entry.destProtocol }.distinct().singleOrNull() ?: return null
@@ -1321,6 +1284,7 @@ internal class FileRuntimeTaskExecutor(
             sourceClient = sourceClient,
             targetClient = targetClient,
             transportPreference = SmallFileArchiveTransportPreference.LAN,
+            ensureRunning = ensureRunning,
             managedLocalFileWriter = { path, _, write ->
                 val entry = queueEntries.first { it.destPath == path }
                 taskState.withTaskArtifact(task, entry.entryId, entry.dest) { actual ->
@@ -1375,11 +1339,13 @@ internal class FileRuntimeTaskExecutor(
                     taskState.startRuntimeByteItem(task, entry.destPath, entry.size)
                     val current = batchProgress.getOrElse(entry.entryId) { 0L }
                     val updated = (current + bytes).coerceAtMost(entry.size)
+                    reportOperationBytes((updated - current).coerceAtLeast(0))
                     batchProgress[entry.entryId] = updated
                     taskState.putRuntimeByteProgress(task, entry.destPath, updated)
                 },
             )
             if (result.isFailure) {
+                reportOperationFailure()
                 LogKit.w(AppStrings.ui_archiving_small_files_runtime_queue_failed_unfinished_entries_were.format(arg0 = result.exceptionOrNull()?.message.orEmpty()))
             }
             val completed = result.getOrNull()?.completedRelativePaths.orEmpty() +
@@ -1816,6 +1782,7 @@ internal class FileRuntimeTaskExecutor(
     )
 
     suspend fun ensureQueuedTaskRunning(task: Task) {
+        validateCopyDestination(task, null)
         if (!taskState.awaitIfPaused(task.key)) {
             throw CancellationException(AppStrings.message_task_cancelled)
         }
@@ -1828,6 +1795,7 @@ internal class FileRuntimeTaskExecutor(
         task: Task,
         entry: TaskRuntimeQueueEntry,
     ): Result<Boolean> {
+        validateCopyDestination(task, entry.toSourceFileSimpleInfo())
         if (taskState.findTaskArtifact(task.key, entry.entryId) == null &&
             taskState.loadRuntimeTransferCheckpoint(task.key, entry.entryId)?.destPath == entry.destPath) {
             // A released legacy checkpoint refers to the original target; do not reinterpret it as owned.
@@ -1847,7 +1815,9 @@ internal class FileRuntimeTaskExecutor(
             else -> TaskArtifactPurpose.FILE
         }
         return taskState.withTaskArtifact(task, entry.entryId, entry.dest, purpose) { path ->
-            executeTrackedCopyQueueEntry(task, entry.copy(dest = entry.dest.copy(path = path)))
+            executeTrackedCopyQueueEntry(task, entry.copy(dest = entry.dest.copy(path = path))).also { result ->
+                if (result.getOrDefault(false)) validateCopyDestination(task, entry.toSourceFileSimpleInfo())
+            }
         }
     }
 
@@ -1976,12 +1946,8 @@ internal class FileRuntimeTaskExecutor(
 
         val chunkSize = resolveTransferRecoveryChunkSize(sourceDesk, targetDesk)
         val totalChunks = calculateDeviceTransportChunkCount(entry.size, chunkSize)
-        val endpointKind = resolveCopyQueueOperationEndpointKind(listOf(entry))
-        val operationConfig = resolveOperationParallelism(
-            endpointKind = endpointKind,
-            remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(listOf(entry)),
-            remoteBusy = resolveCopyQueueRemoteBusy(listOf(entry)),
-        ).let { config ->
+        val tuning = copyQueueTuning(listOf(entry))
+        val operationConfig = tuning.config().let { config ->
             config.copy(
                 initialParallelism = minOf(config.initialParallelism, totalChunks).coerceAtLeast(1),
                 maxParallelism = minOf(config.maxParallelism, totalChunks).coerceAtLeast(1),
@@ -2117,66 +2083,66 @@ internal class FileRuntimeTaskExecutor(
         val allowParallelChunks = sourceClient !is SequentialRangeDeviceFileClient &&
             targetClient !is SequentialRangeDeviceFileClient
 
-        return copyFileWithTransferCheckpoint(
-            taskKey = task.key,
-            entryId = entry.entryId,
-            destPath = entry.destPath,
-            fileSize = entry.size,
-            chunkSize = chunkSize,
-            loadCheckpoint = { taskState.loadRuntimeTransferCheckpoint(task.key, entry.entryId) },
-            saveCheckpoint = { checkpoint -> taskState.saveRuntimeTransferCheckpoint(checkpoint) },
-            deleteCheckpoint = { taskState.deleteRuntimeTransferCheckpoint(task.key, entry.entryId) },
-            targetSize = {
-                loadTransferTargetSize(
-                    protocol = entry.destProtocol,
-                    path = entry.destPath,
-                    targetClient = targetClient,
-                )
-            },
-            readChunk = ::readChunk,
-            writeChunk = ::writeChunk,
-            ensureRunning = { ensureQueuedTaskRunning(task) },
-            operationConfig = operationConfig,
-            dynamicMaxParallelismProvider = {
-                resolveOperationRuntimeMaxParallelism(
-                    endpointKind = endpointKind,
-                    remoteRecommendedParallelism = resolveCopyQueueRemoteRecommendedParallelism(listOf(entry)),
-                    remoteBusy = resolveCopyQueueRemoteBusy(listOf(entry)),
-                ).coerceAtMost(totalChunks.coerceAtLeast(1))
-            },
-            copyChunkDirectly = copyChunkDirectly,
-            copyRemainingDirectly = copyRemainingDirectly,
-            allowParallelChunks = allowParallelChunks,
-            onProgress = { progress ->
-                val now = Clock.System.now().toEpochMilliseconds()
-                val forceProgressUpdate = progress.completedChunks == progress.totalChunks
-                if (progressGate.shouldPublish(force = forceProgressUpdate)) {
-                    if (useChunkOverallProgress) {
-                        taskState.putOverallProgress(task, progress.completedChunks, progress.totalChunks)
-                    }
-                    taskState.putRuntimeByteProgress(task, entry.destPath, progress.transferredBytes)
-                }
-                if (now - lastProgressAt >= 1000L || progress.completedChunks == progress.totalChunks) {
-                    val rateSample = progressRateSampler.update(
-                        completed = progress.transferredBytes,
-                        total = entry.size,
-                        now = now,
-                        force = progress.completedChunks == progress.totalChunks,
-                    )
-                    taskState.putResult(
-                        task,
-                        entry.destPath,
-                        buildWebRtcTransferProgressText(
-                            transferredBytes = progress.transferredBytes,
-                            totalBytes = entry.size,
-                            chunkSize = chunkSize,
-                            rateSample = rateSample,
+        return withOperationTransferControl({ ensureQueuedTaskRunning(task) }) {
+            withDeviceTransferBudgets(sourceClient, targetClient) {
+                copyFileWithTransferCheckpoint(
+                    taskKey = task.key,
+                    entryId = entry.entryId,
+                    destPath = entry.destPath,
+                    fileSize = entry.size,
+                    chunkSize = chunkSize,
+                    loadCheckpoint = { taskState.loadRuntimeTransferCheckpoint(task.key, entry.entryId) },
+                    saveCheckpoint = { checkpoint -> taskState.saveRuntimeTransferCheckpoint(checkpoint) },
+                    deleteCheckpoint = { taskState.deleteRuntimeTransferCheckpoint(task.key, entry.entryId) },
+                    targetSize = {
+                        loadTransferTargetSize(
+                            protocol = entry.destProtocol,
+                            path = entry.destPath,
+                            targetClient = targetClient,
                         )
-                    )
-                    lastProgressAt = now
-                }
-            },
-        )
+                    },
+                    readChunk = ::readChunk,
+                    writeChunk = ::writeChunk,
+                    ensureRunning = { ensureQueuedTaskRunning(task) },
+                    operationConfig = operationConfig,
+                    dynamicMaxParallelismProvider = {
+                        tuning.currentMaxParallelism().coerceAtMost(totalChunks.coerceAtLeast(1))
+                    },
+                    copyChunkDirectly = copyChunkDirectly,
+                    copyRemainingDirectly = copyRemainingDirectly,
+                    allowParallelChunks = allowParallelChunks,
+                    onProgress = { progress ->
+                        val now = Clock.System.now().toEpochMilliseconds()
+                        val forceProgressUpdate = progress.completedChunks == progress.totalChunks
+                        if (progressGate.shouldPublish(force = forceProgressUpdate)) {
+                            if (useChunkOverallProgress) {
+                                taskState.putOverallProgress(task, progress.completedChunks, progress.totalChunks)
+                            }
+                            taskState.putRuntimeByteProgress(task, entry.destPath, progress.transferredBytes)
+                        }
+                        if (now - lastProgressAt >= 1000L || progress.completedChunks == progress.totalChunks) {
+                            val rateSample = progressRateSampler.update(
+                                completed = progress.transferredBytes,
+                                total = entry.size,
+                                now = now,
+                                force = progress.completedChunks == progress.totalChunks,
+                            )
+                            taskState.putResult(
+                                task,
+                                entry.destPath,
+                                buildWebRtcTransferProgressText(
+                                    transferredBytes = progress.transferredBytes,
+                                    totalBytes = entry.size,
+                                    chunkSize = chunkSize,
+                                    rateSample = rateSample,
+                                )
+                            )
+                            lastProgressAt = now
+                        }
+                    },
+                )
+            }
+        }
     }
 
     private suspend fun executeDeleteQueueEntry(
@@ -2456,7 +2422,7 @@ internal class FileRuntimeTaskExecutor(
                     ?: return Result.failure(
                         TaskEndpointUnavailableException(AppStrings.message_task_source_network_disconnected)
                     )
-                networkAccess.delete(entry.srcPath, entry.isDirectory)
+                networkAccess.delete(entry.toSourceFileSimpleInfo())
             }
 
             else -> Result.failure(Exception(AppStrings.ui_delete_failed))

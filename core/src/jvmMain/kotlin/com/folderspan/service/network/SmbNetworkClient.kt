@@ -4,6 +4,8 @@ import strings.AppStrings
 
 import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.utils.LogKit
+import com.hierynomus.msdtyp.FileTime
+import com.hierynomus.msfscc.fileinformation.FileBasicInformation
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.mserref.NtStatus
@@ -22,7 +24,7 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.*
 
-internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : NetworkClient, ChunkReadableNetworkClient {
+internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : StorageProvider, ChunkReadableNetworkClient {
     private suspend fun <T> withShare(block: suspend (NoFollowSmbDiskShare) -> T): Result<T> = withContext(Dispatchers.IO) {
         try {
             val key = networkSessionKey(network, 445)
@@ -79,7 +81,8 @@ internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : 
     ): Result<List<NetworkFileEntry>> {
         return withShare { share ->
             val target = normalizePath(path)
-            val entries = share.list(target)
+            // An explicit pattern avoids smbj's leased snapshot cache after writes.
+            val entries = share.list(target, "*")
             val files = entries.filterNot { isUnsafeNetworkPathSegment(it.fileName) }
                 .map { entry ->
                     val attrs = entry.fileAttributes
@@ -264,6 +267,18 @@ internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : 
         }
     }
 
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> = withShare { share ->
+        require(millis > 0) { "Invalid modification time" }
+        share.openFile(
+            share.checkedPath(normalizePath(path)), EnumSet.of(AccessMask.FILE_WRITE_ATTRIBUTES),
+            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL), SMB2ShareAccess.ALL,
+            SMB2CreateDisposition.FILE_OPEN, EnumSet.noneOf(SMB2CreateOptions::class.java),
+        ).use { file ->
+            file.setFileInformation(smbModifiedTimeInformation(millis))
+        }
+        true
+    }
+
     override suspend fun rename(path: String, newPath: String): Result<Boolean> {
         return withShare { share ->
             val normalized = share.checkedPath(normalizePath(path))
@@ -293,6 +308,11 @@ internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : 
             }
             true
         }
+    }
+
+    override suspend fun deleteEmptyDirectory(path: String): Result<Boolean> = withShare { share ->
+        share.rmdir(share.checkedPath(normalizePath(checkedEmptyDirectoryDeletionPath(path))), false)
+        true
     }
 
     override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> {
@@ -354,3 +374,11 @@ internal fun isSmbConnectionFailure(error: Throwable): Boolean =
             NtStatus.STATUS_CONNECTION_DISCONNECTED,
         )
     }
+
+internal fun smbModifiedTimeInformation(millis: Long): FileBasicInformation {
+    require(millis > 0) { "Invalid modification time" }
+    return FileBasicInformation(
+        FileBasicInformation.DONT_SET, FileBasicInformation.DONT_SET,
+        FileTime.ofEpochMillis(millis), FileBasicInformation.DONT_SET, 0L,
+    )
+}

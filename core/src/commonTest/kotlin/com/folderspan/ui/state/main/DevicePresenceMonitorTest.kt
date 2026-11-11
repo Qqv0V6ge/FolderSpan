@@ -1,5 +1,7 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.service.http.IpAddressInfo
+import com.folderspan.service.http.NetworkInterfaceInfo
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.data.SocketDevice
@@ -15,10 +17,23 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertNotEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class DevicePresenceMonitorTest {
+    @Test fun signaturesIncludeIpv6InterfaceAndPrefixChangesAndIgnoreLoopbackOrDownInterfaces() {
+        val ipv4 = IpAddressInfo("192.168.1.10", false, 24)
+        val ipv6 = IpAddressInfo("2001:db8::1", true, 64)
+        val network = NetworkInterfaceInfo("en0", "Wi-Fi", true, false, listOf(ipv4, ipv6))
+        val before = localNetworkSignature(listOf(network))
+        assertEquals(before, localNetworkSignature(listOf(network.copy(addresses = listOf(ipv6, ipv4)))))
+        assertNotEquals(before, localNetworkSignature(listOf(network.copy(addresses = listOf(ipv4, ipv6.copy(address = "2001:db8::2"))))))
+        assertNotEquals(before, localNetworkSignature(listOf(network.copy(name = "en1"))))
+        assertNotEquals(before, localNetworkSignature(listOf(network.copy(addresses = listOf(ipv4.copy(prefixLength = 16), ipv6)))))
+        assertEquals(before, localNetworkSignature(listOf(network, network.copy(isUp = false), network.copy(isLoopback = true))))
+    }
+
     @Test
     fun unconnectedSessionDevicesArePresenceTargets() {
         val sessionDevice = SocketDevice(

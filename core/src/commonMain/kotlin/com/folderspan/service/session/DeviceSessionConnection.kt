@@ -1,5 +1,6 @@
 package com.folderspan.service.session
 
+import com.folderspan.service.operation.ensureOperationTransferRunning
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
@@ -8,10 +9,13 @@ import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Clock
 
 private const val DEVICE_SESSION_CREDIT_WAIT_TIMEOUT_MILLIS = 120_000L
 
@@ -39,6 +43,8 @@ internal class DeviceSessionConnection(
 ) : DeviceSessionFrameConnection {
     private val mutex = Mutex()
     private val openStreams = HashSet<Int>()
+    private val activeStreams = MutableStateFlow(0)
+    override val activeStreamCount: StateFlow<Int> get() = activeStreams
     private val incomingFrames = Channel<DeviceSessionFrame>(capacity = incomingFrameCapacity.coerceAtLeast(1))
     private val pendingPings = HashMap<String, CompletableDeferred<ByteArray>>()
     private var nextStreamIndex = 0
@@ -65,11 +71,12 @@ internal class DeviceSessionConnection(
             }
             nextStreamIndex += 1
             openStreams += id
+            activeStreams.value = openStreams.size
             lastStreamId = maxOf(lastStreamId, id)
             id
         }
         if (payload.size > DEVICE_SESSION_MAX_PAYLOAD_BYTES) {
-            mutex.withLock { openStreams.remove(streamId) }
+            mutex.withLock { openStreams.remove(streamId); activeStreams.value = openStreams.size }
             throw IllegalArgumentException("OPEN payload exceeds $DEVICE_SESSION_MAX_PAYLOAD_BYTES bytes")
         }
         try {
@@ -89,6 +96,7 @@ internal class DeviceSessionConnection(
                 false
             } else {
                 openStreams += streamId
+                activeStreams.value = openStreams.size
                 lastStreamId = maxOf(lastStreamId, streamId)
                 true
             }
@@ -172,6 +180,7 @@ internal class DeviceSessionConnection(
             if (closed) return
             closed = true
             openStreams.clear()
+            activeStreams.value = 0
             pendingPings.values.toList().also { pendingPings.clear() }
         }
         sendCredit.wakeWaiters()
@@ -185,6 +194,7 @@ internal class DeviceSessionConnection(
     suspend fun run() {
         try {
             for (frame in incoming) {
+                if (frame.receivedAtMillis == null) frame.receivedAtMillis = Clock.System.now().toEpochMilliseconds()
                 if (!dispatch(frame)) {
                     break
                 }
@@ -273,16 +283,15 @@ internal class DeviceSessionConnection(
     private suspend fun sendDataFrame(streamId: Int, payload: ByteArray) {
         currentCoroutineContext().ensureActive()
         ensureStreamOpen(streamId)
-        val acquired = sendCredit.tryConsume(streamId, payload.size) || withTimeoutOrNull(creditWaitTimeoutMillis) {
-            sendCredit.awaitAndConsume(streamId, payload.size) { ensureStreamOpen(streamId) }
-            true
-        } ?: false
-        if (!acquired) {
-            throw DeviceSessionIoException(
-                "stream credit timeout: stream=$streamId timeoutMs=$creditWaitTimeoutMillis",
-            )
+        ensureOperationTransferRunning()
+        if (!sendCredit.tryConsume(streamId, payload.size)) {
+            sendCredit.awaitAndConsume(streamId, payload.size, timeoutMillis = creditWaitTimeoutMillis) {
+                ensureOperationTransferRunning()
+                ensureStreamOpen(streamId)
+            }
         }
         try {
+            ensureOperationTransferRunning()
             ensureStreamOpen(streamId)
             send(DeviceSessionFrame(type = DeviceSessionFrameType.Data, streamId = streamId, payload = payload))
         } catch (error: Throwable) {
@@ -301,7 +310,7 @@ internal class DeviceSessionConnection(
     }
 
     private suspend fun closeLocalStream(streamId: Int) {
-        mutex.withLock { openStreams.remove(streamId) }
+        mutex.withLock { openStreams.remove(streamId); activeStreams.value = openStreams.size }
         sendCredit.closeStream(streamId)
     }
 

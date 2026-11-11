@@ -23,7 +23,7 @@ internal actual object DeviceLanBeaconUdp {
                     runCatching {
                         socket.send(DatagramPacket(payload, payload.size, InetSocketAddress(address, port)))
                     }.onFailure { error ->
-                        LogKit.d(AppStrings.ui_lan_beacon_udp_send_failed_dest_arg0_message_arg1.format(arg0 = (address.hostAddress).toString(), arg1 = (error.message).toString()))
+                        LogKit.d(AppStrings.ui_lan_beacon_udp_send_failed_dest_arg0_message_arg1.format(arg0 = address.hostAddress.orEmpty(), arg1 = (error.message).toString()))
                     }
                 }
             }

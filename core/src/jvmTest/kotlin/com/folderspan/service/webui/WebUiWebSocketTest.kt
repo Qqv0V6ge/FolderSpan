@@ -180,6 +180,26 @@ class WebUiWebSocketTest {
     }
 
     @Test
+    fun wildcardOriginCanAuthenticateAndExecuteCommands(): Unit = runBlocking {
+        withTimeout(20_000) {
+            withRuntime(setOf("*")) { runtime ->
+                val socket = runtime.client.webSocketSession {
+                    url(runtime.url)
+                    header("Origin", "https://independent.example")
+                }
+                try {
+                    socket.send(Frame.Binary(true, WebUiWire.encode(WebUiWirePacket(WebUiWireHeader("auth", token = runtime.login())))))
+                    assertEquals("authenticated", WebUiWire.decode((socket.incoming.receive() as Frame.Binary).data).header.type)
+                    socket.send(Frame.Binary(true, WebUiWire.encode(WebUiWirePacket(WebUiWireHeader("request", 1, "GET", "$WEB_UI_PLATFORM_PATH/fast")))))
+                    val response = WebUiWire.decode((socket.incoming.receive() as Frame.Binary).data)
+                    assertEquals(200, response.header.status)
+                    assertEquals("fast", response.body.decodeToString())
+                } finally { socket.close(); socket.cancel() }
+            }
+        }
+    }
+
+    @Test
     fun foreignOriginAndUnauthenticatedCommandsDoNotExecute(): Unit = runBlocking {
         withTimeout(20_000) {
             withRuntime { runtime ->
@@ -212,15 +232,15 @@ class WebUiWebSocketTest {
         }
     }
 
-    private suspend fun withRuntime(block: suspend CoroutineScope.(Runtime) -> Unit) = coroutineScope {
-        val runtime = Runtime()
+    private suspend fun withRuntime(trustedOrigins: Set<String> = emptySet(), block: suspend CoroutineScope.(Runtime) -> Unit) = coroutineScope {
+        val runtime = Runtime(trustedOrigins)
         try {
             assertTrue(runtime.service.start(runtime.port).running)
             block(runtime)
         } finally { runtime.service.stop(); runtime.client.close() }
     }
 
-    private class Runtime {
+    private class Runtime(trustedOrigins: Set<String>) {
         val port = ServerSocket(0).use { it.localPort }
         val http = "http://127.0.0.1:$port"
         val url = "ws://127.0.0.1:$port$WEB_UI_SOCKET_PATH"
@@ -254,7 +274,7 @@ class WebUiWebSocketTest {
             }
         }
         val service = WebUiHttpService(WebUiRequestHandler(credentials, sessions,
-            WebUiSecurityPolicy { setOf("127.0.0.1") }, PlaceholderWebUiDocumentRoot(), platform))
+            WebUiSecurityPolicy(trustedOrigins) { setOf("127.0.0.1") }, PlaceholderWebUiDocumentRoot(), platform))
         suspend fun login(): String {
             val reply = client.post(http + WEB_UI_LOGIN_PATH) {
                 header("Content-Type", "application/json")

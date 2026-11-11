@@ -22,6 +22,7 @@ internal fun PasswordOutlinedTextField(
     singleLine: Boolean = true,
     isError: Boolean = false,
     supportingText: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     var visible by remember { mutableStateOf(false) }
     val icon = if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility
@@ -32,10 +33,11 @@ internal fun PasswordOutlinedTextField(
         label = label,
         singleLine = singleLine,
         isError = isError,
+        enabled = enabled,
         supportingText = supportingText,
         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
-            IconButton(onClick = { visible = !visible }) {
+            IconButton(onClick = { visible = !visible }, enabled = enabled) {
                 Icon(icon, contentDescription = description)
             }
         },

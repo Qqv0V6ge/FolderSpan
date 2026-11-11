@@ -8,6 +8,8 @@ import com.folderspan.service.session.DeviceSessionIncomingStream
 import com.folderspan.service.session.DeviceSessionPeer
 import com.folderspan.service.session.DeviceSessionTransport
 import com.folderspan.service.session.DeviceSessionWindowPlan
+import com.folderspan.service.session.DeviceSessionTransferFeedback
+import com.folderspan.service.operation.HttpTransferStatus
 import com.folderspan.service.webrtc.models.WebRtcDataChannel
 import com.folderspan.service.webrtc.models.WebRtcDataChannelState
 import com.folderspan.test.runSuspendTest
@@ -18,6 +20,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -34,6 +38,46 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class WebRtcDeviceSessionIntegrationTest {
+    @Test fun feedbackFileTrafficAndRpcUseTheSameSessionChannel() = runSuspendTest {
+        WebRtcSessionPeerPair().use { client, server ->
+            val scope = CoroutineScope(currentCoroutineContext())
+            val limits = HttpTransferStatus(maxParallelRequests = 4, recommendedParallelRequests = 4,
+                maxChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES, recommendedChunkBytes = DEVICE_SESSION_MAX_PAYLOAD_BYTES)
+            val clientFeedback = DeviceSessionTransferFeedback(scope, limits, client.transferActivity(), client::rpc)
+            val serverFeedback = DeviceSessionTransferFeedback(scope, limits, server.transferActivity(), server::rpc)
+            client.setRequestHandler { request -> clientFeedback.handle(request)
+                ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_OK, request.payload) }
+            server.setRequestHandler { request -> serverFeedback.handle(request)
+                ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_OK, request.payload) }
+            var received = 0
+            server.setStreamOpenHandler { id, _ -> object : DeviceSessionIncomingStream {
+                override suspend fun onData(chunk: ByteArray) { received += chunk.size }
+                override suspend fun onTrailer(payload: ByteArray) { server.connection.sendTrailer(id) }
+            } }
+            try {
+                assertTrue(clientFeedback.subscribe())
+                withTimeout(2_000) {
+                    while (clientFeedback.current().sampledAtMillis == 0L || serverFeedback.current().sampledAtMillis == 0L) delay(1)
+                }
+                coroutineScope {
+                    val copy = async {
+                        client.openWriteStream(path = "/feedback.bin", fileSize = DEVICE_SESSION_MAX_PAYLOAD_BYTES * 3L, startOffset = 0L,
+                            data = flow { repeat(3) { emit(ByteArray(DEVICE_SESSION_MAX_PAYLOAD_BYTES) { 7 }); yield() } })
+                    }
+                    val control = async {
+                        repeat(20) {
+                            val bytes = "feedback-rpc-$it".encodeToByteArray()
+                            assertContentEquals(bytes, client.rpc("Echo", bytes).payload)
+                        }
+                    }
+                    copy.await(); control.await()
+                }
+                assertEquals(DEVICE_SESSION_MAX_PAYLOAD_BYTES * 3, received)
+            } finally { clientFeedback.close(); serverFeedback.close() }
+            assertEquals(0L, clientFeedback.current().sampledAtMillis)
+        }
+    }
+
     @Test
     fun concurrentFileStreamsAndRpcShareOneSessionChannel() = runSuspendTest {
         WebRtcSessionPeerPair().use { client, server ->

@@ -1,5 +1,8 @@
 package com.folderspan.di
 
+import app.cash.sqldelight.db.SqlDriver
+import com.folderspan.ui.state.main.SyncLocalStore
+
 import com.folderspan.runtime.RuntimeServiceFailures
 import kotlinx.coroutines.flow.map
 import com.folderspan.proBindings
@@ -188,8 +191,7 @@ val commonScreenModule = module {
 }
 
 val commonDatabaseModule = module {
-    single {
-        val driverFactory = DriverFactory()
-        createDatabase(driverFactory)
-    }
+    single<SqlDriver> { DriverFactory().createDriver() }
+    single { createDatabase(get<SqlDriver>()) }
+    single { SyncLocalStore(get(), get<SqlDriver>()) }
 }

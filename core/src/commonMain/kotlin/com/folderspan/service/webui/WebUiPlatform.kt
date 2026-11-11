@@ -1,5 +1,8 @@
 package com.folderspan.service.webui
 
+import com.folderspan.service.network.StoragePath
+import com.folderspan.service.network.StorageReference
+
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
 import com.folderspan.service.http.server.linkshare.LinkShareHttpRequest
@@ -27,11 +30,19 @@ data class WebUiHostInfo(
     val compressionCodecs: List<Int> = emptyList(),
     val caseInsensitive: Boolean = false,
     val sensitivePaths: List<WebUiSensitivePath> = emptyList(),
+    val deviceId: String = "",
+    val deviceName: String = "",
 
 )
 
 @Serializable
 data class WebUiPathRequest(val path: String)
+
+@Serializable
+data class WebUiSetModifiedTimeRequest(val path: String, val millis: Long)
+
+@Serializable
+data class WebUiMoveRequest(val from: String, val to: String)
 
 @Serializable
 data class WebUiRenameRequest(val path: String, val oldName: String, val newName: String)
@@ -77,7 +88,11 @@ data class WebUiNetworkPath(
     val newPath: String = "",
     val isDirectory: Boolean = false,
     val size: Long = -1,
-)
+    val reference: StorageReference? = null,
+    val newReference: StorageReference? = null,
+) {
+    val storagePath: StoragePath get() = StoragePath(path, reference)
+}
 
 @Serializable
 data class WebUiNetworkBatch(

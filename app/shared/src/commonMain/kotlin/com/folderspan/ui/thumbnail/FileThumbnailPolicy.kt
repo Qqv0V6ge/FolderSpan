@@ -96,9 +96,9 @@ internal class ByteSizeLruCache<K, V>(
 
     private fun trimToSize() {
         while (currentBytes > maxBytes && values.isNotEmpty()) {
-            val eldest = values.entries.first()
-            values.remove(eldest.key)
-            currentBytes -= sizeOf(eldest.value)
+            val (eldestKey, eldestValue) = values.entries.first()
+            values.remove(eldestKey)
+            currentBytes -= sizeOf(eldestValue)
         }
     }
 }

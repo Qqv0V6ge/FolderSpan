@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
+import kotlin.time.Clock
 
 /** Owns framing/credit and file bodies, but never owns business authorization or tasks. */
 internal class PlatformDeviceTransport(
@@ -53,7 +54,8 @@ internal class PlatformDeviceTransport(
     init {
         scope.launch {
             try {
-                for (frame in events) session.emitBytes(eventHandle, "device-frames", DeviceSessionFrames.encodeAll(listOf(frame)))
+                for (frame in events) session.emitBytes(eventHandle, "device-frames", DeviceSessionFrames.encodeAll(listOf(frame)),
+                    (frame.receivedAtMillis ?: 0).toString())
             } finally {
                 withContext(NonCancellable) { runCatching { session.emit(eventHandle, "device-end") } }
                 bodies.cancel()
@@ -473,7 +475,11 @@ internal suspend fun deviceStreamPlatformRequest(request: LinkShareHttpRequest, 
             check(channel.transport == null) { "device transport already started" }
             channel.transport = PlatformDeviceTransport(channel, session, options, requireNotNull(request.query("handle")))
         }
-        return platformResponse(true)
+        val response = platformResponse(true)
+        return response.copy(headers = response.headers + listOf(
+            LinkShareHttpHeader(WEB_UI_DEVICE_FEEDBACK_TIMING_HEADER, "1"),
+            LinkShareHttpHeader(WEB_UI_DEVICE_HOST_TIME_HEADER, Clock.System.now().toEpochMilliseconds().toString()),
+        ))
     }
     val transport = requireNotNull(channel.transport) { "device transport not started" }
     return when (request.method to operation) {

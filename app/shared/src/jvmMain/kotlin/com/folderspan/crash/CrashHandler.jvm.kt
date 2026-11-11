@@ -4,7 +4,8 @@ import com.folderspan.ui.state.main.CrashInfo
 import kotlin.system.exitProcess
 
 actual fun installPlatformCrashHandler(onCrash: (CrashInfo) -> Unit) {
-    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+    Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+        throwable.printStackTrace()
         runCatching { onCrash(CrashInfo.fromThrowable(throwable)) }
     }
 }

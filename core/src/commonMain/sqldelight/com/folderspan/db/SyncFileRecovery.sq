@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS SyncFileRecovery (
+    id TEXT NOT NULL PRIMARY KEY,
+    taskId INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    groupId TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS SyncFileRecoveryTaskGroup ON SyncFileRecovery(taskId, groupId);
+
+upsert:
+INSERT OR REPLACE INTO SyncFileRecovery(id, taskId, fingerprint, groupId, payload) VALUES (?, ?, ?, ?, ?);
+
+selectTask:
+SELECT * FROM SyncFileRecovery WHERE taskId = ? ORDER BY id;
+
+selectRecord:
+SELECT * FROM SyncFileRecovery WHERE id = ?;
+
+selectGroup:
+SELECT * FROM SyncFileRecovery WHERE taskId = ? AND groupId = ? ORDER BY id;
+
+selectRecords:
+SELECT * FROM SyncFileRecovery WHERE id IN ?;
+
+selectGroups:
+SELECT * FROM SyncFileRecovery WHERE taskId = ? AND fingerprint = ? AND groupId IN ?;
+
+selectAll:
+SELECT * FROM SyncFileRecovery ORDER BY taskId, id;
+
+deleteRecord:
+DELETE FROM SyncFileRecovery WHERE id = ?;
+
+deleteVerifiedRecord:
+DELETE FROM SyncFileRecovery WHERE id = ? AND taskId = ? AND fingerprint = ?;
+
+selectTaskPage:
+SELECT * FROM SyncFileRecovery WHERE taskId = ? ORDER BY groupId, id LIMIT ? OFFSET ?;

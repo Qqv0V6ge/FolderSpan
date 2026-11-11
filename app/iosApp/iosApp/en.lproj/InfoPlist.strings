@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "FolderSpan";
+"NSLocalNetworkUsageDescription" = "FolderSpan uses your local network to connect to nearby devices and network storage, browse files, and transfer files you choose.";

@@ -194,7 +194,7 @@ private fun SyncStatusIcon(status: SyncRunStatus) {
         SyncRunStatus.Success -> Icon(Icons.Default.CheckCircle, contentDescription = null)
         SyncRunStatus.Queued -> Icon(Icons.Default.Schedule, contentDescription = null)
         SyncRunStatus.PartialSuccess -> Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
-        SyncRunStatus.Failure -> Icon(
+        SyncRunStatus.Interrupted, SyncRunStatus.Failure -> Icon(
             Icons.Outlined.ErrorOutline,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error
@@ -214,5 +214,6 @@ private fun syncStatusLabel(status: SyncRunStatus): String {
         SyncRunStatus.PartialSuccess -> AppStrings.ui_partially_successful
         SyncRunStatus.Failure -> AppStrings.ui_failed
         SyncRunStatus.Canceled -> AppStrings.ui_canceled
+        SyncRunStatus.Interrupted -> AppStrings.sync_interrupted
     }
 }

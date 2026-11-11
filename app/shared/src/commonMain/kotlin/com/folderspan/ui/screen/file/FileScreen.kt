@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.folderspan.data.StatusEnum
 import com.folderspan.data.file.FileFilterType
 import com.folderspan.data.file.FileFilterSort
+import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.DiskMenuPermission
@@ -93,11 +94,19 @@ data class FileFilterButtonsUiState(
 @Composable
 fun FileScreen(snackbarHostState: SnackbarHostState) {
     val fileState = koinInject<FileState>()
+    val networkState = koinInject<NetworkState>()
+    var storageDialog by remember { mutableStateOf<Pair<FileSimpleInfo, StorageDetailsMode>?>(null) }
+    storageDialog?.let { (file, mode) ->
+        networkState.networks.firstOrNull { it.protocolId == file.protocolId }?.let { network ->
+            StorageDetailsDialogContainer(file, network, mode, onDismiss = { storageDialog = null })
+        }
+    }
     val thumbnailLoader = remember(fileState) { DefaultFileThumbnailLoader(fileState) }
     DisposableEffect(thumbnailLoader) {
         onDispose(thumbnailLoader::close)
     }
     val homeState = koinInject<HomeState>()
+
     val taskState = koinInject<TaskState>()
     val drawerState = koinInject<DrawerState>()
     val path by fileState.path.collectAsState()
@@ -415,7 +424,7 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
                     scope.launch(Dispatchers.Default) {
                         fileRecentState.record(item)
                         if (item.isDirectory) {
-                            fileState.updatePath(item.path)
+                            fileState.updatePath(item)
                         } else {
                             homeState.openFile(item)
                         }
@@ -477,6 +486,12 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
                                 if (isPasteMoveFile) homeState.pasteMoveFile(item.path)
                             }
                         },
+                        onStorageCopy = {
+                            runCatching {
+                                val request = fileState.createCopyDestinationRequest(listOf(item.copy()), deskType)
+                                if (navigator == null) request.close() else navigator.push(CopyDestinationScreen(request))
+                            }.onFailure { error -> scope.launch { snackbarHostState.showSnackbar(error.message ?: AppStrings.ui_source_endpoint_unavailable) } }
+                        },
                         onCopy = {
                             if (isPasteCopyFile) homeState.cancelCopyFile()
                             if (isPasteMoveFile) homeState.cancelMoveFile()
@@ -515,6 +530,12 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
                             homeState.updateFileInfo(item)
                             homeState.updateViewFile(true)
                         },
+                        onStorageVersions = if (!item.isDirectory && networkState.networks.any {
+                            it.protocolId == item.protocolId && it.protocol in setOf("GoogleDrive", "Dropbox", "Nextcloud", "Seafile")
+                        }) ({ storageDialog = item to StorageDetailsMode.Versions }) else null,
+                        onStorageSharing = if (networkState.networks.any {
+                            it.protocolId == item.protocolId && it.protocol in setOf("GoogleDrive", "Dropbox", "Nextcloud", "Seafile")
+                        }) ({ storageDialog = item to StorageDetailsMode.Sharing }) else null,
                     )
                 }
             } else {
@@ -595,7 +616,7 @@ fun FileScreen(snackbarHostState: SnackbarHostState) {
                 return@FileRenameDialog
             }
             scope.launch(Dispatchers.Default) {
-                fileState.rename(path, fileInfo!!.name, item)
+                fileState.rename(fileInfo!!, item)
                     .onSuccess {
                         fileFilterState.updateFilerKey()
                         homeState.updateFileInfo(null)

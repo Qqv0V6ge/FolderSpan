@@ -1,6 +1,7 @@
 package com.folderspan.service.webui
 
 import com.folderspan.data.main.network.NetworkProtocol
+import com.folderspan.data.main.network.Network
 import com.folderspan.service.http.server.linkshare.*
 import com.folderspan.service.network.*
 import kotlinx.coroutines.*
@@ -25,7 +26,7 @@ private class PlatformNetwork(val config: NetworkConnectionConfig, val callback:
     }
 }
 private class NetworkDirectory(val entries: Iterator<NetworkFileEntry>) { val mutex = Mutex() }
-private class NetworkTransfer {
+internal class NetworkTransfer {
     val chunks = Channel<Pair<ByteArray, Long>>(1)
     val mutex = Mutex()
     lateinit var job: Deferred<Boolean>
@@ -35,6 +36,11 @@ internal suspend fun networkPlatformRequest(request: LinkShareHttpRequest, sessi
     val operation = request.path.removePrefix("$WEB_UI_PLATFORM_PATH/networks")
     suspend fun connection(id: String) = (session.resource(id) as? PlatformNetwork)?.client ?: error("not a network handle")
     suspend fun transfer() = (session.resource(requireNotNull(request.query("handle"))) as? NetworkTransfer) ?: error("not a transfer handle")
+    if (operation.startsWith("/advanced/")) return advancedStoragePlatformRequest(request, session, ::connection) { id ->
+        val config = (session.resource(id) as? PlatformNetwork ?: error("not a network handle")).config
+        Network(name = "", protocol = config.protocol, host = config.host,
+            username = config.username, password = config.password, pathSeparator = config.pathSeparator, extras = config.extras).protocolId
+    }
     return when (request.method to operation) {
         "POST" to "" -> {
             val input = request.platformBody<WebUiNetworkOpen>()
@@ -44,10 +50,18 @@ internal suspend fun networkPlatformRequest(request: LinkShareHttpRequest, sessi
             val resource = PlatformNetwork(config, input.callbackId, session)
             platformResponse(WebUiHandle(session.own(resource) { resource.close() }))
         }
+        "POST" to "/capabilities" -> {
+            val input = request.platformBody<WebUiNetworkPath>()
+            platformResponse(connection(input.handle).effectiveCapabilities().getOrThrow())
+        }
+        "POST" to "/stat" -> {
+            val input = request.platformBody<WebUiNetworkPath>()
+            platformResponse(connection(input.handle).stat(input.storagePath).getOrThrow())
+        }
         "POST" to "/directories" -> {
             val input = request.platformBody<WebUiNetworkPath>()
             // ponytail: native protocol clients return a List; page transport here, add native cursors if listings exceed host memory.
-            val directory = NetworkDirectory(connection(input.handle).list(input.path).getOrThrow().iterator())
+            val directory = NetworkDirectory(connection(input.handle).list(input.storagePath).getOrThrow().iterator())
             platformResponse(WebUiHandle(session.own(directory) {}))
         }
         "GET" to "/directories" -> {
@@ -60,21 +74,33 @@ internal suspend fun networkPlatformRequest(request: LinkShareHttpRequest, sessi
             if (batch.finished) session.release(id)
             platformResponse(batch)
         }
-        "POST" to "/mkdir", "POST" to "/create", "POST" to "/delete", "POST" to "/rename", "POST" to "/copy" -> {
+        "POST" to "/mkdir", "POST" to "/create", "POST" to "/delete", "POST" to "/delete-empty-directory", "POST" to "/rename", "POST" to "/move", "POST" to "/copy" -> {
             val input = request.platformBody<WebUiNetworkPath>()
             val client = connection(input.handle)
+            val allowed = when (operation) {
+                "/delete", "/delete-empty-directory" -> client.capabilities.delete
+                "/rename" -> client.capabilities.rename
+                "/move" -> client.capabilities.rename && client.capabilities.delete && client.capabilities.write
+                else -> client.capabilities.write
+            }
+            check(allowed) { "storage operation is not permitted" }
             val result = when (operation) {
-                "/mkdir" -> client.createFolder(input.path)
-                "/create" -> client.createFile(input.path)
-                "/delete" -> client.delete(input.path, input.isDirectory)
-                "/rename" -> client.rename(input.path, input.newPath)
-                else -> client.copyFile(input.path, input.newPath)
+                "/mkdir" -> client.createFolder(input.storagePath)
+                "/create" -> client.createFile(input.storagePath)
+                "/delete" -> client.delete(input.storagePath, input.isDirectory)
+                "/delete-empty-directory" -> client.deleteEmptyDirectory(input.storagePath)
+                "/rename" -> client.rename(input.storagePath, input.newPath)
+                "/move" -> client.move(input.storagePath, StoragePath(input.newPath, input.newReference))
+                else -> client.copyFile(input.storagePath, StoragePath(input.newPath, input.newReference))
             }
             platformResponse(result.getOrThrow())
         }
         "POST" to "/download", "POST" to "/upload" -> {
             val input = request.platformBody<WebUiNetworkPath>()
             val parent = session.resource(input.handle) as? PlatformNetwork ?: error("not a network handle")
+            check(if (operation == "/download") parent.client.capabilities.read else parent.client.capabilities.write) {
+                "storage operation is not permitted"
+            }
             // A transfer owns its sockets so cancellation cannot leave a blocking native read alive.
             val owned = parent.transferConnection()
             val client = owned.client
@@ -83,7 +109,7 @@ internal suspend fun networkPlatformRequest(request: LinkShareHttpRequest, sessi
                 try {
                     if (operation == "/download") {
                         val reader = client as? ChunkReadableNetworkClient ?: error("protocol does not support streaming")
-                        reader.downloadByChunks(input.path, input.size) { bytes, total ->
+                        reader.downloadByChunks(input.storagePath, input.size) { bytes, total ->
                             var offset = 0
                             while (offset < bytes.size) {
                                 val end = minOf(bytes.size, offset + WEB_UI_FILE_STREAM_CHUNK_BYTES)
@@ -94,7 +120,7 @@ internal suspend fun networkPlatformRequest(request: LinkShareHttpRequest, sessi
                         }.getOrThrow().also { check(it) }
                     } else {
                         var received = 0L
-                        client.uploadFromSource(input.path, input.size, readChunk = {
+                        client.uploadFromSource(input.storagePath, input.size, readChunk = {
                             val item = transfer.chunks.receiveCatching()
                             item.exceptionOrNull()?.let { throw it }
                             val bytes = item.getOrNull()?.first

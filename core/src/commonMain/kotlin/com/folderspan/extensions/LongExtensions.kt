@@ -19,9 +19,11 @@ fun Long.timestampToYearMonthDay(): String {
 /**
  * 将毫秒时间戳格式化为 "yyyy-MM-dd HH:mm"。
  */
-fun Long.timestampToYMDHM(): String {
+fun Long.timestampToYMDHM(): String = timestampToYMDHM(TimeZone.currentSystemDefault())
+
+fun Long.timestampToYMDHM(timeZone: TimeZone): String {
     val instant = Instant.fromEpochMilliseconds(this)
-    val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val localDateTime = instant.toLocalDateTime(timeZone)
     return "${localDateTime.year.toString().padStart(2, '0')}-${
         (localDateTime.month.ordinal + 1).toString().padStart(2, '0')
     }-${localDateTime.day.toString().padStart(2, '0')} ${

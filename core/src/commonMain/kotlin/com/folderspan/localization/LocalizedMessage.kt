@@ -58,6 +58,14 @@ object LocalizedMessageKeys {
     const val NOTIFICATION_APP_UPDATE_BODY = "notification.app_update.body"
     const val NOTIFICATION_ERROR_LOG_TITLE = "notification.error_log.title"
     const val NOTIFICATION_ERROR_LOG_BODY = "notification.error_log.body"
+    const val NOTIFICATION_SYNC_TITLE = "notification.sync.title"
+    const val NOTIFICATION_SYNC_PREVIEW = "notification.sync.preview"
+    const val NOTIFICATION_SYNC_PENDING = "notification.sync.pending"
+    const val NOTIFICATION_SYNC_RESULT = "notification.sync.result"
+    const val NOTIFICATION_SYNC_GROUP_PREVIEW = "notification.sync.group.preview"
+    const val NOTIFICATION_SYNC_GROUP_PENDING = "notification.sync.group.pending"
+    const val NOTIFICATION_SYNC_GROUP_RESULT = "notification.sync.group.result"
+    const val CATEGORY_SYNC = "category.sync"
     const val CATEGORY_DEVICE = "category.device"
     const val CATEGORY_SHARE = "category.share"
     const val CATEGORY_PERMISSION = "category.permission"
@@ -216,6 +224,21 @@ data class LocalizedMessage(
                     version = args["version"].orEmpty(),
                 )
 
+            LocalizedMessageKeys.NOTIFICATION_SYNC_TITLE -> AppStrings.sync_notification_title
+            LocalizedMessageKeys.NOTIFICATION_SYNC_PREVIEW -> AppStrings.sync_notification_preview.format(arg0 = args["name"].orEmpty())
+            LocalizedMessageKeys.NOTIFICATION_SYNC_PENDING -> AppStrings.sync_notification_pending.format(arg0 = args["name"].orEmpty(), arg1 = args["pending"].orEmpty())
+            LocalizedMessageKeys.NOTIFICATION_SYNC_RESULT -> AppStrings.sync_notification_result.format(
+                arg0 = args["name"].orEmpty(), arg1 = syncNotificationStatusLabel(args["status"]), arg2 = args["success"].orEmpty(), arg3 = args["failure"].orEmpty())
+            LocalizedMessageKeys.NOTIFICATION_SYNC_GROUP_PREVIEW -> AppStrings.sync_notification_group_preview.format(
+                arg0 = args["name"].orEmpty(), arg1 = syncNotificationModeLabel(args["mode"]), arg2 = args["candidates"].orEmpty())
+            LocalizedMessageKeys.NOTIFICATION_SYNC_GROUP_PENDING -> AppStrings.sync_notification_group_pending.format(
+                arg0 = args["name"].orEmpty(), arg1 = syncNotificationModeLabel(args["mode"]),
+                arg2 = syncNotificationTargetsLabel(args), arg3 = args["pending"].orEmpty())
+            LocalizedMessageKeys.NOTIFICATION_SYNC_GROUP_RESULT -> AppStrings.sync_notification_group_result.format(
+                arg0 = args["name"].orEmpty(), arg1 = syncNotificationModeLabel(args["mode"]),
+                arg2 = syncNotificationTargetsLabel(args), arg3 = syncNotificationStatusLabel(args["status"]),
+                arg4 = args["success"].orEmpty(), arg5 = args["failure"].orEmpty())
+            LocalizedMessageKeys.CATEGORY_SYNC -> AppStrings.ui_synchronization_management
             LocalizedMessageKeys.NOTIFICATION_ERROR_LOG_TITLE ->
                 AppStrings.notification_error_log_title
 
@@ -449,4 +472,22 @@ fun LocalizedMessage?.renderOrLegacy(legacy: String): String {
     }
     val rendered = localized?.render().orEmpty()
     return rendered.ifBlank { legacy }
+}
+
+private fun syncNotificationModeLabel(mode: String?): String = when (mode) {
+    "Mirror" -> AppStrings.sync_mode_mirror
+    "BackupThenClean" -> AppStrings.sync_mode_backup_clean
+    "Bidirectional" -> AppStrings.sync_mode_bidirectional
+    else -> AppStrings.sync_mode_update
+}
+
+private fun syncNotificationTargetsLabel(args: Map<String, String>): String = args["targets"]?.takeIf { it.isNotBlank() }
+    ?: if (args["target_count"].orEmpty() in listOf("", "0")) AppStrings.sync_participants_unconfirmed
+    else AppStrings.sync_participating_targets_arg0.format(arg0 = args["target_count"].orEmpty())
+
+private fun syncNotificationStatusLabel(status: String?): String = when (status) {
+    "Success" -> AppStrings.ui_synchronization_successful
+    "PartialSuccess" -> AppStrings.ui_partially_successful
+    "Canceled" -> AppStrings.ui_sync_canceled
+    else -> AppStrings.ui_sync_failed
 }

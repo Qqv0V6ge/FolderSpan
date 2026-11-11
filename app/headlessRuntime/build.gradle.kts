@@ -148,7 +148,7 @@ compose.desktop {
                 licenseFile.set(rootProject.file("LICENSE"))
                 appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
             }
-            modules("java.sql")
+            modules("java.sql", "java.net.http", "java.security.jgss", "java.rmi", "java.management")
         }
         buildTypes {
             release {
@@ -185,6 +185,7 @@ fun registerTarGzTask(taskName: String, appImageTaskName: String, binaryDirector
     tasks.register<Tar>(taskName) {
         dependsOn(appImageTaskName)
         from(layout.buildDirectory.dir("compose/binaries/$binaryDirectoryName/app/$runtimeAppName"))
+        useFileSystemPermissions()
         archiveBaseName.set(runtimePackageName)
         archiveAppendix.set(runtimeWebUi)
         archiveVersion.set(runtimePackageVersion)

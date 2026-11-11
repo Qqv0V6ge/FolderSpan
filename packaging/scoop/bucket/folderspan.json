@@ -1,0 +1,29 @@
+{
+  "version": "1.0.1",
+  "description": "Cross-platform file manager and file sharing tool",
+  "homepage": "https://github.com/Qqv0V6ge/FolderSpan",
+  "license": "Apache-2.0",
+  "architecture": {
+    "arm64": {
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-arm64-no-pro-FolderSpan-1.0.1-windows-arm64.zip",
+      "hash": "942ef0e0fa04fb2ae40746c10d023e83973e171eba6c4330aec7d8e3c05f0862"
+    }
+  },
+  "extract_dir": "FolderSpan",
+  "shortcuts": [
+    [
+      "FolderSpan.exe",
+      "FolderSpan"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/Qqv0V6ge/FolderSpan"
+  },
+  "autoupdate": {
+    "architecture": {
+      "arm64": {
+        "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v$version/desktop-windows-arm64-no-pro-FolderSpan-$version-windows-arm64.zip"
+      }
+    }
+  }
+}

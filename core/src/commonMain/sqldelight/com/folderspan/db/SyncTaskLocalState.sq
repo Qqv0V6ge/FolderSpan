@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS SyncTaskLocalState (
+    taskId INTEGER NOT NULL PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    confirmedFingerprint TEXT NOT NULL DEFAULT '',
+    baselineEstablished INTEGER NOT NULL DEFAULT 0,
+    pendingRunId INTEGER NOT NULL DEFAULT 0,
+    confirmationNotified INTEGER NOT NULL DEFAULT 0,
+    scheduleTimeZone TEXT NOT NULL DEFAULT '',
+    fixedTargetsJson TEXT NOT NULL DEFAULT '[]',
+    fixedSourceBinding TEXT NOT NULL DEFAULT ''
+);
+
+upsert:
+INSERT OR REPLACE INTO SyncTaskLocalState(taskId, fingerprint, confirmedFingerprint, baselineEstablished, pendingRunId, confirmationNotified) VALUES (?, ?, ?, ?, ?, ?);
+
+selectTask:
+SELECT * FROM SyncTaskLocalState WHERE taskId = ?;
+
+selectTaskIds:
+SELECT taskId FROM SyncTaskLocalState;
+
+confirmPreview:
+UPDATE SyncTaskLocalState SET confirmedFingerprint = fingerprint, fixedTargetsJson = ?, fixedSourceBinding = ? WHERE taskId = ?;
+
+setBaselineEstablished:
+UPDATE SyncTaskLocalState SET baselineEstablished = 1 WHERE taskId = ?;
+
+setPendingRun:
+UPDATE SyncTaskLocalState SET pendingRunId = ? WHERE taskId = ?;
+
+setConfirmationNotified:
+UPDATE SyncTaskLocalState SET confirmationNotified = 1 WHERE taskId = ?;
+
+setScheduleTimeZone:
+UPDATE SyncTaskLocalState SET scheduleTimeZone = ? WHERE taskId = ?;
+
+deleteTask:
+DELETE FROM SyncTaskLocalState WHERE taskId = ?;
+
+resetConfirmation:
+UPDATE SyncTaskLocalState SET confirmedFingerprint = '', baselineEstablished = 0, pendingRunId = 0,
+    confirmationNotified = 0, fixedTargetsJson = '[]', fixedSourceBinding = '' WHERE taskId = ?;

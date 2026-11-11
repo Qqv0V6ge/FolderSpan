@@ -22,7 +22,6 @@ internal enum class SftpAuthType {
 internal fun LazyGridScope.NetworkSftpForm(
     name: String,
     onNameChange: (String) -> Unit,
-    nameError: Boolean,
     host: String,
     onHostChange: (String) -> Unit,
     hostError: Boolean,
@@ -46,14 +45,7 @@ internal fun LazyGridScope.NetworkSftpForm(
         NetworkEditSectionTitle(AppStrings.ui_basic_information)
     }
     item {
-        OutlinedTextField(
-            value = name,
-            onValueChange = onNameChange,
-            label = { Text(AppStrings.ui_name) },
-            isError = nameError,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkNameField(name, onNameChange, defaultNetworkName("SFTP", host))
     }
     item {
         OutlinedTextField(

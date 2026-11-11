@@ -111,6 +111,15 @@ class DesktopDpiSupportTest {
     }
 
     @Test
+    fun resolveWindowSizeScaleOnlyCompensatesForMissingNativeScaling() {
+        assertEquals(2f, DesktopDpiSupport.resolveWindowSizeScale(systemScale = 2f, nativeScale = 1f))
+        assertEquals(1f, DesktopDpiSupport.resolveWindowSizeScale(systemScale = 2f, nativeScale = 2f))
+        assertEquals(0.625f, DesktopDpiSupport.resolveWindowSizeScale(systemScale = 1.25f, nativeScale = 2f))
+        assertEquals(1f, DesktopDpiSupport.resolveWindowSizeScale(systemScale = null, nativeScale = 2f))
+        assertEquals(1f, DesktopDpiSupport.resolveWindowSizeScale(systemScale = 2f, nativeScale = Float.NaN))
+    }
+
+    @Test
     fun resolveWindowResizeRatioPreservesLogicalWindowSize() {
         assertEquals(1.3f, DesktopDpiSupport.resolveWindowResizeRatio(currentScale = 1f, targetScale = 1.3f))
         assertEquals(

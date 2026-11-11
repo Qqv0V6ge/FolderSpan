@@ -17,12 +17,12 @@ import strings.AppStrings
 internal fun listFileChildrenForPrivilegedService(path: String): List<FileSimpleInfo> {
     val directory = File(path)
     if (!directory.exists() && !directory.isSymbolicLinkNoFollow()) {
-        throw FileNotFoundException(AppStrings.ui_directory_does_not_exist_arg0.format(arg0 = (path).toString()))
+        throw FileNotFoundException(AppStrings.ui_directory_does_not_exist_arg0.format(arg0 = path))
     }
     if (directory.isSymbolicLinkNoFollow() || !directory.isDirectory) {
-        throw IllegalArgumentException(AppStrings.ui_the_goal_is_not_the_directory_arg0.format(arg0 = (path).toString()))
+        throw IllegalArgumentException(AppStrings.ui_the_goal_is_not_the_directory_arg0.format(arg0 = path))
     }
-    val files = directory.listFiles() ?: throw AuthorityException(AppStrings.ui_cannot_access_directory_arg0.format(arg0 = (path).toString()))
+    val files = directory.listFiles() ?: throw AuthorityException(AppStrings.ui_cannot_access_directory_arg0.format(arg0 = path))
     return files.mapNotNull { file ->
         file.toFileSimpleInfo().getOrNull()
     }
@@ -272,7 +272,7 @@ class ShizukuFileService : Binder(), IInterface {
     private fun getFileSimple(path: String): FileSimpleInfo {
         val file = File(path)
         if (!file.exists() && !file.isSymbolicLinkNoFollow()) {
-            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = (path).toString()))
+            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = path))
         }
         return file.toFileSimpleInfo().getOrElse { item ->  throw item }
     }
@@ -288,7 +288,7 @@ class ShizukuFileService : Binder(), IInterface {
     private fun getFileInfo(path: String): FileInfo {
         val file = File(path)
         if (!file.exists() && !file.isSymbolicLinkNoFollow()) {
-            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = (path).toString()))
+            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = path))
         }
         val simple = file.toFileSimpleInfo().getOrElse { item ->  throw item }
         var mode = 0
@@ -323,7 +323,7 @@ class ShizukuFileService : Binder(), IInterface {
     private fun deletePath(path: String): Boolean {
         val file = File(path)
         if (!file.exists() && !file.isSymbolicLinkNoFollow()) {
-            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = (path).toString()))
+            throw FileNotFoundException(AppStrings.ui_file_not_found_arg0.format(arg0 = path))
         }
         return deleteFileTreeNoFollow(file)
     }
@@ -384,7 +384,7 @@ class ShizukuFileService : Binder(), IInterface {
         val file = File(path)
         if (!file.exists() && !file.isSymbolicLinkNoFollow()) return true
         if (!file.isSymbolicLinkNoFollow() && !file.isDirectory) {
-            throw IllegalArgumentException(AppStrings.ui_the_goal_is_not_the_directory_arg0.format(arg0 = (path).toString()))
+            throw IllegalArgumentException(AppStrings.ui_the_goal_is_not_the_directory_arg0.format(arg0 = path))
         }
         return deleteFileTreeNoFollow(file)
     }
@@ -392,7 +392,7 @@ class ShizukuFileService : Binder(), IInterface {
     private fun openDescriptor(path: String, mode: Int): ParcelFileDescriptor {
         val file = File(path)
         if (file.isSymbolicLinkNoFollow()) {
-            throw AuthorityException(AppStrings.ui_not_allowed_to_open_symbolic_links_arg0.format(arg0 = (path).toString()))
+            throw AuthorityException(AppStrings.ui_not_allowed_to_open_symbolic_links_arg0.format(arg0 = path))
         }
         if (mode and ParcelFileDescriptor.MODE_CREATE != 0) {
             if (!file.exists()) {

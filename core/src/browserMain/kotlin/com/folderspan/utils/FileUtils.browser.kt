@@ -2,6 +2,7 @@ package com.folderspan.utils
 
 import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.service.network.StorageContentPlatform
 import com.folderspan.service.webui.*
 import com.folderspan.service.webrtc.download.WebRtcBrowserDownloadRegistry
 import kotlinx.coroutines.CancellationException
@@ -10,9 +11,21 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 actual object FileUtils {
+    actual suspend fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean> = platformResult {
+        requireFileAccess(permission)
+        check(!PrivateFileStorage.owns(path)) { "Deleting private browser directories is unsupported" }
+        WebUiPlatformClient.post<WebUiPathRequest, Boolean>("/files/delete-empty-directory", WebUiPathRequest(path))
+    }
+
+    actual suspend fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean> = platformResult {
+        requireFileAccess(permission)
+        check(!PrivateFileStorage.owns(from) && !PrivateFileStorage.owns(to)) { "Moving private browser files is unsupported" }
+        WebUiPlatformClient.post<WebUiMoveRequest, Boolean>("/files/move", WebUiMoveRequest(from, to))
+    }
     actual suspend fun getFile(permission: FileAccessPermission, path: String): Result<FileSimpleInfo> = platformResult {
         requireFileAccess(permission)
         if (PrivateFileStorage.owns(path)) PrivateFileStorage.info(path)
+        else if (StorageContentPlatform.ownsPrivatePath(path)) StorageContentPlatform.privateFileInfo(path)
         else WebUiPlatformClient.get("/files/info?path=${encodeWebUiQuery(path)}")
     }
 
@@ -21,8 +34,8 @@ actual object FileUtils {
 
     actual suspend fun getFileInfo(permission: FileAccessPermission, path: String): Result<FileInfo> = platformResult {
         requireFileAccess(permission)
-        if (PrivateFileStorage.owns(path)) {
-            val info = PrivateFileStorage.info(path)
+        if (PrivateFileStorage.owns(path) || StorageContentPlatform.ownsPrivatePath(path)) {
+            val info = getFile(permission, path).getOrThrow()
             FileInfo(info.name, isDirectory = info.isDirectory, isHidden = info.isHidden, path = info.path,
                 mineType = info.mineType, size = info.size, permissions = 0, user = "", userGroup = "", createdDate = 0, updatedDate = 0)
         } else WebUiPlatformClient.get("/files/details?path=${encodeWebUiQuery(path)}")
@@ -45,6 +58,7 @@ actual object FileUtils {
     actual suspend fun deleteFile(permission: FileAccessPermission, path: String): Result<Boolean> = platformResult {
         requireFileAccess(permission)
         if (PrivateFileStorage.owns(path)) PrivateFileStorage.deleteFile(permission, path).getOrThrow()
+        else if (StorageContentPlatform.ownsPrivatePath(path)) StorageContentPlatform.deletePrivateFile(path)
         else WebUiPlatformClient.json.decodeFromString<Boolean>(WebUiPlatformClient.exchange("DELETE", "$WEB_UI_PLATFORM_PATH/files?path=${encodeWebUiQuery(path)}").body.decodeToString())
     }
 
@@ -60,6 +74,15 @@ actual object FileUtils {
         requireFileAccess(permission)
         if (PrivateFileStorage.owns(path)) { PrivateFileStorage.createDirectoryIfNotExists(permission, path); true }
         else WebUiPlatformClient.post<WebUiPathRequest, Boolean>("/files/mkdir", WebUiPathRequest(path))
+    }
+
+    actual suspend fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean> = platformResult {
+        requireFileAccess(permission)
+        require(millis > 0) { "Invalid modification time" }
+        if (PrivateFileStorage.owns(path)) false
+        else WebUiPlatformClient.post<WebUiSetModifiedTimeRequest, Boolean>(
+            "/files/set-modified-time", WebUiSetModifiedTimeRequest(path, millis),
+        )
     }
 
     actual suspend fun rename(permission: FileAccessPermission, path: String, oldName: String, newName: String): Result<Boolean> = platformResult {
@@ -109,7 +132,8 @@ actual object FileUtils {
             val bytes = if (local != null) {
                 require(end <= local.size)
                 local.copyOfRange(offset.toInt(), offset.toInt() + count)
-            } else WebUiPlatformClient.exchange("GET", "$WEB_UI_PLATFORM_PATH/files/content?path=${encodeWebUiQuery(path)}&offset=$offset&length=$count").body
+            } else if (StorageContentPlatform.ownsPrivatePath(path)) StorageContentPlatform.readPrivateRange(path, offset, offset + count)
+            else WebUiPlatformClient.exchange("GET", "$WEB_UI_PLATFORM_PATH/files/content?path=${encodeWebUiQuery(path)}&offset=$offset&length=$count").body
             check(bytes.size == count) { "file changed or unexpected end of file" }
             emit(Result.success(offset to bytes))
             offset += bytes.size
@@ -131,7 +155,10 @@ actual object FileUtils {
             var position = 0
             do {
                 val count = minOf(data.size - position, WEB_UI_FILE_STREAM_CHUNK_BYTES)
-                WebUiPlatformClient.exchange("PUT", "$WEB_UI_PLATFORM_PATH/files/content?path=${encodeWebUiQuery(path)}&size=$fileSize&offset=${offset + position}", data.copyOfRange(position, position + count), "application/octet-stream")
+                val bytes = data.copyOfRange(position, position + count)
+                if (StorageContentPlatform.ownsPrivatePath(path)) {
+                    StorageContentPlatform.writePrivateRange(path, fileSize, bytes, offset + position)
+                } else WebUiPlatformClient.exchange("PUT", "$WEB_UI_PLATFORM_PATH/files/content?path=${encodeWebUiQuery(path)}&size=$fileSize&offset=${offset + position}", bytes, "application/octet-stream")
                 position += count
             } while (position < data.size)
         }

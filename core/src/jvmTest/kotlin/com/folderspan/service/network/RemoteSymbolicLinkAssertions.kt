@@ -5,7 +5,7 @@ import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-internal suspend fun verifyRemoteSymbolicLinkRejection(client: NetworkClient, root: String) {
+internal suspend fun verifyRemoteSymbolicLinkRejection(client: StorageProvider, root: String) {
     val reader = client as ChunkReadableNetworkClient
     val source = "$root/ordinary/payload.txt"
     val local = Files.createTempFile("remote-link-control", ".txt")

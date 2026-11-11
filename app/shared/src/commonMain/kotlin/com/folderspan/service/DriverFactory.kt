@@ -60,9 +60,11 @@ expect class DriverFactory() {
 // - Linux ~/.local/share/FolderSpan/folderspan.db
 // - iOS: app sandbox home directory (NSHomeDirectory)/folderspan.db
 // - JS/WASM: SQL.js WebWorkerDriver snapshots the database into IndexedDB.
-fun createDatabase(driverFactory: DriverFactory): FolderSpanDatabase {
+fun createDatabase(driverFactory: DriverFactory): FolderSpanDatabase = createDatabase(driverFactory.createDriver())
+
+fun createDatabase(driver: SqlDriver): FolderSpanDatabase {
     val database = FolderSpanDatabase(
-        driver = driverFactory.createDriver(),
+        driver = driver,
         DeviceAdapter = Device.Adapter(
             typeAdapter = driverAdapter,
         ),

@@ -55,7 +55,14 @@ class NetworkAddEntryScreen : AppScreenRoute {
             if (PlatformType == DeviceType.JS) NetworkAddProtocol.Share else NetworkAddProtocol.FTP
         }
         var protocol by rememberSaveable { mutableStateOf(initialProtocol) }
-        val protocolOptions = remember { NetworkAddProtocol.entries.map { item -> item.label } }
+        val protocolOptions = remember { NetworkAddProtocol.entries.map { item -> item.label } + addedStorageProtocols.map(::storageProtocolLabel) }
+        var storageProtocolName by rememberSaveable { mutableStateOf<String?>(null) }
+        val storageForm = storageProtocolName?.let { selected ->
+            rememberStorageFormState(selected, snackbar = snackbarHostState) { network ->
+                networkState.addNetwork(network, persist = true)
+                navigator.pop()
+            }
+        }
 
         var networkName by rememberSaveable { mutableStateOf("") }
         var networkHost by rememberSaveable { mutableStateOf("") }
@@ -90,10 +97,8 @@ class NetworkAddEntryScreen : AppScreenRoute {
         var shareAddress by rememberSaveable { mutableStateOf("") }
         var sharePassword by rememberSaveable { mutableStateOf("") }
 
-        var saveToDatabase by rememberSaveable { mutableStateOf(true) }
         var isTesting by remember { mutableStateOf(false) }
 
-        val nameError = networkName.isBlank()
         val hostEmpty = networkHost.isBlank()
         val parsedShare = remember(shareAddress, protocol) {
             parseShareNetworkLink(shareAddress, protocol.port)
@@ -163,11 +168,11 @@ class NetworkAddEntryScreen : AppScreenRoute {
         }
         val canSave = when (protocol) {
             NetworkAddProtocol.Share -> !shareError && shareAddress.isNotBlank()
-            NetworkAddProtocol.FTP -> !(nameError || ftpHostError)
-            NetworkAddProtocol.SFTP -> !(nameError || sftpHostError)
-            NetworkAddProtocol.SMB -> !(nameError || smbHostError || smbShareError)
-            NetworkAddProtocol.WebDav -> !(nameError || webDavHostError)
-            NetworkAddProtocol.S3 -> !(nameError || s3HostError || s3AccessKeyError || s3SecretKeyError || s3BucketError || s3RegionError)
+            NetworkAddProtocol.FTP -> !ftpHostError
+            NetworkAddProtocol.SFTP -> !sftpHostError
+            NetworkAddProtocol.SMB -> !(smbHostError || smbShareError)
+            NetworkAddProtocol.WebDav -> !webDavHostError
+            NetworkAddProtocol.S3 -> !(s3HostError || s3AccessKeyError || s3SecretKeyError || s3BucketError || s3RegionError)
         }
         val canTest = when (protocol) {
             NetworkAddProtocol.Share -> !shareError
@@ -178,165 +183,21 @@ class NetworkAddEntryScreen : AppScreenRoute {
             NetworkAddProtocol.S3 -> !(s3HostError || s3AccessKeyError || s3SecretKeyError || s3BucketError || s3RegionError)
         }
 
-        val handleSaveClick: () -> Unit = save@{
-            if (!canSave) return@save
-            when (protocol) {
+        fun currentNetwork(): Network? {
+            if (!canSave) return null
+            return when (protocol) {
                 NetworkAddProtocol.Share -> {
-                    val link = parsedShare ?: return@save
-                    val resolvedName = shareName.trim().ifBlank { link.hostLabel }
-                    val resolvedPassword = sharePassword.trim().ifBlank { link.password.orEmpty() }
-                    val shareNetwork = NetworkShare(
-                        name = resolvedName,
-                        baseUrl = link.baseUrl,
-                        password = resolvedPassword
-                    )
-                    scope.launch {
-                        networkState.addNetwork(shareNetwork, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-
-                NetworkAddProtocol.FTP -> {
-                    val parsedHost = ftpParsedHost ?: return@save
-                    if (nameError || ftpHostError) return@save
-                    val network = Network(
-                        name = networkName.trim(),
-                        pathSeparator = "/",
-                        protocol = NetworkProtocol.FTP.name,
-                        host = parsedHost.normalizedHost,
-                        username = networkUsername.trim(),
-                        password = networkPassword,
-                        extras = NetworkDriveExtras(
-                            ftp = FtpDriveExtras(
-                                passiveMode = ftpPassiveMode,
-                                ftpsEnabled = ftpFtpsEnabled,
-                                pathEncoding = ftpPathEncoding
-                            )
-                        )
-                    )
-                    scope.launch {
-                        networkState.addNetwork(network, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-
-                NetworkAddProtocol.SFTP -> {
-                    val parsedHost = sftpParsedHost ?: return@save
-                    if (nameError || sftpHostError) return@save
-                    val network = Network(
-                        name = networkName.trim(),
-                        pathSeparator = "/",
-                        protocol = NetworkProtocol.SFTP.name,
-                        host = parsedHost.normalizedHost,
-                        username = networkUsername.trim(),
-                        password = sftpAuthType.selectedPassword(networkPassword),
-                        extras = NetworkDriveExtras(
-                            sftp = SftpDriveExtras(
-                                privateKey = sftpAuthType.selectedPrivateKey(sftpPrivateKey),
-                                knownHosts = sftpKnownHosts
-                            )
-                        )
-                    )
-                    scope.launch {
-                        networkState.addNetwork(network, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-
-                NetworkAddProtocol.SMB -> {
-                    val parsedHost = smbParsedHost ?: return@save
-                    if (nameError || smbHostError || smbShareError) return@save
-                    val network = Network(
-                        name = networkName.trim(),
-                        pathSeparator = "\\",
-                        protocol = NetworkProtocol.SMB.name,
-                        host = parsedHost.normalizedHost,
-                        username = networkUsername.trim(),
-                        password = networkPassword,
-                        extras = NetworkDriveExtras(
-                            smb = SmbDriveExtras(
-                                share = resolvedSmbShareName,
-                                domain = smbDomain.trim()
-                            )
-                        )
-                    )
-                    scope.launch {
-                        networkState.addNetwork(network, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-
-                NetworkAddProtocol.WebDav -> {
-                    if (nameError || webDavHostError) return@save
-                    val resolvedHost = webDavParsedHost.normalizedBaseUrl
-                    val network = Network(
-                        name = networkName.trim(),
-                        pathSeparator = "/",
-                        protocol = NetworkProtocol.WebDav.name,
-                        host = resolvedHost,
-                        username = networkUsername.trim(),
-                        password = networkPassword,
-                        extras = NetworkDriveExtras(
-                            webdav = WebDavDriveExtras(
-                                authType = webDavAuthType,
-                                token = webDavToken,
-                                tokenHeaderName = webDavTokenHeaderName.trim().ifBlank { "Authorization" },
-                                tokenPrefix = webDavTokenPrefix,
-                                headers = webDavHeaders.toHeaderMap()
-                            )
-                        )
-                    )
-                    scope.launch {
-                        networkState.addNetwork(network, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-
-                NetworkAddProtocol.S3 -> {
-                    if (nameError || s3HostError || s3AccessKeyError || s3SecretKeyError || s3BucketError || s3RegionError) {
-                        return@save
-                    }
-                    val resolvedEndpoint = s3ParsedEndpoint.normalizedBaseUrl
-                    val network = Network(
-                        name = networkName.trim(),
-                        pathSeparator = "/",
-                        protocol = NetworkProtocol.S3.name,
-                        host = resolvedEndpoint,
-                        username = networkUsername.trim(),
-                        password = networkPassword,
-                        extras = NetworkDriveExtras(
-                            s3 = S3DriveExtras(
-                                bucket = s3Bucket.trim(),
-                                region = s3Region.trim(),
-                                endpoint = resolvedEndpoint,
-                                sessionToken = s3SessionToken.trim(),
-                                forcePathStyle = s3ForcePathStyle
-                            )
-                        )
-                    )
-                    scope.launch {
-                        networkState.addNetwork(network, saveToDatabase)
-                        navigator.pop()
-                    }
-                }
-            }
-        }
-
-        val handleTestClick: () -> Unit = test@{
-            if (!canTest || isTesting) return@test
-            val testNetwork = when (protocol) {
-                NetworkAddProtocol.Share -> {
-                    val link = parsedShare ?: return@test
+                    val link = parsedShare ?: return null
                     NetworkShare(
-                        name = shareName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = shareName.trim().ifBlank { link.hostLabel },
                         baseUrl = link.baseUrl,
                         password = sharePassword.trim().ifBlank { link.password.orEmpty() }
                     )
                 }
                 NetworkAddProtocol.FTP -> {
-                    val parsedHost = ftpParsedHost ?: return@test
+                    val parsedHost = ftpParsedHost ?: return null
                     Network(
-                        name = networkName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = networkName.trim().ifBlank { defaultNetworkName(protocol.name, networkHost) },
                         pathSeparator = "/",
                         protocol = NetworkProtocol.FTP.name,
                         host = parsedHost.normalizedHost,
@@ -352,9 +213,9 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     )
                 }
                 NetworkAddProtocol.SFTP -> {
-                    val parsedHost = sftpParsedHost ?: return@test
+                    val parsedHost = sftpParsedHost ?: return null
                     Network(
-                        name = networkName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = networkName.trim().ifBlank { defaultNetworkName(protocol.name, networkHost) },
                         pathSeparator = "/",
                         protocol = NetworkProtocol.SFTP.name,
                         host = parsedHost.normalizedHost,
@@ -369,9 +230,9 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     )
                 }
                 NetworkAddProtocol.SMB -> {
-                    val parsedHost = smbParsedHost ?: return@test
+                    val parsedHost = smbParsedHost ?: return null
                     Network(
-                        name = networkName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = networkName.trim().ifBlank { defaultNetworkName(protocol.name, networkHost) },
                         pathSeparator = "\\",
                         protocol = NetworkProtocol.SMB.name,
                         host = parsedHost.normalizedHost,
@@ -386,9 +247,9 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     )
                 }
                 NetworkAddProtocol.WebDav -> {
-                    val resolvedHost = webDavParsedHost?.normalizedBaseUrl ?: return@test
+                    val resolvedHost = webDavParsedHost?.normalizedBaseUrl ?: return null
                     Network(
-                        name = networkName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = networkName.trim().ifBlank { defaultNetworkName(protocol.name, networkHost) },
                         pathSeparator = "/",
                         protocol = NetworkProtocol.WebDav.name,
                         host = resolvedHost,
@@ -406,10 +267,10 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     )
                 }
                 NetworkAddProtocol.S3 -> {
-                    val parsedEndpoint = s3ParsedEndpoint ?: return@test
+                    val parsedEndpoint = s3ParsedEndpoint ?: return null
                     val resolvedEndpoint = parsedEndpoint.normalizedBaseUrl
                     Network(
-                        name = networkName.trim().ifBlank { AppStrings.ui_temporary_connection },
+                        name = networkName.trim().ifBlank { defaultNetworkName(protocol.name, networkHost) },
                         pathSeparator = "/",
                         protocol = NetworkProtocol.S3.name,
                         host = resolvedEndpoint,
@@ -427,6 +288,37 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     )
                 }
             }
+        }
+        val content = rememberStorageContentFormState(storageProtocolName ?: protocol.name,
+            if (storageForm == null) currentNetwork() else null)
+        val activeContent = storageForm?.content ?: content
+        var isSaving by remember { mutableStateOf(false) }
+
+        val handleSaveClick: () -> Unit = save@{
+            if (storageForm != null) {
+                storageForm.save()
+                return@save
+            }
+            if (isSaving) return@save
+            val selected = currentNetwork() ?: return@save
+            isSaving = true
+            scope.launch {
+                try {
+                    if (content.supportedProtocol) content.save(selected) {
+                        networkState.addNetwork(it, persist = true)
+                    } else networkState.addNetwork(selected, persist = true)
+                    navigator.pop()
+                } finally { isSaving = false }
+            }
+        }
+
+        val handleTestClick: () -> Unit = test@{
+            if (storageForm != null) {
+                storageForm.testConnection()
+                return@test
+            }
+            if (!canTest || isTesting) return@test
+            val testNetwork = currentNetwork() ?: return@test
             scope.launch {
                 isTesting = true
                 try {
@@ -435,6 +327,7 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     val result = withContext(Dispatchers.Default) {
                         testNetwork.getList(rootPath)
                     }
+                    if (result.isSuccess) content.inspect()
                     val message = if (result.isSuccess) {
                         AppStrings.ui_connection_successful
                     } else {
@@ -480,11 +373,11 @@ class NetworkAddEntryScreen : AppScreenRoute {
                     FloatingActionButton(
                         onClick = handleSaveClick,
                         content = {
-                            Icon(Icons.Default.Save, contentDescription = null)
+                            Icon(Icons.Default.Save, contentDescription = AppStrings.ui_save)
                         },
                     )
                     TestConnectionButton(
-                        isTesting = isTesting,
+                        isTesting = storageForm?.testing ?: isTesting,
                         onClick = handleTestClick,
                     )
                 }
@@ -502,29 +395,43 @@ class NetworkAddEntryScreen : AppScreenRoute {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EditableExposedDropdownMenu(
                         optionsUiState = StringListUiState(protocolOptions),
-                        value = protocol.label,
+                        value = storageProtocolName?.let { storageProtocolLabel(NetworkProtocol.valueOf(it)) } ?: protocol.label,
                         readOnly = true,
-                        onValueChange = { label -> protocol = NetworkAddProtocol.fromLabel(label) },
+                        onValueChange = { label ->
+                            activeContent?.invalidate()
+                            val storage = addedStorageProtocols.firstOrNull { storageProtocolLabel(it) == label }
+                            storageProtocolName = storage?.name
+                            if (storage == null) protocol = NetworkAddProtocol.fromLabel(label)
+                        },
                         label = { Text(AppStrings.ui_agreement) },
                         optionContent = { label -> Text(label) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                when (protocol) {
+                if (storageForm != null) {
+                    NetworkStorageForm(
+                        protocol = storageForm.protocol, values = storageForm.values, onChange = { storageForm.values = it },
+                        password = storageForm.password, onPassword = { storageForm.password = it },
+                        token = storageForm.token, onToken = { storageForm.token = it },
+                        accounts = storageForm.availableAccounts, libraries = storageForm.libraries,
+                        authorization = storageForm.authorization, busy = storageForm.busy, error = storageForm.error,
+                        onAuthorize = storageForm::authorize, onAuthorizeSharing = storageForm::authorizeSharing, onCancel = storageForm::cancelAuthorization,
+                        onOpen = storageForm::openAuthorization, onRemove = storageForm::removeAuthorization,
+                        onInstallSeafile = storageForm::installSeafile,
+                    )
+                } else when (protocol) {
                     NetworkAddProtocol.Share -> {
                         NetworkShareForm(
                             name = shareName,
                             onNameChange = { shareName = it },
-                            nameError = false,
-                            showNameHint = true,
                             address = shareAddress,
-                            onAddressChange = { shareAddress = it },
+                            onAddressChange = { content.invalidate(); shareAddress = it },
                             addressError = shareError,
                             addressErrorMessage = shareErrorMessage,
                             resolvedBaseUrl = resolvedBaseUrl,
                             password = sharePassword,
-                            onPasswordChange = { sharePassword = it },
+                            onPasswordChange = { content.invalidate(); sharePassword = it },
                             passwordLabel = AppStrings.ui_access_password_optional,
                             parsedShare = parsedShare
                         )
@@ -535,22 +442,21 @@ class NetworkAddEntryScreen : AppScreenRoute {
                         NetworkFtpForm(
                             name = networkName,
                             onNameChange = { networkName = it },
-                            nameError = nameError,
                             host = networkHost,
-                            onHostChange = { networkHost = it },
+                            onHostChange = { content.invalidate(); networkHost = it },
                             hostError = ftpHostError,
                             hostErrorMessage = ftpHostErrorMessage,
                             resolvedBaseUrl = resolvedAddress,
                             username = networkUsername,
-                            onUsernameChange = { networkUsername = it },
+                            onUsernameChange = { content.invalidate(); networkUsername = it },
                             password = networkPassword,
-                            onPasswordChange = { networkPassword = it },
+                            onPasswordChange = { content.invalidate(); networkPassword = it },
                             passiveMode = ftpPassiveMode,
-                            onPassiveModeChange = { ftpPassiveMode = it },
+                            onPassiveModeChange = { content.invalidate(); ftpPassiveMode = it },
                             ftpsEnabled = ftpFtpsEnabled,
-                            onFtpsEnabledChange = { ftpFtpsEnabled = it },
+                            onFtpsEnabledChange = { content.invalidate(); ftpFtpsEnabled = it },
                             pathEncoding = ftpPathEncoding,
-                            onPathEncodingChange = { ftpPathEncoding = it }
+                            onPathEncodingChange = { content.invalidate(); ftpPathEncoding = it }
                         )
                     }
 
@@ -559,22 +465,21 @@ class NetworkAddEntryScreen : AppScreenRoute {
                         NetworkSftpForm(
                             name = networkName,
                             onNameChange = { networkName = it },
-                            nameError = nameError,
                             host = networkHost,
-                            onHostChange = { networkHost = it },
+                            onHostChange = { content.invalidate(); networkHost = it },
                             hostError = sftpHostError,
                             hostErrorMessage = sftpHostErrorMessage,
                             resolvedBaseUrl = resolvedAddress,
                             authType = sftpAuthType,
-                            onAuthTypeChange = { sftpAuthType = it },
+                            onAuthTypeChange = { content.invalidate(); sftpAuthType = it },
                             username = networkUsername,
-                            onUsernameChange = { networkUsername = it },
+                            onUsernameChange = { content.invalidate(); networkUsername = it },
                             password = networkPassword,
-                            onPasswordChange = { networkPassword = it },
+                            onPasswordChange = { content.invalidate(); networkPassword = it },
                             privateKey = sftpPrivateKey,
-                            onPrivateKeyChange = { sftpPrivateKey = it },
+                            onPrivateKeyChange = { content.invalidate(); sftpPrivateKey = it },
                             knownHosts = sftpKnownHosts,
-                            onKnownHostsChange = { sftpKnownHosts = it }
+                            onKnownHostsChange = { content.invalidate(); sftpKnownHosts = it }
                         )
                     }
 
@@ -583,23 +488,22 @@ class NetworkAddEntryScreen : AppScreenRoute {
                         NetworkSmbForm(
                             name = networkName,
                             onNameChange = { networkName = it },
-                            nameError = nameError,
                             host = networkHost,
-                            onHostChange = { networkHost = it },
+                            onHostChange = { content.invalidate(); networkHost = it },
                             hostError = smbHostError,
                             hostErrorMessage = smbHostErrorMessage,
                             resolvedBaseUrl = resolvedAddress,
                             username = networkUsername,
-                            onUsernameChange = { networkUsername = it },
+                            onUsernameChange = { content.invalidate(); networkUsername = it },
                             password = networkPassword,
-                            onPasswordChange = { networkPassword = it },
+                            onPasswordChange = { content.invalidate(); networkPassword = it },
                             shareName = smbShareName,
-                            onShareNameChange = { smbShareName = it },
+                            onShareNameChange = { content.invalidate(); smbShareName = it },
                             shareNameError = smbShareError,
                             shareNameErrorMessage = smbShareErrorMessage,
                             resolvedShareName = smbParsedHost?.shareName.orEmpty(),
                             domain = smbDomain,
-                            onDomainChange = { smbDomain = it }
+                            onDomainChange = { content.invalidate(); smbDomain = it }
                         )
                     }
 
@@ -607,41 +511,40 @@ class NetworkAddEntryScreen : AppScreenRoute {
                         NetworkWebDavForm(
                             name = networkName,
                             onNameChange = { networkName = it },
-                            nameError = nameError,
                             host = networkHost,
-                            onHostChange = { networkHost = it },
+                            onHostChange = { content.invalidate(); networkHost = it },
                             hostError = webDavHostError,
                             hostErrorMessage = webDavHostErrorMessage,
                             resolvedBaseUrl = webDavParsedHost?.displayAddress.orEmpty(),
                             authType = webDavAuthType,
-                            onAuthTypeChange = { webDavAuthType = it },
+                            onAuthTypeChange = { content.invalidate(); webDavAuthType = it },
                             username = networkUsername,
-                            onUsernameChange = { networkUsername = it },
+                            onUsernameChange = { content.invalidate(); networkUsername = it },
                             password = networkPassword,
-                            onPasswordChange = { networkPassword = it },
+                            onPasswordChange = { content.invalidate(); networkPassword = it },
                             token = webDavToken,
-                            onTokenChange = { webDavToken = it },
+                            onTokenChange = { content.invalidate(); webDavToken = it },
                             tokenHeaderName = webDavTokenHeaderName,
-                            onTokenHeaderNameChange = { webDavTokenHeaderName = it },
+                            onTokenHeaderNameChange = { content.invalidate(); webDavTokenHeaderName = it },
                             tokenPrefix = webDavTokenPrefix,
-                            onTokenPrefixChange = { webDavTokenPrefix = it },
+                            onTokenPrefixChange = { content.invalidate(); webDavTokenPrefix = it },
                             headers = webDavHeaders,
                             onHeaderKeyChange = { index, value ->
-                                webDavHeaders = webDavHeaders.toMutableList().apply {
+                                content.invalidate(); webDavHeaders = webDavHeaders.toMutableList().apply {
                                     this[index] = this[index].copy(key = value)
                                 }
                             },
                             onHeaderValueChange = { index, value ->
-                                webDavHeaders = webDavHeaders.toMutableList().apply {
+                                content.invalidate(); webDavHeaders = webDavHeaders.toMutableList().apply {
                                     this[index] = this[index].copy(value = value)
                                 }
                             },
                             onAddHeader = {
-                                webDavHeaders = webDavHeaders + WebDavHeaderEntry("", "")
+                                content.invalidate(); webDavHeaders = webDavHeaders + WebDavHeaderEntry("", "")
                             },
                             onRemoveHeader = { index ->
                                 if (index in webDavHeaders.indices) {
-                                    webDavHeaders = webDavHeaders.filterIndexed { currentIndex, _ ->
+                                    content.invalidate(); webDavHeaders = webDavHeaders.filterIndexed { currentIndex, _ ->
                                         currentIndex != index
                                     }
                                 }
@@ -653,44 +556,34 @@ class NetworkAddEntryScreen : AppScreenRoute {
                         NetworkS3Form(
                             name = networkName,
                             onNameChange = { networkName = it },
-                            nameError = nameError,
                             endpoint = networkHost,
-                            onEndpointChange = { networkHost = it },
+                            onEndpointChange = { content.invalidate(); networkHost = it },
                             endpointError = s3HostError,
                             endpointErrorMessage = s3HostErrorMessage,
                             resolvedEndpoint = s3ParsedEndpoint?.displayAddress.orEmpty(),
                             accessKeyId = networkUsername,
-                            onAccessKeyIdChange = { networkUsername = it },
+                            onAccessKeyIdChange = { content.invalidate(); networkUsername = it },
                             accessKeyIdError = s3AccessKeyError,
                             secretAccessKey = networkPassword,
-                            onSecretAccessKeyChange = { networkPassword = it },
+                            onSecretAccessKeyChange = { content.invalidate(); networkPassword = it },
                             secretAccessKeyError = s3SecretKeyError,
                             sessionToken = s3SessionToken,
-                            onSessionTokenChange = { s3SessionToken = it },
+                            onSessionTokenChange = { content.invalidate(); s3SessionToken = it },
                             bucket = s3Bucket,
-                            onBucketChange = { s3Bucket = it },
+                            onBucketChange = { content.invalidate(); s3Bucket = it },
                             bucketError = s3BucketError,
                             region = s3Region,
-                            onRegionChange = { s3Region = it },
+                            onRegionChange = { content.invalidate(); s3Region = it },
                             regionError = s3RegionError,
                             forcePathStyle = s3ForcePathStyle,
-                            onForcePathStyleChange = { s3ForcePathStyle = it }
+                            onForcePathStyleChange = { content.invalidate(); s3ForcePathStyle = it }
                         )
                     }
                 }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    ListItem(
-                        headlineContent = { Text(AppStrings.ui_save_database) },
-                        trailingContent = {
-                            Switch(
-                                checked = saveToDatabase,
-                                onCheckedChange = { saveToDatabase = it }
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                if (activeContent?.supportedProtocol == true) item(span = { GridItemSpan(maxLineSpan) }) {
+                    StorageContentSection(activeContent)
                 }
+
             }
         }
     }

@@ -58,6 +58,7 @@ internal class FileStateTaskSubmissionCoordinator(
         destFileSimpleInfo: FileSimpleInfo,
     ) {
 
+        requireWritableCopyDestination(destFileSimpleInfo.protocol)
         LogKit.i(AppStrings.ui_start_copying_files_arg0_arg1.format(arg0 = srcFileSimpleInfo.path, arg1 = destFileSimpleInfo.path))
         taskState.addOrUpdate(task)
         taskState.registerTaskHandler(task) {

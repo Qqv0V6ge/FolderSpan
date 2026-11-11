@@ -18,7 +18,7 @@ suspend fun startHeadlessPlatformRuntime(
 ) {
     require(port in 1..65535)
     val securityPolicy = WebUiSecurityPolicy(
-        trustedOrigins = System.getenv("FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS").orEmpty()
+        trustedOrigins = (System.getenv("FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS") ?: "*")
             .split(',').map(String::trim).filter(String::isNotEmpty).toSet(),
         advertisedHostProvider = { webUiAdvertisedHosts(getAllIPAddresses(SocketClientIPEnum.ALL)).toSet() },
     )

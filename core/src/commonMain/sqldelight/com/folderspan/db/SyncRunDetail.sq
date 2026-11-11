@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS SyncRunDetail (
+    taskId INTEGER NOT NULL,
+    ownerDeviceId TEXT NOT NULL,
+    runId INTEGER NOT NULL,
+    ordinal INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    success INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, ownerDeviceId, runId, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS SyncRunDetailOrder ON SyncRunDetail(taskId, ownerDeviceId, runId, success, ordinal);
+CREATE INDEX IF NOT EXISTS SyncRunDetailKindOrder ON SyncRunDetail(taskId, ownerDeviceId, runId, kind, success, ordinal);
+
+upsert:
+INSERT OR REPLACE INTO SyncRunDetail(taskId, ownerDeviceId, runId, ordinal, kind, success, payload) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectPage:
+SELECT ordinal, payload FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId = ? AND runId = ? AND ordinal < ?
+ORDER BY success, ordinal LIMIT ? OFFSET ?;
+
+selectKindPage:
+SELECT ordinal, payload FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId = ? AND runId = ? AND ordinal < ? AND kind = ?
+ORDER BY success, ordinal LIMIT ? OFFSET ?;
+
+deleteRun:
+DELETE FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId = ? AND runId = ?;
+
+deleteRuns:
+DELETE FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId = ? AND runId IN ?;
+
+pruneRuns:
+DELETE FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId = ? AND runId NOT IN ?;
+
+deleteOtherOwners:
+DELETE FROM SyncRunDetail WHERE taskId = ? AND ownerDeviceId != ?;
+
+deleteTask:
+DELETE FROM SyncRunDetail WHERE taskId = ?;

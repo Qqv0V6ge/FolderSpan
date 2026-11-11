@@ -36,6 +36,25 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class DeviceFileServiceTest {
     @Test
+    fun directoryWriteCheckIsReadOnlyAndRechecksRevokedAuthorization() = runBlocking<Unit> {
+        val database = createInMemoryDatabase()
+        val certificateState = DeviceCertificateState(database)
+        val service = DeviceFileService(certificateState)
+        val token = "copy-write-preflight"
+        certificateState.setTokenPermission(token, 1L)
+        val directory = Files.createTempDirectory("copy-write-check").toRealPath()
+        try {
+            assertTrue(service.checkDirectoryWriteAccess(token, directory.toString()).getOrThrow())
+            assertEquals(0L, Files.list(directory).use { it.count() })
+            certificateState.setDeviceSharePathScope(token,
+                DeviceSharePathScope(listOf(DeviceSharePathGrant(directory.toString(), isDirectory = true))))
+            assertIs<AuthorityException>(service.checkDirectoryWriteAccess(token, directory.toString()).exceptionOrNull())
+            assertEquals(0L, Files.list(directory).use { it.count() })
+            assertIs<AuthorityException>(service.checkDirectoryWriteAccess("unknown-token", directory.toString()).exceptionOrNull())
+        } finally { directory.toFile().deleteRecursively() }
+    }
+
+    @Test
     fun deviceShareScopeAllowsReadsOnlyAndRejectsUnsharedOrSymbolicLinkPaths() = runBlocking {
         val database = createInMemoryDatabase()
         val certificateState = DeviceCertificateState(database)

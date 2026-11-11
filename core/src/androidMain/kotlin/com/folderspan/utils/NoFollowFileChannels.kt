@@ -45,7 +45,7 @@ internal object NoFollowFileChannels {
     private fun mapOpenError(nioPath: Path, path: String, error: Exception): Exception {
         if (error is NoSuchFileException) return Exception(AppStrings.ui_file_does_not_exist)
         if (isSymlinkRejection(nioPath, error)) {
-            return AuthorityException(AppStrings.ui_not_allowed_to_read_write_symbolic_links_arg0.format(arg0 = (path).toString()))
+            return AuthorityException(AppStrings.ui_not_allowed_to_read_write_symbolic_links_arg0.format(arg0 = path))
         }
         return error
     }

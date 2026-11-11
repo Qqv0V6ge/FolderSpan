@@ -8,7 +8,8 @@ class WebUiSecurityPolicy(
     trustedOrigins: Set<String> = emptySet(),
     private val advertisedHostProvider: () -> Set<String>,
 ) {
-    private val trustedOrigins = trustedOrigins.map { origin ->
+    private val allowAnyOrigin = "*" in trustedOrigins
+    private val trustedOrigins = trustedOrigins.filterNot { it == "*" }.map { origin ->
         requireNotNull(parseOrigin(origin)) { "Invalid trusted Web UI origin; use an HTTP(S) root and canonical dotted-decimal IPv4" }
     }.toSet()
 
@@ -23,7 +24,7 @@ class WebUiSecurityPolicy(
         if (!isLoopbackHost(host) && hostKey != originHostKey("::1") && hostKey !in allowedHosts) return false
         if (originHeader == null) return true
         val origin = parseOrigin(originHeader) ?: return false
-        return sameOrigin(origin, target) || trustedOrigins.any { sameOrigin(origin, it) }
+        return allowAnyOrigin || sameOrigin(origin, target) || trustedOrigins.any { sameOrigin(origin, it) }
     }
 }
 

@@ -1,5 +1,7 @@
 package com.folderspan.service.path
 
+import com.folderspan.data.file.shouldHideRemoteDiskSpace
+import com.folderspan.PlatformType
 import strings.AppStrings
 
 import app.cash.sqldelight.ColumnAdapter
@@ -210,7 +212,13 @@ class DevicePathServiceTest {
 
             assertTrue(result.isSuccess)
             assertTrue(rootPathsResult.isSuccess)
-            assertTrue(rootPathsResult.getOrThrow().isNotEmpty())
+            assertEquals(com.folderspan.utils.PathUtils.getHomePath(), rootPathsResult.getOrThrow().first().path)
+            assertEquals(rootPathsResult.getOrThrow().size, rootPathsResult.getOrThrow().map { it.path }.distinct().size)
+            if (!shouldHideRemoteDiskSpace(PlatformType)) {
+                val home = rootPathsResult.getOrThrow().first()
+                assertTrue(home.totalSpace > 0)
+                assertTrue(home.freeSpace in 0..home.totalSpace)
+            }
         } finally {
             directory.toFile().deleteRecursively()
         }

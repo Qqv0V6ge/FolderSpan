@@ -1,5 +1,8 @@
 package com.folderspan.service.network
 
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import strings.AppStrings
 
 import com.folderspan.data.main.network.FtpPathEncoding
@@ -11,7 +14,7 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.net.ftp.*
 import java.io.*
 
-internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : NetworkClient, ChunkReadableNetworkClient {
+internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : StorageProvider, ChunkReadableNetworkClient {
     private suspend fun <T> withClient(block: suspend (FTPClient) -> T): Result<T> = withContext(Dispatchers.IO) {
         try {
             val key = networkSessionKey(network, 21)
@@ -144,10 +147,18 @@ internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : 
         return openLocalSourceNoFollow(localPath).use { channel ->
             withClient { client ->
                 java.nio.channels.Channels.newInputStream(channel).use { input ->
-                    val progressInput = ProgressInputStream(input, size, onProgress)
-                    val success = client.storeFile(normalizePath(remotePath), progressInput)
-                    if (!success) {
-                        throw IllegalStateException(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = (client.replyString).toString()))
+                    // FTPClient.storeFile only closes its data socket for IOException.
+                    // A progress callback may throw CancellationException, so own the stream here.
+                    val output = client.storeFileStream(normalizePath(remotePath))
+                        ?: error(AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = client.replyString))
+                    output.use {
+                        withNetworkStreamCancellation(output) {
+                            copyStreamWithProgress(input, output, size, onProgress)
+                            output.flush()
+                        }
+                    }
+                    check(client.completePendingCommand()) {
+                        AppStrings.ui_ftp_upload_failed_arg0.format(arg0 = client.replyString)
                     }
                 }
                 true
@@ -192,10 +203,18 @@ internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : 
         }
     }
 
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> = withClient { client ->
+        setFtpModificationTime(client, normalizePath(path), millis)
+    }
+
     override suspend fun rename(path: String, newPath: String): Result<Boolean> {
         return withClient { client ->
             client.rename(normalizePath(path), normalizePath(newPath))
         }
+    }
+
+    override suspend fun deleteEmptyDirectory(path: String): Result<Boolean> = withClient { client ->
+        client.removeDirectory(normalizePath(checkedEmptyDirectoryDeletionPath(path)))
     }
 
     override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> {
@@ -237,10 +256,13 @@ internal class FtpNetworkClient(private val network: NetworkConnectionConfig) : 
 }
 
 internal fun createFtpTransportClient(ftpsEnabled: Boolean): FTPClient {
-    return if (ftpsEnabled) {
+    return (if (ftpsEnabled) {
         FTPSClient().apply { isEndpointCheckingEnabled = true }
     } else {
         FTPClient()
+    }).apply {
+        // Provider listings are complete; the file-list layer controls hidden-file visibility.
+        listHiddenFiles = true
     }
 }
 
@@ -283,32 +305,6 @@ private fun throwFtpServerCopyFailure(command: String, replyCode: Int, reply: St
 private fun isFtpServerCopyUnsupportedReply(replyCode: Int): Boolean =
     replyCode == 202 || replyCode == 500 || replyCode == 502 || replyCode == 504
 
-private class ProgressInputStream(
-    input: InputStream,
-    private val totalBytes: Long,
-    private val onProgress: (Long, Long) -> Unit
-) : FilterInputStream(input) {
-    private var doneBytes = 0L
-
-    override fun read(): Int {
-        val result = super.read()
-        if (result >= 0) {
-            doneBytes++
-            onProgress(doneBytes, totalBytes)
-        }
-        return result
-    }
-
-    override fun read(b: ByteArray, off: Int, len: Int): Int {
-        val read = super.read(b, off, len)
-        if (read > 0) {
-            doneBytes += read
-            onProgress(doneBytes, totalBytes)
-        }
-        return read
-    }
-}
-
 private class ProgressOutputStream(
     output: OutputStream,
     private val totalBytes: Long,
@@ -341,4 +337,14 @@ private fun FtpPathEncoding.toControlEncoding(): String {
         FtpPathEncoding.Cp949 -> "CP949"
         FtpPathEncoding.Windows1251 -> "windows-1251"
     }
+}
+
+internal fun setFtpModificationTime(client: FTPClient, path: String, millis: Long): Boolean {
+    require(millis > 0 && '\r' !in path && '\n' !in path) { "Invalid modification time or path" }
+    val timestamp = DateTimeFormatter.ofPattern("yyyyMMddHHmmss").withZone(ZoneOffset.UTC)
+        .format(Instant.ofEpochMilli(millis))
+    val reply = client.sendCommand("MFMT", "$timestamp $path")
+    if (reply in setOf(202, 500, 502, 504)) throw NetworkUnsupportedException("FTP MFMT is not supported")
+    check(FTPReply.isPositiveCompletion(reply)) { client.replyString }
+    return true
 }

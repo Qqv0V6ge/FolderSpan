@@ -105,11 +105,25 @@ class WebUiSecurityPolicyTest {
         assertFalse(policy.allows("192.168.1.10:12043", "http://independent.example", "http"))
         assertFalse(policy.allows("192.168.1.10:12043", "https://independent.example:444", "http"))
         assertFalse(policy.allows("evil.example:12043", "https://independent.example", "http"))
-        listOf("*", "https://*.example", "https://example.test/", "https://user@example.test").forEach { origin ->
+        listOf("https://*.example", "https://example.test/", "https://user@example.test").forEach { origin ->
             assertFailsWith<IllegalArgumentException> {
                 WebUiSecurityPolicy(setOf(origin)) { setOf("127.0.0.1") }
             }
         }
+    }
+
+    @Test
+    fun wildcardTrustAllowsValidCrossOriginsAndKeepsHostValidation() {
+        val policy = WebUiSecurityPolicy(setOf("*")) { setOf("192.168.1.10") }
+        for (origin in listOf("https://independent.example", "http://localhost:8080", "http://[::1]:8080")) {
+            assertTrue(policy.allows("192.168.1.10:12043", origin, "http"), origin)
+        }
+        for (origin in listOf("", "null", "*", "file:///tmp", "https://example.test/path", "https://user@example.test",
+            "https://*.example", "http://127.0.0.010:8080")) {
+            assertFalse(policy.allows("192.168.1.10:12043", origin, "http"), origin)
+        }
+        assertFalse(policy.allows("evil.example:12043", "https://independent.example", "http"))
+        assertFalse(policy.allows("127.0.0.1:invalid", "https://independent.example", "http"))
     }
 
     @Test

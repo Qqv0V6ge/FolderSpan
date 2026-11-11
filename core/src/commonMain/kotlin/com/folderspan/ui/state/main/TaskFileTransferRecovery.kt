@@ -4,6 +4,7 @@ import com.folderspan.service.file.calculateDeviceTransportChunkCount
 import com.folderspan.service.file.calculateDeviceTransportRange
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.MAX_LENGTH
 import com.folderspan.service.operation.OperationParallelismConfig
+import com.folderspan.service.operation.OperationRequestFeedback
 import com.folderspan.service.operation.processItemsAdaptive
 import com.folderspan.utils.LogKit
 import kotlinx.coroutines.CancellationException
@@ -13,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -131,7 +133,15 @@ internal suspend fun copyFileWithTransferCheckpoint(
     }
 
     val resumed = completedChunks > 0
-    onProgress(
+    val feedback = currentCoroutineContext()[OperationRequestFeedback]
+    if (completedChunks == totalChunks) feedback?.ignore()
+    var feedbackBytes = completedChunksToBytes(completedChunks, fileSize, chunkSize)
+    suspend fun emitProgress(progress: TaskFileTransferRecoveryProgress) {
+        feedback?.bytes((progress.transferredBytes - feedbackBytes).coerceAtLeast(0))
+        feedbackBytes = maxOf(feedbackBytes, progress.transferredBytes)
+        onProgress(progress)
+    }
+    emitProgress(
         TaskFileTransferRecoveryProgress(
             transferredBytes = completedChunksToBytes(completedChunks, fileSize, chunkSize),
             completedChunks = completedChunks,
@@ -151,7 +161,7 @@ internal suspend fun copyFileWithTransferCheckpoint(
                 resumed = resumed,
                 saveCheckpoint = saveCheckpoint,
                 ensureRunning = ensureRunning,
-                onProgress = onProgress,
+                onProgress = ::emitProgress,
                 copyRemainingDirectly = copyRemainingDirectly,
                 checkpointNowMs = checkpointNowMs,
             )
@@ -174,7 +184,7 @@ internal suspend fun copyFileWithTransferCheckpoint(
                         updatedAt = committedAt,
                     )
                 )
-                onProgress(
+                emitProgress(
                     TaskFileTransferRecoveryProgress(
                         transferredBytes = completedChunksToBytes(completedChunks, fileSize, chunkSize),
                         completedChunks = completedChunks,
@@ -222,7 +232,7 @@ internal suspend fun copyFileWithTransferCheckpoint(
                                 updatedAt = committedAt,
                             )
                         )
-                        onProgress(
+                        emitProgress(
                             TaskFileTransferRecoveryProgress(
                                 transferredBytes = completedChunksToBytes(
                                     contiguousCompletedChunks,
@@ -240,8 +250,10 @@ internal suspend fun copyFileWithTransferCheckpoint(
         }
         Result.success(true)
     } catch (cancel: CancellationException) {
+        feedback?.failure()
         Result.failure(cancel)
     } catch (error: Throwable) {
+        feedback?.failure()
         Result.failure(error)
     }
 }
@@ -458,6 +470,8 @@ private suspend fun normalizeTransferCheckpoint(
     targetSize: suspend () -> Long?,
 ): TaskRuntimeTransferCheckpoint? {
     if (checkpoint == null) return null
+    checkpoint.requireSupportedFormat()
+    require(checkpoint.uploadSession == null) { "Upload session requires backend recovery" }
     if (checkpoint.taskKey != taskKey ||
         checkpoint.entryId != entryId ||
         checkpoint.destPath != destPath ||

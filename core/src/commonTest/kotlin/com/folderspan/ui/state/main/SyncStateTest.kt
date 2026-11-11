@@ -3,6 +3,8 @@ package com.folderspan.ui.state.main
 import strings.AppStrings
 
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.service.network.StorageReference
+import com.folderspan.utils.ProtoBufCodec
 import com.folderspan.test.ChineseLocalizationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -138,7 +140,7 @@ class SyncStateTest : ChineseLocalizationTest() {
         )
         val sameTarget = source.withCopy(path = "/b.txt")
         val largerTarget = source.withCopy(path = "/b.txt", size = 120)
-        val newerTarget = source.withCopy(path = "/b.txt", updatedDate = 300)
+        val newerTarget = source.withCopy(path = "/b.txt", updatedDate = 10_300)
 
         assertFalse(syncFileChanged(source, sameTarget))
         assertTrue(syncFileChanged(source, largerTarget))
@@ -184,5 +186,17 @@ class SyncStateTest : ChineseLocalizationTest() {
                 separator = "/",
             )
         )
+    }
+
+    @Test
+    fun persistedStorageRootsKeepIndependentSourceAndDestinationIdentities() {
+        val source = StorageReference("source-root")
+        val target = StorageReference("target-root")
+        val task = SyncTask(1, "Cloud sync", sourceType = SyncEndpointType.Network, sourceRef = "account-a", sourcePath = "/same",
+            targetType = SyncEndpointType.Network, targetRef = "account-b", targetPath = "/same",
+            sourceStorageReference = source, targetStorageReference = target)
+        val decoded = ProtoBufCodec.decode<SyncTask>(ProtoBufCodec.encode(task))
+        assertEquals(source, decoded.sourceStorageReference)
+        assertEquals(target, decoded.targetStorageReference)
     }
 }

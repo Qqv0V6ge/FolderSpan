@@ -1,5 +1,7 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.service.network.StorageReference
+
 import com.folderspan.utils.FileAccessPermission
 import strings.AppStrings
 
@@ -7,7 +9,9 @@ import com.folderspan.data.file.FileProtocol
 import com.folderspan.utils.PrivateFileStorage
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.ProtoBufCodec
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.protobuf.ProtoNumber
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
 
@@ -56,6 +60,7 @@ data class TaskRuntimeEndpointRef(
     val protocol: FileProtocol = FileProtocol.Local,
     val protocolId: String = "",
     val path: String = "",
+    val storageReference: StorageReference? = null,
 )
 
 @Serializable
@@ -105,20 +110,65 @@ data class TaskRuntimeQueuedEntry(
     val entry: TaskRuntimeQueueEntry,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class TaskRuntimeUploadSessionReference(
+    @ProtoNumber(1) val schemaVersion: Int = 1,
+    @ProtoNumber(2) val sessionId: String,
+    @ProtoNumber(3) val ownerRuntimeId: String,
+    @ProtoNumber(4) val connectionId: String,
+    @ProtoNumber(5) val source: TaskRuntimeEndpointRef,
+    @ProtoNumber(6) val target: TaskRuntimeEndpointRef,
+    @ProtoNumber(7) val sourceVersion: String,
+    @ProtoNumber(8) val confirmedOffset: Long = 0L,
+    @ProtoNumber(9) val expiresAt: Long = 0L,
+) {
+    internal fun requireSupportedFormat(fileSize: Long) {
+        require(schemaVersion == 1) { "Unsupported upload session reference version" }
+        require(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").matches(sessionId)) {
+            "Upload session reference must be an opaque UUID"
+        }
+        require(ownerRuntimeId.isNotBlank() && connectionId.isNotBlank() && sourceVersion.isNotBlank()) {
+            "Upload session identity is incomplete"
+        }
+        require(confirmedOffset in 0L..fileSize && expiresAt >= 0L) { "Invalid upload session progress" }
+    }
+}
+
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class TaskRuntimeTransferCheckpoint(
-    val schemaVersion: Int = TASK_RUNTIME_SCHEMA_VERSION,
-    val taskKey: Long,
-    val entryId: String,
-    val destPath: String,
-    val fileSize: Long,
-    val chunkSize: Int,
-    val completedChunks: Int = 0,
-    val createdAt: Long,
-    val updatedAt: Long = createdAt,
-)
+    // Old payloads omit the default version; keep that default at 3.
+    @ProtoNumber(1) val schemaVersion: Int = TASK_RUNTIME_SCHEMA_VERSION,
+    @ProtoNumber(2) val taskKey: Long,
+    @ProtoNumber(3) val entryId: String,
+    @ProtoNumber(4) val destPath: String,
+    @ProtoNumber(5) val fileSize: Long,
+    @ProtoNumber(6) val chunkSize: Int,
+    @ProtoNumber(7) val completedChunks: Int = 0,
+    @ProtoNumber(8) val createdAt: Long,
+    @ProtoNumber(9) val updatedAt: Long = createdAt,
+    @ProtoNumber(10) val uploadSession: TaskRuntimeUploadSessionReference? = null,
+) {
+    internal fun requireSupportedFormat() {
+        require(schemaVersion in 1..4) { "Unsupported transfer checkpoint version" }
+        uploadSession?.let { session ->
+            require(schemaVersion == 4) { "Upload session requires transfer checkpoint version 4" }
+            session.requireSupportedFormat(fileSize)
+        }
+    }
+}
+
+@Serializable
+private data class TaskCopyValidationBlob(val schemaVersion: Int = 1, val payload: ByteArray)
 
 interface TaskRuntimePersistenceStore {
+    fun loadCopyValidation(taskKey: Long): ByteArray? = null
+
+    fun saveCopyValidation(taskKey: Long, payload: ByteArray) {
+        error("This task store does not support copy validation snapshots")
+    }
+
     fun loadTaskSnapshots(): List<Task>
 
     fun loadTaskSnapshot(taskKey: Long): Task?
@@ -213,6 +263,19 @@ class TempTaskRuntimePersistenceStore : TaskRuntimePersistenceStore {
 
     private companion object {
         val operationLock = TaskRuntimeStoreLock()
+    }
+
+    override fun loadCopyValidation(taskKey: Long): ByteArray? = withOperationLock {
+        loadProtoFile<TaskCopyValidationBlob>(buildTaskDirPath(taskKey) + PrivateFileStorage.getPathSeparator() + "copy-validation.pb64", AppStrings.ui_task_metadata, taskKey)
+            ?.also { check(it.schemaVersion == 1) { "Unsupported copy validation snapshot" } }?.payload
+    }
+
+    override fun saveCopyValidation(taskKey: Long, payload: ByteArray) = withOperationLock {
+        val path = buildTaskDirPath(taskKey) + PrivateFileStorage.getPathSeparator() + "copy-validation.pb64"
+        writeTextFile(path, encodeProtoLine(TaskCopyValidationBlob(payload = payload)), AppStrings.ui_task_metadata, taskKey)
+        check(loadProtoFile<TaskCopyValidationBlob>(path, AppStrings.ui_task_metadata, taskKey)?.payload?.contentEquals(payload) == true) {
+            "Could not persist copy validation snapshot"
+        }
     }
 
     override fun loadTaskSnapshots(): List<Task> = withOperationLock {
@@ -500,10 +563,12 @@ class TempTaskRuntimePersistenceStore : TaskRuntimePersistenceStore {
             AppStrings.ui_file_recovery_checkpoint,
             taskKey,
         )
-            ?.takeIf { checkpoint -> checkpoint.entryId == entryId }
+            ?.also { checkpoint -> checkpoint.requireSupportedFormat() }
+            ?.takeIf { checkpoint -> checkpoint.taskKey == taskKey && checkpoint.entryId == entryId }
     }
 
     override fun saveTransferCheckpoint(checkpoint: TaskRuntimeTransferCheckpoint) = withOperationLock {
+        checkpoint.requireSupportedFormat()
         writeTextFile(
             path = buildTransferCheckpointPath(checkpoint.taskKey, checkpoint.entryId),
             content = encodeProtoLine(checkpoint),

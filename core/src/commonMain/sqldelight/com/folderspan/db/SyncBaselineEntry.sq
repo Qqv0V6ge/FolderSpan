@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS SyncBaselineEntry (
+    taskId INTEGER NOT NULL,
+    relativePath TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, relativePath)
+);
+
+upsert:
+INSERT OR REPLACE INTO SyncBaselineEntry(taskId, relativePath, fingerprint, payload) VALUES (?, ?, ?, ?);
+
+selectPage:
+SELECT * FROM SyncBaselineEntry WHERE taskId = :taskId AND fingerprint = :fingerprint ORDER BY relativePath LIMIT :pageLimit OFFSET :pageOffset;
+
+selectPath:
+SELECT * FROM SyncBaselineEntry WHERE taskId = ? AND fingerprint = ? AND relativePath = ?;
+
+deletePath:
+DELETE FROM SyncBaselineEntry WHERE taskId = ? AND relativePath = ?;
+
+deleteTask:
+DELETE FROM SyncBaselineEntry WHERE taskId = ?;

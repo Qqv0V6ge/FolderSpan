@@ -42,7 +42,8 @@ internal actual object LocalTaskArtifacts {
             Files.readAttributes(guarded(path, cacheArtifact), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
         } catch (_: java.nio.file.NoSuchFileException) { return null }
         check(attributes.isRegularFile || attributes.isDirectory) { "ownership_changed" }
-        return LocalTaskArtifactDescription(if (attributes.isRegularFile) attributes.size() else null)
+        return LocalTaskArtifactDescription(if (attributes.isRegularFile) attributes.size() else null,
+            attributes.fileKey()?.toString() ?: error("ownership_unverified"))
     }
 
     actual fun inspect(path: String, cacheArtifact: Boolean): LocalTaskArtifactIdentity? {

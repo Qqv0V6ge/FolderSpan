@@ -85,6 +85,9 @@ class NetworkShare(
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
     ): Result<Boolean> {
+        if (destFileSimpleInfo.protocol == FileProtocol.Network) {
+            return Result.failure(NetworkUnsupportedException("Network destinations require the common verified transfer coordinator"))
+        }
         return routeClient.copyTo(task, srcFileSimpleInfo, destFileSimpleInfo)
     }
 

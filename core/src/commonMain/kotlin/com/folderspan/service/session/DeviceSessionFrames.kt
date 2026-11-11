@@ -34,6 +34,7 @@ internal data class DeviceSessionFrame(
     val streamId: Int,
     val payload: ByteArray = ByteArray(0),
 ) {
+    var receivedAtMillis: Long? = null
     val payloadSize: Int
         get() = payload.size
 

@@ -34,7 +34,7 @@ class NetworkSessionReuseIntegrationTest {
                 share = System.getenv("FOLDERSPAN_TEST_SMB_SHARE") ?: "test",
             )),
         )
-        fun newClient(): NetworkClient = if (protocol == "FTP") FtpNetworkClient(network.connectionConfig()) else SmbNetworkClient(network.connectionConfig())
+        fun newClient(): StorageProvider = if (protocol == "FTP") FtpNetworkClient(network.connectionConfig()) else SmbNetworkClient(network.connectionConfig())
         val root = "/reuse-${UUID.randomUUID()}"
         val source = "$root/source.txt"
         val target = "$root/target.txt"

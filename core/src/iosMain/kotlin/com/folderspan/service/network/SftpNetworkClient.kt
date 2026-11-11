@@ -14,6 +14,7 @@ import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.cstr
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.pointed
@@ -79,6 +80,9 @@ import platform.libssh2.libssh2_sftp_mkdir_ex
 import platform.libssh2.libssh2_sftp_open_ex
 import platform.libssh2.libssh2_sftp_read
 import platform.libssh2.libssh2_sftp_readdir_ex
+import platform.libssh2.libssh2_sftp_stat_ex
+import platform.libssh2.LIBSSH2_SFTP_SETSTAT
+import platform.libssh2.LIBSSH2_SFTP_LSTAT
 import platform.libssh2.libssh2_sftp_rename_ex
 import platform.libssh2.libssh2_sftp_rmdir_ex
 import platform.libssh2.libssh2_sftp_shutdown
@@ -109,7 +113,7 @@ import kotlin.text.trim
 import kotlin.toUInt
 import kotlin.toULong
 
-internal class SftpNetworkClient(private val network: NetworkConnectionConfig) : NetworkClient {
+internal class SftpNetworkClient(private val network: NetworkConnectionConfig) : StorageProvider {
     override suspend fun list(
         path: String,
         requestId: String?,
@@ -374,6 +378,30 @@ internal class SftpNetworkClient(private val network: NetworkConnectionConfig) :
                 }
                 Result.success(true)
             }
+        }
+    }
+
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> = withSftp { sftp ->
+        if (millis <= 0) return@withSftp Result.failure(IllegalArgumentException("Invalid modification time"))
+        val normalized = normalizePath(path)
+        memScoped {
+            val attrs = alloc<LIBSSH2_SFTP_ATTRIBUTES>()
+            var prefix = if (normalized.startsWith("/")) "" else "."
+            for (part in normalized.split('/').filter { it.isNotEmpty() && it != "." }) {
+                prefix += "/$part"
+                val rc = sftp.call {
+                    libssh2_sftp_stat_ex(sftp.pointer, prefix, prefix.encodeToByteArray().size.toUInt(), LIBSSH2_SFTP_LSTAT, attrs.ptr)
+                }
+                check(rc == 0 && attrs.flags.toInt() and LIBSSH2_SFTP_ATTR_PERMISSIONS != 0) { "Cannot verify modification target" }
+                check(attrs.permissions.toInt() and LIBSSH2_SFTP_S_IFMT != LIBSSH2_SFTP_S_IFLNK) { "Symbolic links are not supported" }
+            }
+            attrs.flags = LIBSSH2_SFTP_ATTR_ACMODTIME.convert()
+            attrs.atime = (millis / 1000).convert()
+            attrs.mtime = (millis / 1000).convert()
+            val rc = sftp.call {
+                libssh2_sftp_stat_ex(sftp.pointer, normalized, normalized.encodeToByteArray().size.toUInt(), LIBSSH2_SFTP_SETSTAT, attrs.ptr)
+            }
+            if (rc == 0) Result.success(true) else Result.failure(Exception("Cannot set modification time"))
         }
     }
 

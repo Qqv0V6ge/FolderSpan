@@ -6,8 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -22,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.main.Local
+import com.folderspan.data.main.network.NetworkEntry
 import com.folderspan.data.main.network.buildProtocolId
 import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.ignore.normalizeSupportedIgnoreFileNames
@@ -38,6 +42,10 @@ import com.folderspan.utils.executeAsListAwait
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.currentOrThrow
+import com.folderspan.service.network.StorageReference
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +54,7 @@ import kotlin.math.max
 
 class SyncEditScreen(
     private val taskId: Long? = null,
+    private val takeOwnership: Boolean = false,
 ) : AppScreenRoute {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -70,12 +79,21 @@ class SyncEditScreen(
 
         var name by rememberSaveable(taskId) { mutableStateOf(template.name) }
         var enabled by rememberSaveable(taskId) { mutableStateOf(template.enabled) }
+        var backup by rememberSaveable(taskId) { mutableStateOf(template.backup) }
+        var destinationsJson by rememberSaveable(taskId) { mutableStateOf(Json.encodeToString(template.destinations)) }
+        val destinations = remember(destinationsJson) { Json.decodeFromString<List<StorageDestination>>(destinationsJson) }
+        var chooseDestinations by remember { mutableStateOf(false) }
+        var browsingDestination by remember { mutableStateOf<NetworkEntry?>(null) }
+        var selectedDestinationPath by remember { mutableStateOf("") }
+
         var sourceType by rememberSaveable(taskId) { mutableStateOf(template.sourceType) }
         var sourceRef by rememberSaveable(taskId) { mutableStateOf(template.sourceRef) }
         var sourcePath by rememberSaveable(taskId) { mutableStateOf(template.sourcePath) }
+        var sourceReferenceJson by rememberSaveable(taskId, sourceType, sourceRef) { mutableStateOf(template.sourceStorageReference?.takeIf { sourceType == template.sourceType && sourceRef == template.sourceRef }?.let { Json.encodeToString(it) }) }
         var targetType by rememberSaveable(taskId) { mutableStateOf(template.targetType) }
         var targetRef by rememberSaveable(taskId) { mutableStateOf(template.targetRef) }
         var targetPath by rememberSaveable(taskId) { mutableStateOf(template.targetPath) }
+        var targetReferenceJson by rememberSaveable(taskId, targetType, targetRef) { mutableStateOf(template.targetStorageReference?.takeIf { targetType == template.targetType && targetRef == template.targetRef }?.let { Json.encodeToString(it) }) }
         var includeSubdirectories by rememberSaveable(taskId) { mutableStateOf(template.includeSubdirectories) }
         var includeEmptyDirectories by rememberSaveable(taskId) { mutableStateOf(template.includeEmptyDirectories) }
         var useIgnoreFiles by rememberSaveable(taskId) { mutableStateOf(template.useIgnoreFiles) }
@@ -94,10 +112,30 @@ class SyncEditScreen(
         val ignoreFileDraftNames = decodeIgnoreFileSelection(ignoreFileDraftSelection)
         var filterRaw by rememberSaveable(taskId) { mutableStateOf(template.filterRaw) }
         var conflictPolicy by rememberSaveable(taskId) { mutableStateOf(template.conflictPolicy) }
+        var mode by rememberSaveable(taskId) { mutableStateOf(template.mode) }
+        var bidiPolicy by rememberSaveable(taskId) { mutableStateOf(template.bidiConflictPolicy) }
+        var recycleEnabled by rememberSaveable(taskId) { mutableStateOf(template.recycleEnabled) }
+        var retentionText by rememberSaveable(taskId) { mutableStateOf(template.recycleRetentionDays.toString()) }
+        var deleteThresholdText by rememberSaveable(taskId) { mutableStateOf(template.deleteThreshold.toString()) }
+        var includeRaw by rememberSaveable(taskId) { mutableStateOf(template.includeRaw) }
+        var notifyLevel by rememberSaveable(taskId) { mutableStateOf(template.notifyLevel) }
+        var triggerOnDeviceConnect by rememberSaveable(taskId) { mutableStateOf(template.triggerOnDeviceConnect) }
+        var triggerOnNetworkAvailable by rememberSaveable(taskId) { mutableStateOf(template.triggerOnNetworkAvailable) }
+        var requireWifi by rememberSaveable(taskId) { mutableStateOf(template.requireWifi) }
+        var requireCharging by rememberSaveable(taskId) { mutableStateOf(template.requireCharging) }
+        var showDisableRecycle by remember { mutableStateOf(false) }
+        var pendingDefinitionTask by remember { mutableStateOf<SyncTask?>(null) }
         var scheduleType by rememberSaveable(taskId) { mutableStateOf(template.scheduleType) }
+        var scheduleTimeText by rememberSaveable(taskId) { mutableStateOf(syncScheduleTimeText(template.scheduleTimeMinutes)) }
+        var scheduleWeekdays by rememberSaveable(taskId) { mutableStateOf(template.scheduleWeekdays) }
         var intervalMinutesText by rememberSaveable(taskId) {
             mutableStateOf(template.intervalMinutes.takeIf { item -> item > 0 }?.toString() ?: "15")
         }
+        var retryCountText by rememberSaveable(taskId) { mutableStateOf(template.retryCount.toString()) }
+        var timeoutSecondsText by rememberSaveable(taskId) { mutableStateOf(template.timeoutSeconds.toString()) }
+        var parallelismText by rememberSaveable(taskId) { mutableStateOf(template.parallelism.toString()) }
+        var pendingReverseTask by remember { mutableStateOf<SyncTask?>(null) }
+        var reverseTasks by remember { mutableStateOf<List<SyncTask>>(emptyList()) }
         var showSourcePathSelector by rememberSaveable(taskId) { mutableStateOf(false) }
         var selectedSourcePath by rememberSaveable(taskId) { mutableStateOf(sourcePath) }
         var showTargetPathSelector by rememberSaveable(taskId) { mutableStateOf(false) }
@@ -292,6 +330,7 @@ class SyncEditScreen(
                 sourceType = sourceType,
                 sourceRef = sourceRef,
                 sourcePath = sourcePath,
+                storageReference = sourceReferenceJson?.let { Json.decodeFromString<StorageReference>(it) },
             ).getOrElse {
                 availableIgnoreFileNames = emptyList()
                 showIgnoreFileSelection = false
@@ -306,7 +345,16 @@ class SyncEditScreen(
             ignoreFileDraftSelection = encodeIgnoreFileSelection(retainedSelection)
         }
 
-        val strictEndpointValidation = editingTask == null
+        LaunchedEffect(backup, destinationsJson) {
+            if (backup) destinations.firstOrNull()?.let {
+                targetType = it.type
+                targetRef = it.ref
+                targetPath = it.path
+                targetReferenceJson = it.storageReference?.let { reference -> Json.encodeToString(reference) }
+            }
+        }
+
+        val strictEndpointValidation = editingTask == null || takeOwnership
 
         val validationError = remember(
             name,
@@ -331,12 +379,28 @@ class SyncEditScreen(
             )
         }
 
+        val executionSettingsValid = validSyncExecutionSettings(retryCountText, timeoutSecondsText, parallelismText)
+        val protectionSettingsValid = validSyncProtectionSettings(retentionText, deleteThresholdText, mode, recycleEnabled)
+        val scheduleInputError = syncScheduleInputError(scheduleType, scheduleTimeText, scheduleWeekdays)
+        suspend fun saveTask(task: SyncTask, confirmReverseTasks: Boolean = false) {
+            val result = syncState.createOrUpdateTask(task, confirmReverseTasks, takeOwnership)
+            val failure = result.exceptionOrNull()
+            when {
+                result.isSuccess -> navigator.pop()
+                failure is SyncReverseTaskException -> {
+                    pendingReverseTask = task
+                    reverseTasks = failure.tasks
+                }
+                else -> snackbarHostState.showLatestSnackbar(failure?.message ?: AppStrings.ui_save_failed)
+            }
+        }
+
         AppScaffold(
             topBar = {
                 TopAppBar(
                     title = {
                         Text(
-                            if (editingTask == null) AppStrings.ui_add_sync else AppStrings.ui_edit_sync,
+                            if (takeOwnership) AppStrings.sync_take_ownership else if (editingTask == null) AppStrings.ui_add_sync else AppStrings.ui_edit_sync,
                         )
                     },
                     navigationIcon = {
@@ -351,43 +415,69 @@ class SyncEditScreen(
                     text = { Text(AppStrings.ui_save) },
                     icon = { Icon(Icons.Default.Check, contentDescription = null) },
                     onClick = {
-                        if (validationError != null) {
+                        if (validationError != null || !executionSettingsValid || !protectionSettingsValid || scheduleInputError != null) {
                             coroutineScope.launch {
-                                snackbarHostState.showLatestSnackbar(validationError)
+                                snackbarHostState.showLatestSnackbar(validationError ?: scheduleInputError ?: if (!executionSettingsValid) AppStrings.sync_invalid_execution_settings
+                                    else if (retentionText.toIntOrNull() !in 1..365) AppStrings.sync_invalid_retention else AppStrings.sync_invalid_delete_threshold)
                             }
                             return@ExtendedFloatingActionButton
                         }
                         coroutineScope.launch {
                             val interval = intervalMinutesText.toLongOrNull()?.coerceAtLeast(1L) ?: 15L
 
-                            val task = SyncTask(
+                            if (backup && destinations.isEmpty()) {
+                                snackbarHostState.showLatestSnackbar(AppStrings.ui_storage_no_candidate)
+                                return@launch
+                            }
+                            val primary = destinations.firstOrNull()
+                            val task = template.copy(
                                 id = template.id,
                                 name = name.trim(),
                                 enabled = enabled,
                                 sourceType = sourceType,
                                 sourceRef = sourceRef,
                                 sourcePath = sourcePath.trim(),
-                                targetType = targetType,
-                                targetRef = targetRef,
-                                targetPath = targetPath.trim(),
+                                sourceStorageReference = sourceReferenceJson?.let { Json.decodeFromString<StorageReference>(it) },
+                                targetType = if (backup) primary?.type ?: targetType else targetType,
+                                targetRef = if (backup) primary?.ref ?: targetRef else targetRef,
+                                targetPath = if (backup) primary?.path ?: targetPath.trim() else targetPath.trim(),
+                                targetStorageReference = if (backup) primary?.storageReference else targetReferenceJson?.let { Json.decodeFromString<StorageReference>(it) },
+                                backup = backup,
+                                destinations = if (backup || template.selectedSources.isNotEmpty()) destinations else emptyList(),
+                                selectRecommended = false,
+                                preferredEntryIds = emptyList(),
+                                selectedSources = template.selectedSources,
+                                currentSourceReferences = template.currentSourceReferences,
+
                                 includeSubdirectories = includeSubdirectories,
                                 includeEmptyDirectories = includeEmptyDirectories,
                                 useIgnoreFiles = useIgnoreFiles,
                                 ignoreFileNames = ignoreFileNames,
                                 filterRaw = filterRaw.trim(),
                                 conflictPolicy = conflictPolicy,
+                                mode = mode,
+                                bidiConflictPolicy = bidiPolicy,
+                                recycleEnabled = recycleEnabled,
+                                recycleRetentionDays = retentionText.toIntOrNull()?.takeIf { it in 1..365 } ?: template.recycleRetentionDays.coerceIn(1, 365),
+                                deleteThreshold = deleteThresholdText.toIntOrNull()?.takeIf { it in 1..100_000 } ?: template.deleteThreshold.coerceIn(1, 100_000),
+                                includeRaw = includeRaw.trim(),
+                                notifyLevel = notifyLevel,
+                                triggerOnDeviceConnect = triggerOnDeviceConnect,
+                                triggerOnNetworkAvailable = triggerOnNetworkAvailable,
+                                requireWifi = requireWifi,
+                                requireCharging = requireCharging,
                                 scheduleType = scheduleType,
+                                scheduleTimeMinutes = parseSyncScheduleTime(scheduleTimeText) ?: template.scheduleTimeMinutes,
+                                scheduleWeekdays = scheduleWeekdays,
                                 intervalMinutes = interval,
                                 createdAt = template.createdAt,
+                                retryCount = retryCountText.toInt(),
+                                timeoutSeconds = timeoutSecondsText.toInt(),
+                                parallelism = parallelismText.toInt(),
                             )
-                            val result = syncState.createOrUpdateTask(task)
-                            if (result.isSuccess) {
-                                navigator.pop()
-                            } else {
-                                snackbarHostState.showLatestSnackbar(
-                                    result.exceptionOrNull()?.message ?: AppStrings.ui_save_failed
-                                )
-                            }
+                            if (editingTask != null && syncDefinitionFingerprint(task) != syncDefinitionFingerprint(template)) {
+                                pendingDefinitionTask = task
+                            } else saveTask(task)
                         }
                     }
                 )
@@ -403,18 +493,23 @@ class SyncEditScreen(
                 horizontalSpacing = 16.dp,
                 floatingActionButtonPadding = GridListFabPadding,
             ) {
+                if (takeOwnership) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(AppStrings.sync_take_ownership_hint)
+                    }
+                }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     NetworkEditSectionTitle(AppStrings.ui_basics)
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                item {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { item -> name = item },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("sync-task-name"),
                         label = { Text(AppStrings.ui_task_name) },
                         supportingText = {
                             if (validationError != null) {
-                                Text(validationError, color = MaterialTheme.colorScheme.error)
+                                Text(validationError)
                             }
                         },
                         isError = validationError != null,
@@ -444,7 +539,7 @@ class SyncEditScreen(
                         if (sourceType == SyncEndpointType.Local) {
                             SyncPathTextField(
                                 value = sourcePath,
-                                onValueChange = { item -> sourcePath = item },
+                                onValueChange = { item -> sourcePath = item; sourceReferenceJson = null },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = AppStrings.ui_source_path,
                                 selectContentDescription = AppStrings.ui_select_source_path,
@@ -471,15 +566,13 @@ class SyncEditScreen(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = AppStrings.ui_no_source_endpoint_available_needs_support_reading,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SyncPathTextField(
                             value = sourcePath,
-                            onValueChange = { item -> sourcePath = item },
+                            onValueChange = { item -> sourcePath = item; sourceReferenceJson = null },
                             modifier = Modifier.fillMaxWidth(),
                             label = AppStrings.ui_source_path,
                             selectContentDescription = AppStrings.ui_select_source_path,
@@ -511,7 +604,7 @@ class SyncEditScreen(
                         if (targetType == SyncEndpointType.Local) {
                             SyncPathTextField(
                                 value = targetPath,
-                                onValueChange = { item -> targetPath = item },
+                                onValueChange = { item -> targetPath = item; targetReferenceJson = null },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = AppStrings.ui_target_path,
                                 selectContentDescription = AppStrings.ui_select_target_path,
@@ -538,15 +631,13 @@ class SyncEditScreen(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = AppStrings.ui_no_target_endpoint_available_needs_support_writing,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SyncPathTextField(
                             value = targetPath,
-                            onValueChange = { item -> targetPath = item },
+                            onValueChange = { item -> targetPath = item; targetReferenceJson = null },
                             modifier = Modifier.fillMaxWidth(),
                             label = AppStrings.ui_target_path,
                             selectContentDescription = AppStrings.ui_select_target_path,
@@ -556,17 +647,84 @@ class SyncEditScreen(
                 }
 
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    NetworkEditSectionTitle(AppStrings.ui_strategy)
+                    SyncSwitchRow(
+                        label = AppStrings.ui_storage_backup,
+                        checked = backup,
+                        onCheckedChange = {
+                            backup = it
+                            if (it && editingTask == null) enabled = false
+                        },
+                        supportingText = AppStrings.ui_storage_keep_history,
+                    )
+                }
+                if (backup || template.selectedSources.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(AppStrings.ui_storage_targets)
+                            destinations.forEach { destination ->
+                                ListItem(
+                                    headlineContent = { Text(networkState.entries.firstOrNull {
+                                        it.id == destination.networkEntryId
+                                    }?.network?.name ?: AppStrings.ui_target_network_disk_does_not_exist) },
+                                    supportingContent = { Text(destination.path) },
+                                    trailingContent = {
+                                        Column {
+                                            TextButton(onClick = {
+                                                destinationsJson = Json.encodeToString(listOf(destination) + (destinations - destination))
+                                            }) { Text(AppStrings.ui_storage_prefer_action) }
+                                            TextButton(onClick = {
+                                                destinationsJson = Json.encodeToString(destinations - destination)
+                                            }) { Text(AppStrings.ui_remove) }
+                                        }
+                                    },
+                                )
+                            }
+                            Box {
+                                OutlinedButton(
+                                    onClick = { chooseDestinations = true },
+                                    modifier = Modifier.testTag("sync-add-backup-target"),
+                                ) { Text(AppStrings.ui_storage_add_target) }
+                                DropdownMenu(expanded = chooseDestinations, onDismissRequest = { chooseDestinations = false }) {
+                                    if (networkState.entries.isEmpty()) {
+                                        DropdownMenuItem(
+                                            text = { Text(AppStrings.ui_target_network_disk_does_not_exist) },
+                                            onClick = {},
+                                            enabled = false,
+                                        )
+                                    }
+                                    networkState.entries.forEach { entry ->
+                                        DropdownMenuItem(
+                                            text = { Text(entry.network.name) },
+                                            onClick = {
+                                                browsingDestination = entry
+                                                chooseDestinations = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            Text(AppStrings.ui_storage_lifecycle)
+                        }
+                    }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
+                    NetworkEditSectionTitle(AppStrings.ui_strategy)
+                }
+                syncModeSettings(mode, bidiPolicy, recycleEnabled, retentionText, deleteThresholdText,
+                    onModeChange = { next -> mode = next; conflictPolicy = syncConflictPolicyForMode(conflictPolicy, next) },
+                    onBidiPolicyChange = { bidiPolicy = it },
+                    onRecycleChange = { next -> if (next) recycleEnabled = true else showDisableRecycle = true },
+                    onRetentionChange = { retentionText = it }, onThresholdChange = { deleteThresholdText = it })
+                if (mode == SyncMode.Update || mode == SyncMode.BackupThenClean) item(span = { GridItemSpan(maxLineSpan) }) {
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SyncConflictPolicy.entries.forEachIndexed { index, policy ->
+                        val policies = SyncConflictPolicy.entries.filter { mode != SyncMode.BackupThenClean || it != SyncConflictPolicy.Replace }
+                        policies.forEachIndexed { index, policy ->
                             SegmentedButton(
                                 selected = conflictPolicy == policy,
                                 onClick = { conflictPolicy = policy },
                                 shape = SegmentedButtonDefaults.itemShape(
                                     index = index,
-                                    count = SyncConflictPolicy.entries.size,
+                                    count = policies.size,
                                 ),
                             ) {
                                 Text(
@@ -581,30 +739,18 @@ class SyncEditScreen(
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(AppStrings.ui_contains_subdirectories)
-                        Switch(
-                            checked = includeSubdirectories,
-                            onCheckedChange = { item -> includeSubdirectories = item }
-                        )
-                    }
+                    SyncSwitchRow(
+                        label = AppStrings.ui_contains_subdirectories,
+                        checked = includeSubdirectories,
+                        onCheckedChange = { item -> includeSubdirectories = item },
+                    )
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(AppStrings.ui_synchronize_empty_directories)
-                        Switch(
-                            checked = includeEmptyDirectories,
-                            onCheckedChange = { item -> includeEmptyDirectories = item }
-                        )
-                    }
+                    SyncSwitchRow(
+                        label = AppStrings.ui_synchronize_empty_directories,
+                        checked = includeEmptyDirectories,
+                        onCheckedChange = { item -> includeEmptyDirectories = item },
+                    )
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     AdvancedIgnoreConfiguration(
@@ -625,10 +771,16 @@ class SyncEditScreen(
                     )
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
+                    OutlinedTextField(value = includeRaw, onValueChange = { includeRaw = it },
+                        modifier = Modifier.fillMaxWidth().testTag("sync-include-rules"),
+                        label = { Text(AppStrings.sync_include_rules) }, minLines = 2, maxLines = 6,
+                        supportingText = { Text(AppStrings.sync_include_rules_hint) })
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     OutlinedTextField(
                         value = filterRaw,
                         onValueChange = { item -> filterRaw = item },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("sync-filter-rules"),
                         label = { Text(AppStrings.ui_filter_rules) },
                         minLines = 3,
                         maxLines = 8,
@@ -636,52 +788,68 @@ class SyncEditScreen(
                     )
                 }
 
+                syncExecutionSettings(
+                    retryCountText, timeoutSecondsText, parallelismText,
+                    { retryCountText = it }, { timeoutSecondsText = it }, { parallelismText = it },
+                )
+                item {
+                    SyncNotificationSettings(notifyLevel) { notifyLevel = it }
+                }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     NetworkEditSectionTitle(AppStrings.ui_scheduling)
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SyncScheduleType.entries.forEachIndexed { index, type ->
-                            SegmentedButton(
-                                selected = scheduleType == type,
-                                onClick = { scheduleType = type },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = SyncScheduleType.entries.size,
-                                ),
-                            ) {
-                                Text(
-                                    when (type) {
-                                        SyncScheduleType.Manual -> AppStrings.ui_manual
-                                        SyncScheduleType.Interval -> AppStrings.ui_interval
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    SyncScheduleSettings(scheduleType, enabled, intervalMinutesText, scheduleTimeText, scheduleWeekdays,
+                        { scheduleType = it }, { enabled = it }, { intervalMinutesText = it },
+                        { scheduleTimeText = it }, { scheduleWeekdays = it })
                 }
-                if (scheduleType == SyncScheduleType.Interval) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(AppStrings.ui_enable_scheduled_execution)
-                            Switch(checked = enabled, onCheckedChange = { item -> enabled = item })
-                        }
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = intervalMinutesText,
-                            onValueChange = { item -> intervalMinutesText = item },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(AppStrings.ui_interval_minutes) },
-                            singleLine = true,
-                        )
-                    }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    SyncTriggerSettings(triggerOnDeviceConnect, triggerOnNetworkAvailable, requireWifi, requireCharging,
+                        { triggerOnDeviceConnect = it }, { triggerOnNetworkAvailable = it },
+                        { requireWifi = it }, { requireCharging = it })
                 }
             }
+        }
+
+        pendingReverseTask?.let { pending ->
+            SyncReverseTaskDialog(
+                tasks = reverseTasks,
+                onConfirm = {
+                    pendingReverseTask = null
+                    coroutineScope.launch { saveTask(pending, confirmReverseTasks = true) }
+                },
+                onDismiss = { pendingReverseTask = null },
+                onUseBidirectional = {
+                    pendingReverseTask = null
+                    mode = SyncMode.Bidirectional
+                },
+            )
+        }
+
+        pendingDefinitionTask?.let { pending ->
+            SyncDefinitionChangeDialog(onConfirm = {
+                pendingDefinitionTask = null
+                coroutineScope.launch { saveTask(pending) }
+            }, onDismiss = { pendingDefinitionTask = null })
+        }
+        if (showDisableRecycle) SyncDisableRecycleDialog(onConfirm = {
+            recycleEnabled = false
+            showDisableRecycle = false
+        }, onDismiss = { showDisableRecycle = false })
+
+        browsingDestination?.let { entry ->
+            SyncPathSelectorDialog(
+                title = AppStrings.ui_select_target_path,
+                deskType = entry.network,
+                selectedPath = entry.network.pathSeparator,
+                onConfirm = { selectedDestinationPath = it },
+                onConfirmFile = { file ->
+                    val destination = entry.storageDestination(selectedDestinationPath, file?.storageReference)
+                    destinationsJson = Json.encodeToString((destinations + destination).distinct())
+                    browsingDestination = null
+                },
+                onDismiss = { browsingDestination = null },
+            )
         }
 
         if (showSourcePathSelector && sourceSelectorDesk != null) {
@@ -694,7 +862,8 @@ class SyncEditScreen(
                     sourcePath = path
                     showSourcePathSelector = false
                 },
-                onDismiss = { showSourcePathSelector = false }
+                onDismiss = { showSourcePathSelector = false },
+                onConfirmFile = { file -> sourceReferenceJson = file?.storageReference?.let { Json.encodeToString(it) } }
             )
         }
 
@@ -708,7 +877,8 @@ class SyncEditScreen(
                     targetPath = path
                     showTargetPathSelector = false
                 },
-                onDismiss = { showTargetPathSelector = false }
+                onDismiss = { showTargetPathSelector = false },
+                onConfirmFile = { file -> targetReferenceJson = file?.storageReference?.let { Json.encodeToString(it) } }
             )
         }
 
@@ -767,29 +937,13 @@ internal fun AdvancedIgnoreConfiguration(
     val normalizedSelection = normalizeSupportedIgnoreFileNames(selectedFileNames)
     val normalizedAvailable = normalizeSupportedIgnoreFileNames(availableFileNames)
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 16.dp),
-            ) {
-                Text(AppStrings.ui_advanced_ignore)
-                Text(
-                    text = AppStrings.ui_advanced_ignore_description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-                modifier = Modifier.testTag("sync-advanced-ignore-switch"),
-            )
-        }
+        SyncSwitchRow(
+            label = AppStrings.ui_advanced_ignore,
+            checked = enabled,
+            onCheckedChange = onEnabledChange,
+            supportingText = AppStrings.ui_advanced_ignore_description,
+            switchModifier = Modifier.testTag("sync-advanced-ignore-switch"),
+        )
 
         if (enabled) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -815,8 +969,6 @@ internal fun AdvancedIgnoreConfiguration(
                                 .takeIf { fileNames -> fileNames.isNotEmpty() }
                                 ?.joinToString(", ")
                                 ?: AppStrings.ui_no_ignore_files_selected,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Icon(
@@ -827,8 +979,6 @@ internal fun AdvancedIgnoreConfiguration(
             } else {
                 Text(
                     text = AppStrings.ui_no_ignore_files_found_in_source,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -930,3 +1080,64 @@ internal fun syncSourceChanged(
     currentPath: String,
 ): Boolean =
     previousType != currentType || previousRef != currentRef || previousPath != currentPath
+
+internal fun validSyncExecutionSettings(retries: String, timeout: String, parallelism: String): Boolean =
+    retries.toIntOrNull() in 0..5 &&
+        (timeout.toIntOrNull() == 0 || timeout.toIntOrNull() in 30..3600) &&
+        parallelism.toIntOrNull() in 1..8
+
+internal fun LazyGridScope.syncExecutionSettings(
+    retryCount: String,
+    timeoutSeconds: String,
+    parallelism: String,
+    onRetryCountChange: (String) -> Unit,
+    onTimeoutSecondsChange: (String) -> Unit,
+    onParallelismChange: (String) -> Unit,
+) {
+    item(key = "sync-retry-count") {
+        OutlinedTextField(
+            value = retryCount, onValueChange = onRetryCountChange,
+            label = { Text(AppStrings.sync_retry_count) },
+            isError = retryCount.toIntOrNull() !in 0..5,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().testTag("sync-retry-count"), singleLine = true,
+        )
+    }
+    item(key = "sync-timeout-seconds") {
+        OutlinedTextField(
+            value = timeoutSeconds, onValueChange = onTimeoutSecondsChange,
+            label = { Text(AppStrings.sync_timeout_seconds) },
+            supportingText = { Text(AppStrings.sync_timeout_hint) },
+            isError = timeoutSeconds.toIntOrNull() != 0 && timeoutSeconds.toIntOrNull() !in 30..3600,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().testTag("sync-timeout-seconds"), singleLine = true,
+        )
+    }
+    item(key = "sync-parallelism") {
+        OutlinedTextField(
+            value = parallelism, onValueChange = onParallelismChange,
+            label = { Text(AppStrings.sync_parallelism) },
+            supportingText = { Text(AppStrings.sync_parallelism_help) },
+            isError = parallelism.toIntOrNull() !in 1..8,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().testTag("sync-parallelism"), singleLine = true,
+        )
+    }
+}
+
+@Composable
+internal fun SyncReverseTaskDialog(tasks: List<SyncTask>, onConfirm: () -> Unit, onDismiss: () -> Unit, onUseBidirectional: (() -> Unit)? = null) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(AppStrings.sync_reverse_title) },
+        text = {
+            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                Text(AppStrings.sync_reverse_warning)
+                tasks.forEach { Text(it.name.ifBlank { AppStrings.ui_unnamed_sync }) }
+                if (onUseBidirectional != null) TextButton(onUseBidirectional) { Text(AppStrings.sync_use_bidirectional) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(AppStrings.ui_confirm) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(AppStrings.ui_cancel) } },
+    )
+}

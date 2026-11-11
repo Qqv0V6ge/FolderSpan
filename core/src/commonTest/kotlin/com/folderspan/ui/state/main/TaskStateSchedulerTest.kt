@@ -16,6 +16,27 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 class TaskStateSchedulerTest {
+
+    @Test fun automaticConnectionCancellationDoesNotHideALaterUserCancellation() = runSuspendTest {
+        val state = TaskState(runtimeStore = TestTaskRuntimePersistenceStore())
+        val automatic = task(990L)
+        val user = task(991L)
+        for (task in listOf(automatic, user)) { state.addOrUpdate(task); state.beginTaskOutputs(task) }
+        try {
+            state.requestCancel(automatic, "connection lost", userInitiated = false)
+            assertTrue(state.isTaskCancelled(automatic.key))
+            assertFalse(state.isTaskCanceledByUser(automatic.key))
+            state.requestCancel(automatic)
+            assertTrue(state.isTaskCanceledByUser(automatic.key))
+            state.requestCancel(user)
+            state.requestCancel(user, "late connection event", userInitiated = false)
+            assertTrue(state.isTaskCanceledByUser(user.key))
+        } finally {
+            state.taskOutputsFinished(automatic)
+            state.taskOutputsFinished(user)
+            state.stop()
+        }
+    }
     @Test
     fun stopWaitsForActiveWorkAndRetainsCheckpointsWithoutStartingQueuedWork() = runSuspendTest {
         withTimeout(5_000.milliseconds) {

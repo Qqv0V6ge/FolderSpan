@@ -105,7 +105,7 @@ fun EditableExposedDropdownMenu(
         if (menuItems.isNotEmpty()) {
             DropdownMenu(
                 modifier = Modifier.exposedDropdownSize(true),
-                properties = PopupProperties(focusable = false),
+                properties = PopupProperties(focusable = readOnly),
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {

@@ -136,6 +136,14 @@ data class Task(
 
     fun runtimePhaseText(): String? = activeRuntimePhaseText()
 
+    fun runtimeByteSpeedPerSecond(nowMillis: Long = Clock.System.now().toEpochMilliseconds()): Double? {
+        if (values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY] != TASK_RUNTIME_METRIC_KIND_BYTES) return null
+        val speed = values[TASK_RUNTIME_METRIC_SPEED_VALUE_KEY]?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return null
+        val updated = values[TASK_RUNTIME_METRIC_UPDATED_AT_VALUE_KEY]?.toLongOrNull()?.takeIf { it > 0 } ?: return null
+        if (nowMillis < updated) return null
+        return if (nowMillis - updated >= 3_000) 0.0 else speed
+    }
+
     fun runtimeMetricSpeedText(): String? {
         val speed = values[TASK_RUNTIME_METRIC_SPEED_VALUE_KEY]?.toDoubleOrNull()
             ?.takeIf { item -> item >= 0.0 }

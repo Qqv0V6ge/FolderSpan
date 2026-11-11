@@ -103,4 +103,45 @@ class TaskRuntimePersistenceStoreFileFormatTest {
             store.clearTaskRuntime(taskKey)
         }
     }
+
+    @Test
+    fun unknownCheckpointVersionFailsWithoutDeletingRecoveryData() {
+        val taskKey = System.nanoTime()
+        val checkpoint = TaskRuntimeTransferCheckpoint(
+            taskKey = taskKey, entryId = "future-format", destPath = "/dest/a",
+            fileSize = 2048, chunkSize = 1024, createdAt = 1,
+        )
+        try {
+            store.saveTransferCheckpoint(checkpoint)
+            val directory = File(File(PathUtils.getCachePath(), "task-runtime"), "$taskKey/transfer")
+            val file = directory.listFiles()!!.single()
+            val futurePayload = Base64.encode(ProtoBufCodec.encode(checkpoint.copy(schemaVersion = 999)))
+            file.writeText(futurePayload)
+            assertFailsWith<IllegalArgumentException> {
+                store.loadTransferCheckpoint(taskKey, checkpoint.entryId)
+            }
+            assertEquals(futurePayload, file.readText())
+        } finally {
+            store.clearTaskRuntime(taskKey)
+        }
+    }
+
+    @Test
+    fun checkpointWithAnotherTaskIdentityIsNotLoaded() {
+        val taskKey = System.nanoTime()
+        val checkpoint = TaskRuntimeTransferCheckpoint(
+            taskKey = taskKey, entryId = "wrong-owner", destPath = "/dest/a",
+            fileSize = 2048, chunkSize = 1024, createdAt = 1,
+        )
+        try {
+            store.saveTransferCheckpoint(checkpoint)
+            val directory = File(File(PathUtils.getCachePath(), "task-runtime"), "$taskKey/transfer")
+            directory.listFiles()!!.single().writeText(
+                Base64.encode(ProtoBufCodec.encode(checkpoint.copy(taskKey = taskKey + 1))),
+            )
+            assertNull(store.loadTransferCheckpoint(taskKey, checkpoint.entryId))
+        } finally {
+            store.clearTaskRuntime(taskKey)
+        }
+    }
 }

@@ -14,7 +14,6 @@ import com.folderspan.ui.screen.network.NetworkEditSectionTitle
 internal fun LazyGridScope.NetworkSmbForm(
     name: String,
     onNameChange: (String) -> Unit,
-    nameError: Boolean,
     host: String,
     onHostChange: (String) -> Unit,
     hostError: Boolean,
@@ -33,9 +32,9 @@ internal fun LazyGridScope.NetworkSmbForm(
     onDomainChange: (String) -> Unit,
 ) {
     NetworkStandardForm(
+        protocol = "SMB",
         name = name,
         onNameChange = onNameChange,
-        nameError = nameError,
         host = host,
         onHostChange = onHostChange,
         hostError = hostError,

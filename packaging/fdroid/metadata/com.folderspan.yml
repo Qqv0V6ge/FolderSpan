@@ -1,0 +1,79 @@
+Disabled: Candidate pending dependency/source inclusion review and development-history qualification
+Categories:
+  - File Manager
+  - File Transfer
+License: Apache-2.0
+AuthorName: FolderSpan
+AuthorEmail: 572169725@qq.com
+WebSite: https://folderspan.com
+SourceCode: https://github.com/Qqv0V6ge/FolderSpan
+IssueTracker: https://github.com/Qqv0V6ge/FolderSpan/issues
+Name: FolderSpan
+Summary: Manage local and remote files and share across devices
+Description: |-
+  FolderSpan standard edition is a free file manager and sharing tool.
+  Browse local files, connect remote storage and share files between devices.
+  Network connections and transfers exchange the data needed by the services
+  selected by the user. Available capabilities depend on platform permissions.
+  No FolderSpan account is required. The standard edition has no ads or in-app
+  purchases. Third-party components retain their own license terms.
+RepoType: git
+Repo: https://github.com/Qqv0V6ge/FolderSpan.git
+
+Builds:
+  - versionName: 1.0.1
+    versionCode: 5
+    commit: 3b2627a46c6fb70d97746bd390df3bccc4675cd0
+    subdir: app/androidApp
+    rm:
+      - app/shared/src/jsMain/resources/sql-wasm.wasm
+      - app/shared/src/wasmJsMain/resources/sql-wasm.wasm
+      - third-party/maven/okhttp-publicsuffix-source/publicsuffixes.gz
+      - core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin
+    prebuild: sed -i '/org.gradle.toolchains.foojay-resolver-convention/d' ../../settings.gradle.kts
+    build: |-
+      python3 - <<'PY'
+      import hashlib, importlib.util
+      from pathlib import Path
+      relative = Path('third-party/resources/tools/verify_gbk_mapping.py')
+      root = next(path for path in (Path.cwd(), *Path.cwd().parents) if (path / relative).is_file())
+      spec = importlib.util.spec_from_file_location('gbk_mapping_source', root / relative)
+      mapping = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(mapping)
+      source = root / 'third-party/resources/upstream/unicode/CP936.TXT'
+      data = mapping.encode_delta(mapping.ordered_table(mapping.read_source(source.read_bytes())))
+      assert hashlib.sha256(data).hexdigest() == mapping.RESOURCE_SHA256
+      output = root / 'core/src/commonMain/composeResources/files/editor/gbk-delta-map.bin'
+      output.write_bytes(data)
+      print('GBK resource rebuilt from verified Unicode CP936 source:', hashlib.sha256(data).hexdigest())
+      PY
+    gradle:
+      - 'yes'
+    gradleprops:
+      - includeProMain=false
+      - folderspanBuildType=release
+      - androidEnableAbiSplits=false
+      - releaseVersion=1.0.1
+      - androidVersionCode=5
+
+MaintainerNotes: |-
+  This is a disabled candidate, not a claim of F-Droid eligibility.
+  Published v1.0.1 verifies the package ID, version and ordinary-edition license.
+  The pinned follow-up commit refreshes Android/Linux third-party notice metadata
+  and distribution tooling without changing Android application features.
+  The original release commit passed official lint, source and APK scanning and
+  an unsigned build in upstream Actions run 40428761641; the refreshed candidate
+  is independently checked. This is not a signature-reproducibility claim.
+  Historical code, artwork and documentation include generative-AI output.
+  Public FolderSpan Git history begins on 2026-10-12; no development-history
+  exception has been obtained. Inspect all native dependencies and source assets.
+  The two WebAssembly files are only JS/wasm target resources, unused on Android.
+  The gzip is an audit copy; editable MPL source rules and exceptions are kept.
+  GBK data is regenerated after scanning from the archived, checksum-pinned Unicode
+  CP936 text using the existing verified encoder; the output must match the APK
+  resource SHA-256. Foojay auto-provisioning is removed; the builder supplies Java.
+  No scanignore/scandelete exemptions or upstream-signature reproducibility claims
+  have been added. F-Droid would normally use its own signing key.
+
+AutoUpdateMode: None
+UpdateCheckMode: Static

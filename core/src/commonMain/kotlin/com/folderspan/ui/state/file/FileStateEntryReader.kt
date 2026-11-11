@@ -44,6 +44,7 @@ internal suspend fun readSystemShareFiles(
 internal class FileStateEntryReader(
     private val currentDesk: () -> DiskBase,
     private val directoryCollector: FileStateDirectoryCollector,
+    private val networkDirectory: (DiskBase, String) -> FileSimpleInfo? = { _, _ -> null },
 ) {
     private fun buildListRequestBatchId(desk: DiskBase): String {
         return "file-list:${buildDiskPathKey(desk)}"
@@ -88,7 +89,7 @@ internal class FileStateEntryReader(
                     }
                 }
 
-                is NetworkAccess -> desk.getList(path, batchId = buildListRequestBatchId(desk))
+                is NetworkAccess -> desk.getList(networkDirectory(desk, path) ?: desk.getFile(path).getOrThrow(), batchId = buildListRequestBatchId(desk))
                 else -> Result.failure(EmptyDataException())
             }
         }
@@ -216,7 +217,7 @@ internal class FileStateEntryReader(
                     Result.failure(Exception(AppStrings.ui_failed_to_retrieve))
                 }
 
-                is NetworkAccess -> desk.getFile(path)
+                is NetworkAccess -> networkDirectory(desk, path)?.let { Result.success(it) } ?: desk.getFile(path)
                 else -> Result.failure(Exception(AppStrings.ui_failed_to_retrieve))
             }
         }

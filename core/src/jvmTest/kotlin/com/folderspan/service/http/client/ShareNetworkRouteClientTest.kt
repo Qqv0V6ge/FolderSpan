@@ -37,6 +37,7 @@ class ShareNetworkRouteClientTest {
         val authRequest = captured.first()
         assertEquals(HttpMethod.Post, authRequest.method)
         assertEquals("/auth", authRequest.url.encodedPath)
+        assertEquals("http://localhost:8080", authRequest.headers[HttpHeaders.Origin])
         assertNull(authRequest.url.parameters["pwd"])
         assertTrue(authRequestBody(authRequest).contains("pwd=secret"))
         assertFalse(authRequest.url.toString().contains("pwd="))

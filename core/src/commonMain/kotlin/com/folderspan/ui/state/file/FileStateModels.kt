@@ -498,6 +498,8 @@ internal fun buildTaskRuntimeCopyQueueEntry(
             destPath = dest.path,
             destProtocol = dest.protocol,
             destProtocolId = dest.protocolId,
+            srcStorageReference = src.storageReference,
+            destStorageReference = dest.storageReference,
         ),
         stage = TaskRuntimeStage.COPY,
         kind = if (src.isDirectory) {
@@ -534,6 +536,7 @@ internal fun buildTaskRuntimeDeleteQueueEntry(
             destPath = "",
             destProtocol = FileProtocol.Local,
             destProtocolId = "",
+            srcStorageReference = target.storageReference,
         ),
         stage = stage,
         kind = when (stage) {
@@ -555,6 +558,7 @@ internal fun TaskRuntimeQueueEntry.toOperationSourceFileSimpleInfo(): FileSimple
         protocolId = src.protocolId,
         isDirectory = isDirectory,
         size = size,
+        storageReference = src.storageReference,
     )
 }
 

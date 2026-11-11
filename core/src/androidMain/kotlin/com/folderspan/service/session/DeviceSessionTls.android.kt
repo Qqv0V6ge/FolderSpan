@@ -76,20 +76,20 @@ private fun createDeviceSessionSocket(
         arrayOf(trustManager),
         SecureRandom(),
     )
-    LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = (host).toString(), arg1 = (port).toString()))
+    LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = host, arg1 = (port).toString()))
     val socket = context.socketFactory.createSocket(host, port) as SSLSocket
     try {
         socket.enabledProtocols = socket.supportedProtocols
             .filter { protocol -> protocol == "TLSv1.2" || protocol == "TLSv1.3" }
             .toTypedArray()
         socket.offerDeviceSessionAlpn()
-        LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = (host).toString()))
+        LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = host))
         socket.startHandshake()
         if (!socket.hasDeviceSessionAlpn()) {
-            LogKit.w(AppStrings.ui_device_session_client_missing_alpn_arg0_host_arg1.format(arg0 = (DEVICE_SESSION_ALPN).toString(), arg1 = (host).toString()))
+            LogKit.w(AppStrings.ui_device_session_client_missing_alpn_arg0_host_arg1.format(arg0 = DEVICE_SESSION_ALPN, arg1 = host))
             throw DeviceSessionIoException("missing ALPN $DEVICE_SESSION_ALPN")
         }
-        LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = (host).toString(), arg1 = (DEVICE_SESSION_ALPN).toString()))
+        LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = host, arg1 = DEVICE_SESSION_ALPN))
         return socket
     } catch (error: Throwable) {
         runCatching { socket.close() }

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FolderSpan
+Comment=Manage local and remote files and share across devices
+Exec=folderspan %U
+Icon=folderspan
+Terminal=false
+Categories=Utility;FileManager;FileTransfer;

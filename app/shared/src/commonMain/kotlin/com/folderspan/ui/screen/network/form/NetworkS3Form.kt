@@ -14,7 +14,6 @@ import com.folderspan.ui.screen.network.NetworkEditSectionTitle
 internal fun LazyGridScope.NetworkS3Form(
     name: String,
     onNameChange: (String) -> Unit,
-    nameError: Boolean,
     endpoint: String,
     onEndpointChange: (String) -> Unit,
     endpointError: Boolean,
@@ -48,14 +47,7 @@ internal fun LazyGridScope.NetworkS3Form(
         NetworkEditSectionTitle(AppStrings.ui_basic_information)
     }
     item {
-        OutlinedTextField(
-            value = name,
-            onValueChange = onNameChange,
-            label = { Text(AppStrings.ui_name) },
-            isError = nameError,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkNameField(name, onNameChange, defaultNetworkName("S3", endpoint))
     }
     item {
         OutlinedTextField(
@@ -138,15 +130,6 @@ internal fun LazyGridScope.NetworkS3Form(
         )
     }
     item(span = { GridItemSpan(maxLineSpan) }) {
-        ListItem(
-            headlineContent = { Text(AppStrings.network_force_path_style_label) },
-            trailingContent = {
-                Switch(
-                    checked = forcePathStyle,
-                    onCheckedChange = onForcePathStyleChange
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkFormSwitch(AppStrings.network_force_path_style_label, forcePathStyle, onForcePathStyleChange)
     }
 }

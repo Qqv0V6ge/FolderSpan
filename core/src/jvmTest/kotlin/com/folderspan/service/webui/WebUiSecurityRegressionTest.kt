@@ -375,30 +375,35 @@ class WebUiSecurityRegressionTest {
     }
 
     @Test
-    fun explicitlyTrustedWebCanLoginPreflightAndUsePlatformOperations(): Unit = runBlocking {
+    fun explicitlyTrustedAndWildcardWebCanLoginPreflightAndUsePlatformOperations(): Unit = runBlocking {
         val origin = "http://localhost:8080"
-        val fixture = Fixture(setOf(origin))
-        try {
-            val login = fixture.login(origin)
-            assertEquals(200, login.statusCode)
-            assertEquals(origin, login.header("Access-Control-Allow-Origin"))
-            val token = fixture.json.decodeFromString<WebUiLoginResponse>(
-                (login.body as LinkShareHttpResponseBody.Bytes).bytes.decodeToString()).sessionToken
-            assertEquals(200, fixture.request("GET", "$WEB_UI_PLATFORM_PATH/files/roots", token, origin = origin).statusCode)
-            val headers = mapOf(
-                "Access-Control-Request-Method" to listOf("POST"),
-                "Access-Control-Request-Headers" to listOf("Content-Type, $WEB_UI_SESSION_HEADER, $WEB_UI_PROTOCOL_HEADER"),
-            )
-            val preflight = fixture.request("OPTIONS", "$WEB_UI_PLATFORM_PATH/files/append", origin = origin, extraHeaders = headers)
-            assertEquals(204, preflight.statusCode)
-            assertEquals(origin, preflight.header("Access-Control-Allow-Origin"))
-            assertTrue(preflight.header("Access-Control-Allow-Headers").orEmpty().contains(WEB_UI_SESSION_HEADER.lowercase()))
-            assertEquals(403, fixture.request("OPTIONS", WEB_UI_LOGIN_PATH, origin = origin, extraHeaders =
-                headers + ("Access-Control-Request-Headers" to listOf("X-Untrusted"))).statusCode)
-            assertEquals(403, fixture.request("OPTIONS", WEB_UI_LOGIN_PATH, origin = null, extraHeaders = headers).statusCode)
-            assertEquals(403, fixture.request("POST", WEB_UI_LOGIN_PATH, origin = origin, extraHeaders =
-                mapOf("Origin" to listOf(origin, "https://evil.example"))).statusCode)
-            assertEquals(403, fixture.request("GET", "/", extraHeaders = mapOf("Host" to listOf("evil.example"))).statusCode)
-        } finally { fixture.handler.stop() }
+        for (trustedOrigins in listOf(setOf(origin), setOf("*"))) {
+            val fixture = Fixture(trustedOrigins)
+            try {
+                val login = fixture.login(origin)
+                assertEquals(200, login.statusCode)
+                assertEquals(origin, login.header("Access-Control-Allow-Origin"))
+                val token = fixture.json.decodeFromString<WebUiLoginResponse>(
+                    (login.body as LinkShareHttpResponseBody.Bytes).bytes.decodeToString()).sessionToken
+                assertEquals(200, fixture.request("GET", "$WEB_UI_PLATFORM_PATH/files/roots", token, origin = origin).statusCode)
+                val headers = mapOf(
+                    "Access-Control-Request-Method" to listOf("POST"),
+                    "Access-Control-Request-Headers" to listOf("Content-Type, $WEB_UI_SESSION_HEADER, $WEB_UI_PROTOCOL_HEADER"),
+                )
+                val preflight = fixture.request("OPTIONS", "$WEB_UI_PLATFORM_PATH/files/append", origin = origin, extraHeaders = headers)
+                assertEquals(204, preflight.statusCode)
+                assertEquals(origin, preflight.header("Access-Control-Allow-Origin"))
+                assertTrue(preflight.header("Access-Control-Allow-Headers").orEmpty().contains(WEB_UI_SESSION_HEADER.lowercase()))
+                val unauthorized = fixture.request("GET", "$WEB_UI_PLATFORM_PATH/files/roots", origin = origin)
+                assertEquals(401, unauthorized.statusCode)
+                assertEquals(origin, unauthorized.header("Access-Control-Allow-Origin"))
+                assertEquals(403, fixture.request("OPTIONS", WEB_UI_LOGIN_PATH, origin = origin, extraHeaders =
+                    headers + ("Access-Control-Request-Headers" to listOf("X-Untrusted"))).statusCode)
+                assertEquals(403, fixture.request("OPTIONS", WEB_UI_LOGIN_PATH, origin = null, extraHeaders = headers).statusCode)
+                assertEquals(403, fixture.request("POST", WEB_UI_LOGIN_PATH, origin = origin, extraHeaders =
+                    mapOf("Origin" to listOf(origin, "https://evil.example"))).statusCode)
+                assertEquals(403, fixture.request("GET", "/", extraHeaders = mapOf("Host" to listOf("evil.example"))).statusCode)
+            } finally { fixture.handler.stop() }
+        }
     }
 }

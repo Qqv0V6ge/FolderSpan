@@ -15,9 +15,12 @@ if (process.env.FOLDERSPAN_WEBRTC_INTEROP_URL) {
     config.client.webrtcInteropUrl = process.env.FOLDERSPAN_WEBRTC_INTEROP_URL;
     config.client.webrtcInteropConfig = process.env.FOLDERSPAN_WEBRTC_INTEROP_CONFIG || '{}';
 }
-config.client.mocha = Object.assign({}, config.client.mocha, { timeout: 60000 });
+// Match the real Runtime suite's cloud snapshot budget, including browser reporting overhead.
+config.client.mocha = Object.assign({}, config.client.mocha, {
+    timeout: process.env.FOLDERSPAN_STORAGE_CONTENT_RUNTIME_FIXTURE_URL ? 920000 : 60000,
+});
 config.failOnEmptyTestSuite = true;
-config.browserNoActivityTimeout = 65000;
+config.browserNoActivityTimeout = process.env.FOLDERSPAN_STORAGE_CONTENT_RUNTIME_FIXTURE_URL ? 925000 : 65000;
 // Keep loopback ICE independent of the host's multicast DNS configuration.
 config.customLaunchers = Object.assign({}, config.customLaunchers, {
     ChromeHeadlessWebRtc: {

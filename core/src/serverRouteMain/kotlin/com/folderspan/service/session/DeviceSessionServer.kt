@@ -71,6 +71,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
@@ -81,6 +84,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration
+import kotlin.time.Clock
 import kotlin.time.TimeSource
 import strings.AppStrings
 import com.folderspan.data.main.device.DeviceCategory
@@ -213,6 +217,7 @@ internal class DeviceSessionServer(
     private val writeLocksMutex = Mutex()
     private val incomingWritesMutex = Mutex()
     private val fileStreamSlots = Semaphore(sessionPlan.maxFileStreams)
+    private val fileTransferActivity = MutableStateFlow(0)
     private val transport = DeviceSessionTransport(
         channel = channel,
         sendPlan = sessionPlan,
@@ -246,6 +251,15 @@ internal class DeviceSessionServer(
     @Volatile
     private var boundDeviceId: String? = null
     private var authorizationJob: Job? = null
+    private val transferFeedback = DeviceSessionTransferFeedback(
+        scope = scope,
+        limits = sessionPlan.toTransferStatus(sessionPlan.maxFileStreams, sessionPlan.recommendedChunkBytes(),
+            Clock.System.now().toEpochMilliseconds()),
+        activity = combine(transport.connection.activeStreamCount, controlEndpoint.activeTransferRequests, fileTransferActivity) {
+            streams, requests, files -> maxOf(streams, files) + requests
+        },
+        rpc = controlEndpoint::rpc,
+    )
 
     suspend fun run() {
         LogKit.i(AppStrings.ui_device_session_server_start_remote_arg0.format(arg0 = (remoteHost).toString()))
@@ -260,6 +274,7 @@ internal class DeviceSessionServer(
             LogKit.e("device session server failed: ${error.message}", error)
             runCatching { transport.connection.goAway() }
         } finally {
+            transferFeedback.close()
             authorizationJob?.cancel()
             LogKit.i(AppStrings.ui_device_session_server_ends_remote_arg0_device_arg1.format(arg0 = (remoteHost).toString(), arg1 = (boundDeviceId).toString()))
             cleanupMessageEndpoint()
@@ -275,12 +290,12 @@ internal class DeviceSessionServer(
             DeviceSessionFrameType.Data -> {
                 if (frame.streamId == DEVICE_SESSION_CONTROL_STREAM_ID) {
                     val messages = try {
-                        controlAssembler.push(frame.payload)
+                        controlAssembler.push(frame.payload, frame.receivedAtMillis)
                     } catch (error: DeviceSessionIoException) {
                         LogKit.w(AppStrings.ui_device_session_control_message_assembly_failed_arg0.format(arg0 = (error.message).toString()))
                         emptyList()
                     }
-                    messages.forEach { message -> handleControl(message) }
+                    messages.forEach { message -> handleControl(message, controlAssembler.messageReceivedAtMillis) }
                 } else {
                     val write = incomingWritesMutex.withLock { incomingWrites[frame.streamId] }
                     if (write != null) {
@@ -333,8 +348,8 @@ internal class DeviceSessionServer(
         }
     }
 
-    private suspend fun handleControl(payload: ByteArray) {
-        controlEndpoint.handle(payload)
+    private suspend fun handleControl(payload: ByteArray, receivedAtMillis: Long?) {
+        controlEndpoint.handle(payload, receivedAtMillis)
     }
 
     private suspend fun dispatchRpc(request: DeviceSessionControlRequest): DeviceSessionControlResponse {
@@ -360,6 +375,8 @@ internal class DeviceSessionServer(
             dispatcher.deviceState.markRemoteDeviceConnected(boundDeviceId.orEmpty())
         }
         return when (request.method) {
+            DEVICE_SESSION_RPC_SUBSCRIBE_TRANSFER_FEEDBACK, DEVICE_SESSION_RPC_TRANSFER_FEEDBACK ->
+                transferFeedback.handle(request) ?: DeviceSessionControlResponse(request.requestId, DEVICE_SESSION_RPC_BAD_REQUEST)
             DEVICE_SESSION_RPC_IDENTIFY -> ok(request, ProtoBufCodec.encode(getSocketDevice()))
             DEVICE_SESSION_RPC_CONNECT -> handleConnect(request)
             DEVICE_SESSION_RPC_THEME -> ok(request, ProtoBufCodec.encode(handleTheme(request.payload)))
@@ -384,6 +401,10 @@ internal class DeviceSessionServer(
             DEVICE_SESSION_RPC_DELETE -> batchBooleanResult(request, dispatcher.fileService.deletes(requireToken(), ProtoBufCodec.decode(request.payload)))
             DEVICE_SESSION_RPC_COPY_PATH -> handleCopy(request)
             DEVICE_SESSION_RPC_COPY_CONTROL -> result(request, dispatcher.fileCopyService.controlCopy(requireToken(), ProtoBufCodec.decode(request.payload)))
+            DEVICE_SESSION_RPC_CHECK_DIRECTORY_WRITE_ACCESS -> {
+                val query = ProtoBufCodec.decode<GetFileByPathRequest>(request.payload)
+                result(request, dispatcher.fileService.checkDirectoryWriteAccess(requireToken(), query.path))
+            }
             DEVICE_SESSION_RPC_GET_FILE_BY_PATH -> result(request, dispatcher.fileService.getFileByPath(requireToken(), ProtoBufCodec.decode(request.payload)))
             DEVICE_SESSION_RPC_GET_FILE_INFO_BY_PATH -> result(request, dispatcher.fileService.getFileInfoByPath(requireToken(), ProtoBufCodec.decode(request.payload)))
             DEVICE_SESSION_RPC_GET_FILE_BY_PATH_AND_NAME -> result(request, dispatcher.fileService.getFileByPathAndName(requireToken(), ProtoBufCodec.decode(request.payload)))
@@ -464,6 +485,7 @@ internal class DeviceSessionServer(
             maxFileStreams = sessionPlan.maxFileStreams,
             recommendedChunkBytes = sessionPlan.recommendedChunkBytes(),
             archiveCapabilities = FolderSpanArchiveStreamCapabilities.local(),
+            supportsTransferFeedback = true,
         )
         return DeviceSessionControlResponse(
             requestId = request.requestId,
@@ -566,12 +588,18 @@ internal class DeviceSessionServer(
             transport.connection.sendRst(streamId)
             return
         }
+        fileTransferActivity.update { it + 1 }
         try {
             start()
         } catch (error: Throwable) {
-            fileStreamSlots.release()
+            releaseFileStreamSlot()
             throw error
         }
+    }
+
+    private fun releaseFileStreamSlot() {
+        fileStreamSlots.release()
+        fileTransferActivity.update { (it - 1).coerceAtLeast(0) }
     }
 
     private suspend fun registerMessageEndpoint(deviceId: String, token: String) {
@@ -720,7 +748,7 @@ internal class DeviceSessionServer(
                 runCatching { transport.connection.sendRst(streamId) }
             } finally {
                 outgoingStreamsMutex.withLock { outgoingStreams.remove(streamId) }
-                fileStreamSlots.release()
+                releaseFileStreamSlot()
             }
         }
         outgoingStreamsMutex.withLock { outgoingStreams[streamId] = job }
@@ -784,7 +812,7 @@ internal class DeviceSessionServer(
                 runCatching { transport.connection.sendRst(streamId) }
             } finally {
                 outgoingStreamsMutex.withLock { outgoingStreams.remove(streamId) }
-                fileStreamSlots.release()
+                releaseFileStreamSlot()
             }
         }
         outgoingStreamsMutex.withLock { outgoingStreams[streamId] = job }
@@ -833,7 +861,7 @@ internal class DeviceSessionServer(
                 runCatching { transport.connection.sendRst(streamId) }
             } finally {
                 outgoingStreamsMutex.withLock { outgoingStreams.remove(streamId) }
-                fileStreamSlots.release()
+                releaseFileStreamSlot()
             }
         }
         outgoingStreamsMutex.withLock { outgoingStreams[streamId] = job }
@@ -950,7 +978,7 @@ internal class DeviceSessionServer(
                 runCatching {
                     transport.connection.sendTrailer(streamId, ProtoBufCodec.encode(response))
                 }
-                fileStreamSlots.release()
+                releaseFileStreamSlot()
             }
         }
         outgoingStreamsMutex.withLock { outgoingStreams[streamId] = job }
@@ -968,7 +996,7 @@ internal class DeviceSessionServer(
                 runCatching { transport.connection.sendRst(streamId) }
             } finally {
                 outgoingStreamsMutex.withLock { outgoingStreams.remove(streamId) }
-                fileStreamSlots.release()
+                releaseFileStreamSlot()
             }
         }
         outgoingStreamsMutex.withLock { outgoingStreams[streamId] = job }

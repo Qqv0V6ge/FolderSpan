@@ -2,6 +2,7 @@ package com.folderspan.data.main.network
 
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
+import com.folderspan.service.network.StoragePath
 import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.ui.state.main.Task
 import kotlinx.coroutines.flow.Flow
@@ -9,6 +10,27 @@ import strings.AppStrings
 
 interface NetworkAccess {
     val protocolId: String
+    suspend fun getList(directory: FileSimpleInfo, requestId: String? = null, batchId: String? = null): Result<List<FileSimpleInfo>> =
+        getList(directory.path, requestId, batchId)
+
+    suspend fun getFile(file: FileSimpleInfo): Result<FileSimpleInfo> = getFile(file.path)
+
+    suspend fun rename(file: FileSimpleInfo, newName: String): Result<Boolean> =
+        rename(file.path.substringBeforeLast('/', "/"), file.name, newName)
+    suspend fun delete(file: FileSimpleInfo): Result<Boolean> = delete(file.path, file.isDirectory)
+    suspend fun deleteEmptyDirectory(file: FileSimpleInfo): Result<Boolean> =
+        Result.failure(NetworkUnsupportedException("Deleting only empty directories is unsupported"))
+    suspend fun move(file: FileSimpleInfo, to: StoragePath): Result<Boolean> =
+        Result.failure(NetworkUnsupportedException("Storage move is unsupported"))
+    suspend fun createFolder(path: StoragePath): Result<Boolean> = createFolder(path.path.substringBeforeLast('/', "/").ifEmpty { "/" }, path.path.substringAfterLast('/'))
+    suspend fun createFile(path: StoragePath): Result<Boolean> = createFile(path.path.substringBeforeLast('/', "/").ifEmpty { "/" }, path.path.substringAfterLast('/'))
+    suspend fun createFolder(directory: FileSimpleInfo, name: String): Result<Boolean> = createFolder(directory.path, name)
+    suspend fun createFile(directory: FileSimpleInfo, name: String): Result<Boolean> = createFile(directory.path, name)
+    suspend fun uploadFileFromLocal(localPath: String, remotePath: StoragePath, size: Long, onProgress: (Long, Long) -> Unit = { _, _ -> }): Result<Boolean> =
+        uploadFileFromLocal(localPath, remotePath.path, size, onProgress)
+    suspend fun uploadFromSource(remotePath: StoragePath, size: Long, onProgress: (Long, Long) -> Unit = { _, _ -> }, readChunk: suspend () -> ByteArray?): Result<Boolean> =
+        uploadFromSource(remotePath.path, size, onProgress, readChunk)
+
     suspend fun getList(
         path: String,
         requestId: String? = null,
@@ -80,6 +102,9 @@ interface NetworkAccess {
     ): Result<Boolean> = Result.failure(
         NetworkUnsupportedException(AppStrings.network_protocol_write_not_supported)
     )
+
+    suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> =
+        Result.failure(NetworkUnsupportedException("Modification time is not supported"))
 
     suspend fun rename(path: String, oldName: String, newName: String): Result<Boolean>
 

@@ -3,14 +3,30 @@ package com.folderspan.service.webui
 import com.folderspan.service.http.archive.FolderSpanArchiveRemoteWriteException
 import com.folderspan.service.http.archive.FolderSpanArchiveTransferResult
 import com.folderspan.service.session.*
+import com.folderspan.service.operation.HTTP_TRANSFER_STATUS_FRESH_MILLIS
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import korlibs.crypto.SecureRandom
+import kotlin.time.Clock
+
+internal const val WEB_UI_DEVICE_FEEDBACK_TIMING_HEADER = "X-FolderSpan-Device-Feedback-Timing"
+internal const val WEB_UI_DEVICE_HOST_TIME_HEADER = "X-FolderSpan-Host-Time"
+
+internal fun webUiDeviceFrameReceivedAt(clientStartedAt: Long, hostOpenedAt: Long, hostReceivedAt: Long, now: Long): Long {
+    if (clientStartedAt <= 0 || hostOpenedAt <= 0 || hostReceivedAt <= 0 || now < clientStartedAt) return 0
+    val elapsed = now - clientStartedAt
+    val hostElapsed = hostReceivedAt - hostOpenedAt
+    // The open request's start gives a conservative clock offset, including its entire round trip.
+    if (hostElapsed > elapsed || hostElapsed <= elapsed - HTTP_TRANSFER_STATUS_FRESH_MILLIS) return 0
+    return now - (elapsed - hostElapsed)
+}
 
 @Serializable
 internal data class WebUiDeviceTransportOpen(val sendPlan: DeviceSessionWindowPlan, val receivePlan: DeviceSessionWindowPlan, val isClient: Boolean)
@@ -47,6 +63,13 @@ internal class WebUiDeviceTransport(
     override val connection: DeviceSessionFrameConnection get() = this
     override val supportsHostTransfers = true
     override val hostTransportHandle get() = handle
+    private var openedAtClient = 0L
+    private var openedAtHost = 0L
+    override val supportsFeedbackTiming: Boolean get() = openedAtHost > 0
+    private val streams = mutableSetOf<Int>()
+    private val streamsMutex = Mutex()
+    private val activeStreams = MutableStateFlow(0)
+    override val activeStreamCount: StateFlow<Int> get() = activeStreams
     private val incoming = Channel<DeviceSessionFrame>(options.receivePlan.frameQueueCapacity())
     override val incomingEvents: ReceiveChannel<DeviceSessionFrame> get() = incoming
     private val ready = CompletableDeferred<Unit>()
@@ -71,6 +94,9 @@ internal class WebUiDeviceTransport(
                         val frame = if (item.type == DeviceSessionFrameType.Data && item.streamId != 0)
                             DeviceSessionFrame(DeviceSessionFrameType.Data, item.streamId, exchange("GET", "$base&operation=body&streamId=${item.streamId}", null).body)
                         else item
+                        frame.receivedAtMillis = webUiDeviceFrameReceivedAt(openedAtClient, openedAtHost,
+                            event.data.toLongOrNull() ?: 0, Clock.System.now().toEpochMilliseconds())
+                        if (frame.type == DeviceSessionFrameType.Trailer || frame.type == DeviceSessionFrameType.Rst) markStream(frame.streamId, false)
                         if (frame.type == DeviceSessionFrameType.Ping) onPing?.invoke(frame.payload)
                         else {
                             if (frame.type == DeviceSessionFrameType.GoAway) goAway = DeviceSessionGoAway(DeviceSessionFrames.readIntLe(frame.payload))
@@ -80,7 +106,12 @@ internal class WebUiDeviceTransport(
                 }
                 byteArrayOf()
             }
-            post(base, options)
+            openedAtClient = Clock.System.now().toEpochMilliseconds()
+            val opened = post(base, options)
+            fun header(name: String) = opened.headers.entries.firstOrNull { it.key.equals(name, true) }?.value?.trim()
+            if (header(WEB_UI_DEVICE_FEEDBACK_TIMING_HEADER) == "1") {
+                openedAtHost = header(WEB_UI_DEVICE_HOST_TIME_HEADER)?.toLongOrNull()?.takeIf { it > 0 } ?: 0
+            }
             ready.complete(Unit)
             ended.await()
         } catch (error: Throwable) {
@@ -88,8 +119,11 @@ internal class WebUiDeviceTransport(
             incoming.close(error)
             if (error is CancellationException) throw error
         } finally {
-            incoming.close()
-            withContext(NonCancellable) { close() }
+            withContext(NonCancellable) {
+                streamsMutex.withLock { streams.clear(); activeStreams.value = 0 }
+                incoming.close()
+                close()
+            }
         }
     }.also { check(job == null); job = it }
 
@@ -101,6 +135,7 @@ internal class WebUiDeviceTransport(
 
     override suspend fun openStream(payload: ByteArray, onStreamAllocated: suspend (Int) -> Unit): Int {
         val id = operation("allocate", payload = payload).streamId
+        markStream(id, true)
         try {
             onStreamAllocated(id)
             operation("start", id)
@@ -110,7 +145,16 @@ internal class WebUiDeviceTransport(
             throw error
         }
     }
-    override suspend fun acceptRemoteStream(streamId: Int) = operation("accept", streamId).accepted
+    override suspend fun acceptRemoteStream(streamId: Int): Boolean {
+        val accepted = operation("accept", streamId).accepted
+        if (accepted) markStream(streamId, true)
+        return accepted
+    }
+
+    private suspend fun markStream(streamId: Int, open: Boolean) = streamsMutex.withLock {
+        if (open) streams.add(streamId) else streams.remove(streamId)
+        activeStreams.value = streams.size
+    }
     override suspend fun sendData(streamId: Int, payload: ByteArray) {
         if (payload.isEmpty()) exchange("POST", "$base&operation=data&streamId=$streamId", payload)
         var offset = 0
@@ -130,9 +174,9 @@ internal class WebUiDeviceTransport(
             offset = end
         }
     }
-    override suspend fun sendTrailer(streamId: Int, payload: ByteArray) { operation("trailer", streamId, payload) }
+    override suspend fun sendTrailer(streamId: Int, payload: ByteArray) { operation("trailer", streamId, payload); markStream(streamId, false) }
     override suspend fun sendWindowUpdate(streamId: Int, creditBytes: Int) { operation("window", streamId, value = creditBytes) }
-    override suspend fun sendRst(streamId: Int, errorCode: Int) { operation("reset", streamId, value = errorCode) }
+    override suspend fun sendRst(streamId: Int, errorCode: Int) { operation("reset", streamId, value = errorCode); markStream(streamId, false) }
     override suspend fun ping(payload: ByteArray) = operation("ping", payload = payload).payload
     override suspend fun goAway() { operation("go-away") }
     override suspend fun receivedGoAway() = goAway

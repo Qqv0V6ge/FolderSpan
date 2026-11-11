@@ -3,9 +3,11 @@ package com.folderspan.extensions
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.ui.state.main.TaskRuntimeEndpointRef
+import com.folderspan.service.network.forPath
 
 fun FileSimpleInfo.fileOperationKey(): String {
-    return "${protocol.name}:$protocolId:$path"
+    return storageReference?.id?.takeIf { it.isNotEmpty() }?.let { "${protocol.name}:$protocolId:id:${it.length}:$it" }
+        ?: "${protocol.name}:$protocolId:$path"
 }
 
 internal fun FileSimpleInfo.toCopyDestination(
@@ -16,6 +18,7 @@ internal fun FileSimpleInfo.toCopyDestination(
         path = path.replaceFirst(sourceRoot.path, targetRoot.path),
         protocol = targetRoot.protocol,
         protocolId = targetRoot.protocolId,
+        storageReference = targetRoot.storageReference?.forPath(targetRoot.path, path.replaceFirst(sourceRoot.path, targetRoot.path), targetRoot.isDirectory),
     )
 }
 
@@ -24,6 +27,7 @@ internal fun FileSimpleInfo.toEndpointRef(): TaskRuntimeEndpointRef {
         protocol = protocol,
         protocolId = protocolId,
         path = path,
+        storageReference = storageReference,
     )
 }
 

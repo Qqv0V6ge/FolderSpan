@@ -21,6 +21,40 @@ private data object PayloadScreenRoute : AppScreenRoute {
 
 class AppNavigatorTest {
     @Test
+    fun removingAPayloadClosesOnlyItsOwnedResourcesOnce() {
+        var closes = 0
+        val screen = object : AppScreenRoute, AutoCloseable {
+            @Composable override fun Content() = Unit
+            override fun close() { closes++ }
+        }
+        val navigator = MutableAppNavigator(RootRoute)
+        navigator.push(screen)
+        val route = navigator.currentRoute!!
+        navigator.push(DetailsRoute)
+        navigator.pop()
+        assertEquals(0, closes)
+        navigator.pop()
+        AppRoutePayloadStore.release(route)
+        assertEquals(1, closes)
+    }
+
+    @Test
+    fun suppressingADuplicatePayloadDoesNotCloseItsStillActiveScreen() {
+        var closes = 0
+        val screen = object : AppScreenRoute, AutoCloseable {
+            @Composable override fun Content() = Unit
+            override fun close() { closes++ }
+        }
+        val navigator = MutableAppNavigator(RootRoute)
+        navigator.push(screen)
+        navigator.push(screen)
+        assertEquals(0, closes)
+        assertEquals(2, navigator.routes.size)
+        navigator.pop()
+        assertEquals(1, closes)
+    }
+
+    @Test
     fun mutableNavigatorStartsWithInitialRoute() {
         val navigator = MutableAppNavigator(RootRoute)
 

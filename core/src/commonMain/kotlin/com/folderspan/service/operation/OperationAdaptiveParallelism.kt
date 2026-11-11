@@ -2,7 +2,9 @@ package com.folderspan.service.operation
 
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.DEVICE_DIRECT_MAX_LENGTH
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -13,7 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.time.Clock
+import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val LOCAL_OPERATION_INITIAL_PARALLELISM = 6
@@ -25,11 +27,12 @@ private const val SHARE_OPERATION_MAX_PARALLELISM = 16
 private const val NETWORK_OPERATION_MAX_PARALLELISM = 12
 private const val OPERATION_BUSY_MAX_PARALLELISM = 2
 private const val OPERATION_FAST_MILLIS = 500L
-private const val OPERATION_SLOW_MILLIS = 4_000L
+private const val OPERATION_SLOW_SAMPLES = 3
 private const val OPERATION_ACQUIRE_POLL_MILLIS = 10L
 private const val OPERATION_QUEUE_CAPACITY_FACTOR = 4
 private const val OPERATION_MIN_QUEUE_CAPACITY = 4
 private const val OPERATION_EWMA_NEW_SAMPLE_PERCENT = 35
+private val operationClock = TimeSource.Monotonic.markNow()
 
 internal data class OperationParallelismConfig(
     val initialParallelism: Int,
@@ -170,11 +173,16 @@ internal suspend fun <T> processItemsAdaptive(
         val queue = Channel<T>(safeConfig.queueCapacity)
         val workers = List(minOf(safeConfig.hardMaxParallelism, items.size).coerceAtLeast(1)) {
             launch(Dispatchers.Default) {
-                for (item in queue) {
-                    limiter.withPermit {
-                        ensureRunning()
-                        processItem(item)
+                try {
+                    for (item in queue) {
+                        limiter.withPermit(ensureRunning = ensureRunning) {
+                            ensureRunning()
+                            processItem(item)
+                        }
                     }
+                } catch (cancelled: CancellationException) {
+                    this@coroutineScope.cancel(cancelled)
+                    throw cancelled
                 }
             }
         }
@@ -192,10 +200,14 @@ internal suspend fun <T> processItemsAdaptive(
     }
 }
 
-private class AdaptiveOperationLimiter(
+internal class AdaptiveOperationLimiter(
     config: OperationParallelismConfig,
     private val dynamicMaxParallelismProvider: () -> Int,
     private val onActiveParallelismChanged: suspend (Int) -> Unit,
+    private val nowMillis: () -> Long = { operationClock.elapsedNow().inWholeMilliseconds },
+    private val canDispatch: () -> Boolean = { true },
+    private val reuseParentFeedback: Boolean = false,
+    private val waitingReason: () -> TransferWaitReason? = { null },
 ) {
     private val mutex = Mutex()
     private val minLimit = 1
@@ -203,46 +215,61 @@ private class AdaptiveOperationLimiter(
     private var currentLimit = config.initialParallelism
     private var activeRequests = 0
     private var fastSuccesses = 0
+    private var slowSamples = 0
     private var latencyEwmaMillis: Double? = null
+
+    internal suspend fun parallelismLimit(): Int = mutex.withLock { currentLimit }
 
     /**
      * 获取动态许可并执行一个操作，结束时根据耗时和成败反馈调整并发窗口。
      */
-    suspend fun <T> withPermit(block: suspend () -> T): T {
-        acquire()
-        val startedAt = Clock.System.now().toEpochMilliseconds()
+    suspend fun <T> withPermit(ensureRunning: suspend () -> Unit = {}, block: suspend () -> T): T {
+        acquire(ensureRunning)
+        val feedback = if (reuseParentFeedback) currentCoroutineContext()[OperationRequestFeedback]
+            ?: OperationRequestFeedback(nowMillis) else OperationRequestFeedback(nowMillis)
         var success = false
         try {
-            val result = block()
+            val result = withContext(feedback) { block() }
             success = true
             return result
         } finally {
-            val duration = Clock.System.now().toEpochMilliseconds() - startedAt
             withContext(NonCancellable) {
-                release(durationMillis = duration, success = success)
+                release(durationMillis = feedback.latencyMillis(), success = success && !feedback.failed,
+                    ignored = success && feedback.ignored)
             }
         }
     }
 
-    private suspend fun acquire() {
-        while (true) {
-            var activeCount: Int? = null
-            mutex.withLock {
-                clampLimitLocked()
-                if (activeRequests < currentLimit) {
-                    activeRequests++
-                    activeCount = activeRequests
+    private suspend fun acquire(ensureRunning: suspend () -> Unit) {
+        var closeWaiting: (() -> Unit)? = null
+        var observedReason: TransferWaitReason? = null
+        try {
+            while (true) {
+                ensureRunning()
+                var activeCount: Int? = null
+                mutex.withLock {
+                    clampLimitLocked()
+                    if (activeRequests < currentLimit && canDispatch()) {
+                        activeRequests++
+                        activeCount = activeRequests
+                    }
                 }
+                activeCount?.let { count ->
+                    onActiveParallelismChanged(count)
+                    return
+                }
+                val reason = waitingReason()
+                if (reason != observedReason) {
+                    closeWaiting?.invoke()
+                    closeWaiting = reason?.let { observeOperationTransferWait(it) }
+                    observedReason = reason
+                }
+                delay(OPERATION_ACQUIRE_POLL_MILLIS.milliseconds)
             }
-            activeCount?.let { count ->
-                onActiveParallelismChanged(count)
-                return
-            }
-            delay(OPERATION_ACQUIRE_POLL_MILLIS.milliseconds)
-        }
+        } finally { closeWaiting?.invoke() }
     }
 
-    private suspend fun release(durationMillis: Long, success: Boolean) {
+    private suspend fun release(durationMillis: Long, success: Boolean, ignored: Boolean) {
         var activeCount = 0
         mutex.withLock {
             activeRequests = (activeRequests - 1).coerceAtLeast(0)
@@ -250,11 +277,25 @@ private class AdaptiveOperationLimiter(
             val runtimeMax = clampLimitLocked()
             if (!success) {
                 fastSuccesses = 0
+                slowSamples = 0
                 currentLimit = maxOf(minLimit, currentLimit / 2).coerceAtMost(runtimeMax)
+                return@withLock
+            }
+            if (ignored) {
+                fastSuccesses = 0
                 return@withLock
             }
 
             val previousEwma = latencyEwmaMillis
+            if (previousEwma != null && durationMillis >= maxOf(OPERATION_FAST_MILLIS.toDouble(), previousEwma * 2)) {
+                fastSuccesses = 0
+                if (++slowSamples >= OPERATION_SLOW_SAMPLES) {
+                    currentLimit = maxOf(minLimit, currentLimit - maxOf(1, currentLimit / 4))
+                    slowSamples = 0
+                }
+                return@withLock
+            }
+            slowSamples = 0
             val nextEwma = if (previousEwma == null) {
                 durationMillis.toDouble()
             } else {
@@ -266,14 +307,9 @@ private class AdaptiveOperationLimiter(
             latencyEwmaMillis = nextEwma
 
             when {
-                durationMillis >= OPERATION_SLOW_MILLIS || nextEwma >= OPERATION_SLOW_MILLIS -> {
-                    fastSuccesses = 0
-                    currentLimit = maxOf(minLimit, currentLimit - maxOf(1, currentLimit / 4))
-                }
-
-                durationMillis <= OPERATION_FAST_MILLIS && nextEwma <= OPERATION_FAST_MILLIS -> {
+                durationMillis <= maxOf(OPERATION_FAST_MILLIS.toDouble(), nextEwma * 1.25) -> {
                     fastSuccesses++
-                    if (fastSuccesses >= currentLimit && currentLimit < runtimeMax) {
+                    if (fastSuccesses >= maxOf(2, currentLimit) && currentLimit < runtimeMax) {
                         currentLimit = (currentLimit + maxOf(1, currentLimit / 4)).coerceAtMost(runtimeMax)
                         fastSuccesses = 0
                     }
@@ -287,6 +323,7 @@ private class AdaptiveOperationLimiter(
 
     private fun clampLimitLocked(): Int {
         val runtimeMax = dynamicMaxParallelismProvider().coerceIn(minLimit, hardMax)
+        if (currentLimit > runtimeMax) fastSuccesses = 0
         currentLimit = currentLimit.coerceIn(minLimit, runtimeMax)
         return runtimeMax
     }

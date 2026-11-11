@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 import strings.AppStrings
 
 private const val DEVICE_SESSION_WRITE_BATCH_BYTES = 1024 * 1024
@@ -71,7 +72,9 @@ internal class DeviceSessionTransport(
             val reader = launch(channel.ioContext) {
                 try {
                     while (true) {
-                        incoming.send(DeviceSessionIo.readFrame(channel))
+                        val frame = DeviceSessionIo.readFrame(channel)
+                        frame.receivedAtMillis = Clock.System.now().toEpochMilliseconds()
+                        incoming.send(frame)
                     }
                 } catch (error: CancellationException) {
                     throw error

@@ -5,6 +5,7 @@ import com.folderspan.data.file.FileFilterType
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.db.FileFilter
 import com.folderspan.extensions.getExtensions
+import com.folderspan.extensions.fileOperationKey
 import strings.AppStrings
 
 @Immutable
@@ -31,14 +32,14 @@ internal fun prepareFileSelectorEntries(
     displayConstraints: FileSelectorConstraints = FileSelectorConstraints.Unrestricted,
     selectionConstraints: FileSelectorConstraints = FileSelectorConstraints.Unrestricted,
 ): List<FileSelectorEntryUiModel> {
-    val selectedPaths = checkedFiles.mapTo(mutableSetOf()) { file -> file.path }
+    val selectedKeys = checkedFiles.mapTo(mutableSetOf()) { file -> file.fileOperationKey() }
     return files.mapNotNull { file ->
         if (displayConstraints.evaluate(file) !== FileSelectorConstraintResult.Allowed) {
             return@mapNotNull null
         }
         FileSelectorEntryUiModel(
             file = file,
-            isSelected = file.path in selectedPaths,
+            isSelected = file.fileOperationKey() in selectedKeys,
             selectionRejection = file.selectionRejection(
                 selectionFilterTypes = selectionFilterTypes,
                 configuredFileFilters = configuredFileFilters,
@@ -95,6 +96,7 @@ internal fun resolveFileSelectorConfirmSelection(
     currentPath: String,
     selectionFilterTypes: List<FileFilterType>,
     selectionConstraints: FileSelectorConstraints = FileSelectorConstraints.Unrestricted,
+    currentDirectory: FileSimpleInfo? = null,
 ): List<FileSimpleInfo> {
     if (selectedFiles.isNotEmpty()) {
         return selectedFiles
@@ -105,7 +107,7 @@ internal fun resolveFileSelectorConfirmSelection(
     if (currentPath.isBlank()) {
         return emptyList()
     }
-    return listOf(currentDirectoryAsSelection(currentPath))
+    return listOf(currentDirectory?.takeIf { it.path == currentPath } ?: currentDirectoryAsSelection(currentPath))
 }
 
 internal fun currentDirectoryAsSelection(path: String): FileSimpleInfo {

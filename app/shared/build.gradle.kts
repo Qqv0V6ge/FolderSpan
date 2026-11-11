@@ -142,6 +142,10 @@ configurations.all {
 }
 
 kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     android {
         namespace = "com.folderspan.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -190,13 +194,17 @@ kotlin {
     }
 
     js {
-        browser()
+        browser {
+            testTask { useKarma { useChromeHeadless() } }
+        }
         binaries.executable()
     }
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        browser()
+        browser {
+            testTask { useKarma { useChromeHeadless() } }
+        }
         binaries.executable()
         compilerOptions {
             freeCompilerArgs.add("-Xwasm-use-new-exception-proposal")
@@ -222,6 +230,8 @@ kotlin {
         val jvmMain = getByName("jvmMain")
         val jvmTest = getByName("jvmTest")
         val wasmJsMain = getByName("wasmJsMain")
+        getByName("jsTest").kotlin.srcDir("src/sqlBrowserTest/kotlin")
+        getByName("wasmJsTest").kotlin.srcDir("src/sqlBrowserTest/kotlin")
 
         commonMain.dependencies {
             api(projects.core)
@@ -269,6 +279,8 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(compose.desktop.currentOs)
+            implementation(libs.apache.sshd.core)
+            implementation(libs.apache.sshd.sftp)
         }
         jsMain.dependencies {
             implementation(libs.sqldelight.driver.js)
@@ -303,7 +315,7 @@ val iosSimulatorWebRtcFramework = composeIosNativeFrameworks("iosSimulatorArm64"
 val copyIosSimulatorWebRtcFrameworkForTests =
     tasks.register<Sync>("copyIosSimulatorWebRtcFrameworkForTests") {
         description = "Copies the WebRTC framework into the iOS simulator test bundle."
-        onlyIf { iosSimulatorWebRtcFramework != null }
+        enabled = iosSimulatorWebRtcFramework != null
         iosSimulatorWebRtcFramework?.let { framework ->
             from(framework)
             into(layout.buildDirectory.dir("bin/iosSimulatorArm64/debugTest/Frameworks/WebRTC.framework"))

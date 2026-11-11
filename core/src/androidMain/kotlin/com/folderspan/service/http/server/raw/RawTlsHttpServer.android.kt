@@ -177,10 +177,10 @@ internal class RawTlsHttpServer(
                     LogKit.d(AppStrings.ui_device_session_tls_handshake_remote_arg0.format(arg0 = (client.inetAddress?.hostAddress).toString()))
                     client.startHandshake()
                     if (!client.hasDeviceSessionAlpn()) {
-                        LogKit.w(AppStrings.ui_device_session_rejected_connection_missing_alpn_arg0_remote_arg1.format(arg0 = (DEVICE_SESSION_ALPN).toString(), arg1 = (client.inetAddress?.hostAddress).toString()))
+                        LogKit.w(AppStrings.ui_device_session_rejected_connection_missing_alpn_arg0_remote_arg1.format(arg0 = DEVICE_SESSION_ALPN, arg1 = (client.inetAddress?.hostAddress).toString()))
                         return
                     }
-                    LogKit.i(AppStrings.ui_device_session_tls_complete_remote_arg0_alpn_arg1.format(arg0 = (client.inetAddress?.hostAddress).toString(), arg1 = (DEVICE_SESSION_ALPN).toString()))
+                    LogKit.i(AppStrings.ui_device_session_tls_complete_remote_arg0_alpn_arg1.format(arg0 = (client.inetAddress?.hostAddress).toString(), arg1 = DEVICE_SESSION_ALPN))
                     callbacks.accept(AndroidDeviceSessionByteChannel(client), client.inetAddress?.hostAddress, scope
                     )
                     return

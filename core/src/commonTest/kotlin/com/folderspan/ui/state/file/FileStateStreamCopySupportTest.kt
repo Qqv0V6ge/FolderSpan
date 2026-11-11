@@ -9,6 +9,8 @@ import com.folderspan.exception.AuthorityException
 import com.folderspan.service.http.archive.selectSmallFileArchiveBatches
 import com.folderspan.service.operation.TraversalEndpointKind
 import com.folderspan.test.runSuspendTest
+import com.folderspan.service.network.StorageReference
+import com.folderspan.service.network.StoragePath
 import com.folderspan.ui.state.main.Task
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -370,6 +372,33 @@ class FileStateStreamCopySupportTest {
         assertTrue(network.createdFolders.isEmpty())
     }
 
+
+    @Test
+    fun selectedCloudUploadRetainsIdentityAndDoesNotDeleteExistingItemOnFailure() = runSuspendTest {
+        val network = RecordingNetworkAccess()
+        val reference = StorageReference(id = "selected-file", parentId = "selected-parent")
+        val result = streamUploadFileToNetwork(network, "/same.txt", 7L, { _, _ -> },
+            readChunk = { throw IllegalStateException("source failed") }, reference = reference)
+        assertTrue(result.isFailure)
+        assertEquals(StoragePath("/same.txt", reference), network.lastStorageUpload)
+        assertTrue(network.deleted.isEmpty())
+    }
+
+    @Test
+    fun duplicateCloudNamesFailBeforeAnyDestinationWrite() = runSuspendTest {
+        val network = RecordingNetworkAccess()
+        val source = directory("/source").copy(storageReference = StorageReference(id = "root"))
+        val children = listOf(
+            file("/source/same.txt").copy(storageReference = StorageReference(id = "A", parentId = "root")),
+            file("/source/same.txt").copy(storageReference = StorageReference(id = "B", parentId = "root")),
+        )
+        val result = streamCopyDirectoryToNetwork(source, directory("/destination"), "/", "/", network, {},
+            TraversalEndpointKind.Device, { Result.success(children) }, { _, _ -> error("No file may be copied") })
+        assertTrue(result.isFailure)
+        assertTrue(network.createdFolders.isEmpty())
+        assertTrue(network.uploaded.isEmpty())
+    }
+
     private fun directory(path: String): FileSimpleInfo = file(path, isDirectory = true, size = 0L)
 
     private fun file(
@@ -392,6 +421,7 @@ class FileStateStreamCopySupportTest {
 
 private class RecordingNetworkAccess : NetworkAccess {
     override val protocolId: String = "network-1"
+    var lastStorageUpload: StoragePath? = null
     val uploaded = mutableListOf<Pair<String, ByteArray>>()
     val createdFolders = mutableListOf<String>()
     val createdFiles = mutableListOf<String>()
@@ -434,6 +464,11 @@ private class RecordingNetworkAccess : NetworkAccess {
         size: Long,
         onProgress: (Long, Long) -> Unit,
     ): Result<Boolean> = Result.failure(UnsupportedOperationException())
+
+    override suspend fun uploadFromSource(remotePath: StoragePath, size: Long, onProgress: (Long, Long) -> Unit, readChunk: suspend () -> ByteArray?): Result<Boolean> {
+        lastStorageUpload = remotePath
+        return uploadFromSource(remotePath.path, size, onProgress, readChunk)
+    }
 
     override suspend fun uploadFromSource(
         remotePath: String,
