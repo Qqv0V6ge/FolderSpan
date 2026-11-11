@@ -17,8 +17,6 @@ import com.folderspan.utils.ShareNetworkLink
 internal fun LazyGridScope.NetworkShareForm(
     name: String,
     onNameChange: (String) -> Unit,
-    nameError: Boolean,
-    showNameHint: Boolean,
     address: String,
     onAddressChange: (String) -> Unit,
     addressError: Boolean,
@@ -29,12 +27,6 @@ internal fun LazyGridScope.NetworkShareForm(
     passwordLabel: String,
     parsedShare: ShareNetworkLink?,
 ) {
-    val nameSupportingText: (@Composable () -> Unit)? =
-        if (showNameHint && name.isBlank() && parsedShare != null) {
-            { Text(AppStrings.ui_leave_blank_use_arg0.format(arg0 = parsedShare.hostLabel)) }
-        } else {
-            null
-        }
     val passwordSupportingText: (@Composable () -> Unit)? =
         if (password.isBlank() && parsedShare?.password?.isNotBlank() == true) {
             { Text(AppStrings.ui_password_link_detected) }
@@ -46,15 +38,7 @@ internal fun LazyGridScope.NetworkShareForm(
         NetworkEditSectionTitle(AppStrings.ui_basic_information)
     }
     item {
-        OutlinedTextField(
-            value = name,
-            onValueChange = onNameChange,
-            label = { Text(AppStrings.ui_name) },
-            isError = nameError,
-            singleLine = true,
-            supportingText = nameSupportingText,
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkNameField(name, onNameChange, parsedShare?.hostLabel ?: AppStrings.ui_link_sharing)
     }
     item {
         OutlinedTextField(
@@ -85,5 +69,9 @@ internal fun LazyGridScope.NetworkShareForm(
             supportingText = passwordSupportingText,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+    item(span = { GridItemSpan(maxLineSpan) }) {
+        Text(AppStrings.ui_read_only, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

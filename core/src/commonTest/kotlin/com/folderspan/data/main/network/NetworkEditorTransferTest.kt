@@ -2,7 +2,7 @@ package com.folderspan.data.main.network
 
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
-import com.folderspan.service.network.NetworkClient
+import com.folderspan.service.network.StorageProvider
 import com.folderspan.service.network.NetworkFileEntry
 import com.folderspan.test.runSuspendTest
 import kotlin.test.Test
@@ -10,55 +10,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class NetworkEditorTransferTest {
-    @Test
-    fun editorTransfersDelegateWithoutBufferingWholeFile() = runSuspendTest {
-        val client = RecordingNetworkClient()
-        val network = object : Network(
-            name = "S3",
-            pathSeparator = "/",
-            protocol = NetworkProtocol.S3.name,
-            host = "https://example.invalid",
-            username = "",
-            password = "",
-        ) {
-            override val client: NetworkClient = client
-        }
-        val file = FileSimpleInfo(
-            name = "large.txt",
-            isDirectory = false,
-            isHidden = false,
-            path = "/large.txt",
-            mineType = ".txt",
-            size = 128L * 1024 * 1024,
-            createdDate = 0L,
-            updatedDate = 0L,
-            protocol = FileProtocol.Network,
-            protocolId = network.protocolId,
-        )
-        val downloadProgress = mutableListOf<Pair<Long, Long>>()
-
-        val download = network.downloadFileToLocal(file, "/cache/editor-large.txt") { completed, total ->
-            downloadProgress += completed to total
-        }
-        val upload = network.uploadFileFromLocal(
-            localPath = "/cache/editor-save.txt",
-            remotePath = file.path,
-            size = file.size,
-        )
-
-        assertTrue(download.getOrThrow())
-        assertTrue(upload.getOrThrow())
-        assertEquals(
-            DownloadCall(file.path, "/cache/editor-large.txt", file.size),
-            client.downloadCall,
-        )
-        assertEquals(
-            UploadCall("/cache/editor-save.txt", file.path, file.size),
-            client.uploadCall,
-        )
-        assertEquals(listOf(file.size / 2 to file.size, file.size to file.size), downloadProgress)
-    }
-
     @Test
     fun uploadFromSourceRejectsParentDirectoryPathBeforeClientWrite() = runSuspendTest {
         val client = RecordingNetworkClient()
@@ -70,7 +21,7 @@ class NetworkEditorTransferTest {
             username = "",
             password = "",
         ) {
-            override val client: NetworkClient = client
+            override val client: StorageProvider = client
         }
 
         val result = network.uploadFromSource(
@@ -95,7 +46,7 @@ class NetworkEditorTransferTest {
             username = "",
             password = "",
         ) {
-            override val client: NetworkClient = client
+            override val client: StorageProvider = client
         }
 
         val result = network.createFolder("/dst", "..")
@@ -105,40 +56,46 @@ class NetworkEditorTransferTest {
     }
 
     @Test
-    fun uploadFileFromLocalKeepsNestedSafeRelativePath() = runSuspendTest {
+    fun renameDirectoryWithTrailingSeparatorKeepsDestinationInParent() = runSuspendTest {
         val client = RecordingNetworkClient()
         val network = object : Network(
-            name = "S3",
+            name = "Nextcloud",
             pathSeparator = "/",
-            protocol = NetworkProtocol.S3.name,
+            protocol = NetworkProtocol.Nextcloud.name,
             host = "https://example.invalid",
             username = "",
             password = "",
         ) {
-            override val client: NetworkClient = client
+            override val client: StorageProvider = client
         }
 
-        val result = network.uploadFileFromLocal(
-            localPath = "/cache/sub/b.txt",
-            remotePath = "/dst/folder/sub/b.txt",
-            size = 3L,
-        )
+        for ((path, expected) in listOf(
+            "/old/" to "/renamed",
+            "/parent/old/" to "/parent/renamed",
+            "/parent/old" to "/parent/renamed",
+        )) {
+            val file = FileSimpleInfo.nullFileSimpleInfo().withCopy(
+                name = "old",
+                path = path,
+                isDirectory = true,
+                protocol = FileProtocol.Network,
+                protocolId = network.protocolId,
+            )
 
-        assertTrue(result.getOrThrow())
-        assertEquals(
-            UploadCall("/cache/sub/b.txt", "/dst/folder/sub/b.txt", 3L),
-            client.uploadCall,
-        )
+            assertTrue(network.rename(file, "renamed").getOrThrow())
+            assertEquals(path to expected, client.renameCalls.last())
+        }
     }
 
-    private data class DownloadCall(val remotePath: String, val localPath: String, val size: Long)
-    private data class UploadCall(val localPath: String, val remotePath: String, val size: Long)
+    internal data class DownloadCall(val remotePath: String, val localPath: String, val size: Long)
+    internal data class UploadCall(val localPath: String, val remotePath: String, val size: Long)
 
-    private class RecordingNetworkClient : NetworkClient {
+    internal class RecordingNetworkClient : StorageProvider {
         var downloadCall: DownloadCall? = null
         var uploadCall: UploadCall? = null
         val uploadFromSourceCalls = mutableListOf<String>()
         val createdFolders = mutableListOf<String>()
+        val renameCalls = mutableListOf<Pair<String, String>>()
 
         override suspend fun list(
             path: String,
@@ -181,7 +138,10 @@ class NetworkEditorTransferTest {
             return Result.success(true)
         }
 
-        override suspend fun rename(path: String, newPath: String): Result<Boolean> = Result.success(true)
+        override suspend fun rename(path: String, newPath: String): Result<Boolean> {
+            renameCalls += path to newPath
+            return Result.success(true)
+        }
 
         override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> = Result.success(true)
 

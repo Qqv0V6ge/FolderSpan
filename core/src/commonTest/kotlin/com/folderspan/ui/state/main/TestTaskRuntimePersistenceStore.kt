@@ -4,6 +4,9 @@ import strings.AppStrings
 
 
 class TestTaskRuntimePersistenceStore : TaskRuntimePersistenceStore {
+    val copyValidations = mutableMapOf<Long, ByteArray>()
+    override fun loadCopyValidation(taskKey: Long): ByteArray? = copyValidations[taskKey]?.copyOf()
+    override fun saveCopyValidation(taskKey: Long, payload: ByteArray) { copyValidations[taskKey] = payload.copyOf() }
     val taskSnapshots = linkedMapOf<Long, Task>()
     val metas = mutableMapOf<Long, TaskRuntimeMeta>()
     val runStates = mutableMapOf<Long, TaskRuntimeRunState>()
@@ -176,6 +179,7 @@ class TestTaskRuntimePersistenceStore : TaskRuntimePersistenceStore {
     }
 
     override fun clearTaskRuntime(taskKey: Long) {
+        copyValidations.remove(taskKey)
         metas.remove(taskKey)
         runStates.remove(taskKey)
         pendingEntries.remove(taskKey)

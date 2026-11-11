@@ -16,19 +16,105 @@ import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.runBlocking
+import java.io.RandomAccessFile
+import kotlin.io.path.createTempDirectory
 import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class KtorS3NetworkClientTest {
+
+    @Test
+    fun incompleteOrCyclicDirectoryPagesFailInsteadOfReturningAnEmptyOrPartialView() = runBlocking {
+        val invalid = listOf(
+            "<ListBucketResult></ListBucketResult>",
+            "<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>",
+            "<ListBucketResult><IsTruncated>false</IsTruncated>",
+            "<ListBucketResult><IsTruncated>false</IsTruncated><NextContinuationToken>contradiction</NextContinuationToken></ListBucketResult>",
+            "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>bad</Key><Size>invalid</Size></Contents></ListBucketResult>",
+        )
+        for (body in invalid) HttpClient(MockEngine {
+            respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/xml"))
+        }).use { http ->
+            assertTrue(KtorS3NetworkClient(buildNetwork().connectionConfig(), http).list("/").isFailure)
+        }
+        var requests = 0
+        HttpClient(MockEngine {
+            requests++
+            respond("<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>same</NextContinuationToken></ListBucketResult>",
+                HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/xml"))
+        }).use { http ->
+            assertTrue(KtorS3NetworkClient(buildNetwork().connectionConfig(), http).list("/").isFailure)
+            assertEquals(2, requests)
+        }
+        requests = 0
+        HttpClient(MockEngine {
+            requests++
+            if (requests == 1) respond("<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>next</NextContinuationToken><Contents><Key>first</Key><Size>1</Size></Contents></ListBucketResult>",
+                HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/xml"))
+            else respond("unavailable", HttpStatusCode.ServiceUnavailable)
+        }).use { http ->
+            assertTrue(KtorS3NetworkClient(buildNetwork().connectionConfig(), http).list("/").isFailure)
+            assertEquals(2, requests)
+        }
+    }
+
+
+    @Test fun emptyDirectoryDeletionRemovesOnlyMarkerAndRetainsConcurrentChild(): Unit = runBlocking {
+        for (alreadyNonEmpty in listOf(false, true)) {
+            val requests = mutableListOf<HttpRequestData>()
+            val objects = mutableSetOf("folder/").apply { if (alreadyNonEmpty) add("folder/new") }
+            HttpClient(MockEngine { request ->
+                requests += request
+                when (request.method) {
+                    HttpMethod.Get -> respond("<ListBucketResult><IsTruncated>false</IsTruncated>" + objects.joinToString("") { "<Contents><Key>$it</Key><Size>4</Size></Contents>" } + "</ListBucketResult>",
+                        HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/xml"))
+                    HttpMethod.Delete -> {
+                        objects.add("folder/new")
+                        objects.remove(request.url.encodedPath.removePrefix("/demo-bucket/"))
+                        respond("", HttpStatusCode.NoContent)
+                    }
+                    else -> error("Unexpected request ${request.method}")
+                }
+            }).use { http ->
+                val client = KtorS3NetworkClient(buildNetwork().connectionConfig(), http)
+                assertEquals(!alreadyNonEmpty, client.deleteEmptyDirectory(StoragePath("/folder")).isSuccess)
+                assertTrue("folder/new" in objects)
+                assertEquals(if (alreadyNonEmpty) emptyList() else listOf("/demo-bucket/folder/"),
+                    requests.filter { it.method == HttpMethod.Delete }.map { it.url.encodedPath })
+                assertTrue(client.deleteEmptyDirectory("/").isFailure)
+                assertTrue(client.deleteEmptyDirectory("/folder/../other").isFailure)
+            }
+        }
+    }
+
+    @Test fun failedMoveCopyDoesNotDeleteSource(): Unit = runBlocking {
+        val requests = mutableListOf<HttpRequestData>()
+        HttpClient(MockEngine { request ->
+            requests += request
+            when (request.method) {
+                HttpMethod.Get -> respond("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/xml"))
+                HttpMethod.Head -> respond("", HttpStatusCode.OK)
+                HttpMethod.Put -> respond("<Error><Code>Denied</Code></Error>", HttpStatusCode.Forbidden)
+                else -> error("Unexpected destructive request ${request.method}")
+            }
+        }).use { http ->
+            val client = KtorS3NetworkClient(buildNetwork().connectionConfig(), http)
+            assertTrue(client.move(StoragePath("/source.txt"), StoragePath("/archive/new.txt")).isFailure)
+            assertTrue(requests.any { it.method == HttpMethod.Put })
+            assertFalse(requests.any { it.method == HttpMethod.Delete })
+        }
+    }
     @Test
     fun listedObjectsAndVirtualDirectoriesHaveKnownNonLinkMetadata() = runBlocking {
         val engine = MockEngine {
             respond(
                 content = """
-                    <ListBucketResult>
+                    <ListBucketResult><IsTruncated>false</IsTruncated>
                       <CommonPrefixes><Prefix>nested/</Prefix></CommonPrefixes>
                       <Contents><Key>file.txt</Key><Size>7</Size></Contents>
                     </ListBucketResult>
@@ -413,6 +499,105 @@ class KtorS3NetworkClientTest {
         }
     }
 
+    @Test
+    fun resumedDownloadRejectsMismatchedContentRangeWithoutChangingTheExistingFile() = runBlocking {
+        val destination = createTempFile(prefix = "s3-range-", suffix = ".bin").toFile()
+        val original = byteArrayOf(1, 2, 3)
+        destination.writeBytes(original)
+        var requests = 0
+        val client = KtorS3NetworkClient(buildNetwork().connectionConfig(), HttpClient(MockEngine { request ->
+            requests++
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals("bytes=3-", request.headers[HttpHeaders.Range])
+            respond(
+                content = ByteReadChannel(byteArrayOf(4, 5, 6)),
+                status = HttpStatusCode.PartialContent,
+                headers = headersOf(HttpHeaders.ContentRange, "bytes 2-4/6"),
+            )
+        }))
+        try {
+            assertTrue(client.download("/source.bin", destination.absolutePath, 6L) { _, _ -> }.isFailure)
+            assertEquals(1, requests)
+            assertContentEquals(original, destination.readBytes())
+        } finally {
+            client.close()
+            destination.delete()
+        }
+    }
+
+    @Test
+    fun multipartRetryQueriesServerAndSkipsAnAlreadyConfirmedPart() = runBlocking {
+        val directory = createTempDirectory(prefix = "s3-multipart-retry-").toFile()
+        val source = directory.resolve("source.bin")
+        val partSize = 8L * 1024 * 1024
+        RandomAccessFile(source, "rw").use { it.setLength(2 * partSize) }
+        val uploadedParts = mutableListOf<Int>()
+        var creates = 0
+        var queries = 0
+        var completes = 0
+        var retrying = false
+        fun newClient() = KtorS3NetworkClient(buildNetwork().connectionConfig(), HttpClient(MockEngine { request ->
+            val uploadId = request.url.parameters["uploadId"]
+            when {
+                request.method == HttpMethod.Head -> respond(
+                    content = ByteReadChannel.Empty, status = HttpStatusCode.NotFound,
+                )
+                request.method == HttpMethod.Post && "uploads" in request.url.parameters.names() -> {
+                    creates++
+                    respond("<InitiateMultipartUploadResult><UploadId>resume-upload</UploadId></InitiateMultipartUploadResult>")
+                }
+                request.method == HttpMethod.Get && uploadId == "resume-upload" -> {
+                    assertTrue(retrying)
+                    queries++
+                    respond("""
+                        <ListPartsResult><IsTruncated>false</IsTruncated><Part>
+                        <PartNumber>1</PartNumber><ETag>&quot;first-part&quot;</ETag><Size>$partSize</Size>
+                        </Part></ListPartsResult>
+                    """.trimIndent())
+                }
+                request.method == HttpMethod.Put && uploadId == "resume-upload" -> {
+                    val part = checkNotNull(request.url.parameters["partNumber"]).toInt()
+                    uploadedParts += part
+                    if (part == 2 && !retrying) respond("interrupted", HttpStatusCode.ServiceUnavailable)
+                    else respond("", HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ETag, if (part == 1) "\"first-part\"" else "\"second-part\""))
+                }
+                request.method == HttpMethod.Post && uploadId == "resume-upload" -> {
+                    assertTrue(retrying)
+                    completes++
+                    respond("<CompleteMultipartUploadResult><ETag>&quot;complete&quot;</ETag></CompleteMultipartUploadResult>")
+                }
+                else -> error("Unexpected S3 request: ${request.method} ${request.url}")
+            }
+        }))
+        try {
+            val firstClient = newClient()
+            try {
+                assertTrue(firstClient.upload(source.absolutePath, "/target.bin", source.length()) { _, _ -> }.isFailure)
+            } finally { firstClient.close() }
+            assertEquals(listOf(1, 2), uploadedParts)
+            assertEquals(1, directory.listFiles().orEmpty().count { it.name.endsWith(".state") })
+            retrying = true
+            val progress = mutableListOf<Long>()
+            val recoveredClient = newClient()
+            try {
+                assertTrue(recoveredClient.upload(source.absolutePath, "/target.bin", source.length()) { done, _ ->
+                    progress += done
+                }.getOrThrow())
+            } finally { recoveredClient.close() }
+            assertEquals(listOf(1, 2, 2), uploadedParts)
+            assertEquals(1, creates)
+            assertEquals(1, queries)
+            assertEquals(1, completes)
+            assertEquals(partSize, progress.first())
+            assertEquals(source.length(), progress.last())
+            assertFalse(directory.listFiles().orEmpty().any { it.name.endsWith(".state") })
+            assertEquals(2 * partSize, source.length())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     private fun buildNetwork(): Network {
         return Network(
             name = "S3",
@@ -441,7 +626,7 @@ class KtorS3NetworkClientTest {
 """
 
         private const val LIST_SOURCE_DIRECTORY_RESPONSE = """
-<ListBucketResult>
+<ListBucketResult><IsTruncated>false</IsTruncated>
   <Contents>
     <Key>source/</Key>
     <LastModified>2026-03-18T00:00:00.000Z</LastModified>

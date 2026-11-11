@@ -7,6 +7,8 @@ import com.folderspan.data.main.network.NetworkAccess
 import com.folderspan.data.main.share.SYSTEM_SHARE_DESK_ID
 import com.folderspan.exception.AuthorityException
 import com.folderspan.service.http.archive.FolderSpanArchiveCodec
+import com.folderspan.service.network.StorageReference
+import com.folderspan.service.network.StoragePath
 import com.folderspan.service.network.containsUnsafeNetworkPathSegment
 import com.folderspan.service.network.isRemotePathWithinRoot
 import com.folderspan.service.network.isUnsafeNetworkPathSegment
@@ -282,6 +284,7 @@ internal suspend fun streamUploadFileToNetwork(
     size: Long,
     onProgress: (Long, Long) -> Unit,
     readChunk: suspend () -> ByteArray?,
+    reference: StorageReference? = null,
 ): Result<Boolean> {
     return streamUploadFileToNetwork(
         remotePath = remotePath,
@@ -289,10 +292,10 @@ internal suspend fun streamUploadFileToNetwork(
         onProgress = onProgress,
         readChunk = readChunk,
         uploadFromSource = { path, uploadSize, progress, next ->
-            networkAccess.uploadFromSource(path, uploadSize, progress, next)
+            networkAccess.uploadFromSource(StoragePath(path, reference), uploadSize, progress, next)
         },
         deletePartial = { path ->
-            networkAccess.delete(path, isDirectory = false)
+            if (reference == null) networkAccess.delete(path, isDirectory = false)
         },
     )
 }
@@ -301,6 +304,7 @@ internal suspend fun createRemoteEmptyFile(
     networkAccess: NetworkAccess,
     remotePath: String,
     destSeparator: String,
+    reference: StorageReference? = null,
 ): Result<Boolean> {
     unsafeNetworkWritePathError(remotePath)?.let { return Result.failure(it) }
     val (parent, name) = splitRemoteParentAndName(remotePath, destSeparator)
@@ -308,13 +312,14 @@ internal suspend fun createRemoteEmptyFile(
         return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
     }
     unsafeNetworkWritePathError(parent)?.let { return Result.failure(it) }
-    return networkAccess.createFile(parent, name)
+    return if (reference == null) networkAccess.createFile(parent, name) else networkAccess.createFile(StoragePath(remotePath, reference))
 }
 
 internal suspend fun createRemoteFolder(
     networkAccess: NetworkAccess,
     remotePath: String,
     destSeparator: String,
+    reference: StorageReference? = null,
 ): Result<Boolean> {
     unsafeNetworkWritePathError(remotePath)?.let { return Result.failure(it) }
     val (parent, name) = splitRemoteParentAndName(remotePath, destSeparator)
@@ -322,7 +327,7 @@ internal suspend fun createRemoteFolder(
         return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
     }
     unsafeNetworkWritePathError(parent)?.let { return Result.failure(it) }
-    return networkAccess.createFolder(parent, name)
+    return if (reference == null) networkAccess.createFolder(parent, name) else networkAccess.createFolder(StoragePath(remotePath, reference))
 }
 
 internal suspend fun streamCopyDirectoryToNetwork(
@@ -366,18 +371,20 @@ internal suspend fun streamCopyDirectoryToNetwork(
         compareBy<FileSimpleInfo> { entry -> !entry.isDirectory }
             .thenBy { entry -> entry.path.length },
     )
+    val targetPaths = mutableSetOf<String>()
     for (entry in ordered) {
-        resolveDirectoryCopyRemotePath(
+        val resolved = resolveDirectoryCopyRemotePath(
             source = source,
             entry = entry,
             destination = destination,
             sourceSeparator = sourceSeparator,
             destSeparator = destSeparator,
         ).getOrElse { error -> return Result.failure(error) }
+        if (!targetPaths.add(resolved)) return Result.failure(IllegalStateException(AppStrings.storage_ambiguous_copy_names))
     }
 
     onCreateFolder(destination.path)
-    val rootCreate = createRemoteFolder(networkAccess, destination.path, destSeparator)
+    val rootCreate = createRemoteFolder(networkAccess, destination.path, destSeparator, destination.storageReference)
     if (rootCreate.isFailure || !rootCreate.getOrDefault(false)) {
         return Result.failure(rootCreate.exceptionOrNull() ?: Exception(AppStrings.ui_folder_creation_failed))
     }
@@ -410,7 +417,7 @@ internal suspend fun streamCopyDirectoryToNetwork(
             continue
         }
         onCreateFolder(remotePath)
-        val created = createRemoteFolder(networkAccess, remotePath, destSeparator)
+        val created = createRemoteFolder(networkAccess, remotePath, destSeparator, destination.withCopy(path = remotePath).storageReference)
         if (created.isFailure || !created.getOrDefault(false)) {
             return Result.failure(created.exceptionOrNull() ?: Exception(AppStrings.ui_folder_creation_failed))
         }

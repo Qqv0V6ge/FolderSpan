@@ -1,6 +1,7 @@
 package com.folderspan.service.http.client
 
 import com.folderspan.utils.FileAccessPermission
+import com.folderspan.exception.NetworkUnsupportedException
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.extensions.formatDuration
@@ -192,6 +193,9 @@ class ShareNetworkRouteClient(
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
     ): Result<Boolean> {
+        if (destFileSimpleInfo.protocol == FileProtocol.Network) {
+            return Result.failure(NetworkUnsupportedException("Network destinations require the common verified transfer coordinator"))
+        }
         val cancellation = CancellationException(AppStrings.message_task_cancelled)
         fun markCopySuccess(src: FileSimpleInfo, dest: FileSimpleInfo) {
             taskState.removeResult(task, dest.path)
@@ -733,10 +737,14 @@ class ShareNetworkRouteClient(
     }
 
     private suspend fun authenticateWithPassword(): String {
+        val target = Url(baseUrl)
+        val origin = URLBuilder(protocol = target.protocol, host = target.host, port = target.port)
+            .buildString().removeSuffix("/")
         val response = authHttpClient.post {
             url.takeFrom(baseUrl)
             url.encodedPath = LINK_SHARE_AUTH_PATH
             header("X-API-Request", "true")
+            header(HttpHeaders.Origin, origin)
             header(HttpHeaders.UserAgent, userAgent)
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(

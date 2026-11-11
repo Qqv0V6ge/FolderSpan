@@ -1,12 +1,25 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.utils.currentSyncTimeZone
+
 import strings.AppStrings
 
+import com.folderspan.ignore.ResolvedIgnoreMatcher
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import kotlinx.serialization.EncodeDefault
+import com.folderspan.service.network.StorageReference
+import com.folderspan.service.network.StorageCapabilities
 import kotlinx.serialization.Serializable
 import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atTime
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 
 enum class SyncEndpointType {
     Local,
@@ -23,6 +36,8 @@ enum class SyncConflictPolicy {
 enum class SyncScheduleType {
     Manual,
     Interval,
+    Daily,
+    Weekly,
 }
 
 enum class SyncRunStatus {
@@ -33,6 +48,21 @@ enum class SyncRunStatus {
     PartialSuccess,
     Failure,
     Canceled,
+    Interrupted,
+}
+
+enum class SyncMode { Update, Mirror, BackupThenClean, Bidirectional }
+enum class SyncBidiConflictPolicy { KeepBoth, Newer, Source, Target }
+enum class SyncNotifyLevel { All, FailuresAndConfirmations, Off }
+
+internal fun syncModeEndpointError(mode: SyncMode, source: Boolean, directory: Boolean, capabilities: StorageCapabilities): String? = when {
+    !directory && mode != SyncMode.Update -> AppStrings.sync_mode_directory_required
+    !capabilities.sync -> if (source) AppStrings.ui_source_endpoint_unavailable else AppStrings.ui_target_endpoint_unavailable
+    (source || mode == SyncMode.Bidirectional) && !capabilities.read -> AppStrings.ui_source_endpoint_does_not_support_reading
+    (!source || mode == SyncMode.Bidirectional) && !capabilities.write -> AppStrings.ui_target_endpoint_does_not_support_writing
+    source && mode in listOf(SyncMode.BackupThenClean, SyncMode.Bidirectional) && !capabilities.delete -> AppStrings.sync_source_delete_required
+    !source && mode in listOf(SyncMode.Mirror, SyncMode.Bidirectional) && !capabilities.delete -> AppStrings.sync_target_delete_required
+    else -> null
 }
 
 internal const val RUN_HISTORY_LIMIT = 30
@@ -81,7 +111,7 @@ internal fun syncFileChanged(source: FileSimpleInfo, target: FileSimpleInfo): Bo
 
     val sourceUpdated = source.updatedDate
     val targetUpdated = target.updatedDate
-    return sourceUpdated > 0L && targetUpdated > 0L && sourceUpdated > targetUpdated
+    return sourceUpdated > 0L && targetUpdated > 0L && sourceUpdated > targetUpdated && sourceUpdated - targetUpdated > 2_000L
 }
 
 internal fun splitFileNameAndExt(fileName: String): Pair<String, String> {
@@ -205,11 +235,13 @@ internal fun syncTargetInsideSourcePath(
 internal fun sanitizeSyncMessage(rawMessage: String?): String {
     if (rawMessage.isNullOrBlank()) return ""
 
-    var message: String = rawMessage
+    var message = Regex("""([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#]*@""").replace(rawMessage) { match ->
+        "${match.groupValues[1]}***@"
+    }
     val sensitivePatterns = listOf(
-        Regex("(?i)(password\\s*[:=]\\s*)([^\\s,;]+)"),
-        Regex("(?i)(token\\s*[:=]\\s*)([^\\s,;]+)"),
-        Regex("(?i)(authorization\\s*[:=]\\s*)([^\\s,;]+)"),
+        Regex("""(?i)(\bBearer\s+)([^\s,;]+)"""),
+        Regex("""(?i)((?:password|(?:access_|refresh_)?token)\s*[:=]\s*)([^\s,;&]+)"""),
+        Regex("""(?i)(authorization\s*[:=]\s*)(?:(?:Bearer|Basic)\s+)?([^\s,;&]+)"""),
     )
 
     sensitivePatterns.forEach { pattern ->
@@ -303,13 +335,62 @@ data class SyncTask(
     @EncodeDefault val lastMessage: String = "",
     @EncodeDefault val createdAt: Long = nowMillis(),
     @EncodeDefault val updatedAt: Long = nowMillis(),
+    val sourceStorageReference: StorageReference? = null,
+    val targetStorageReference: StorageReference? = null,
+    @EncodeDefault val policyVersion: Long = 1,
+    @EncodeDefault val backup: Boolean = false,
+    @EncodeDefault val destinations: List<StorageDestination> = emptyList(),
+    @EncodeDefault val selectRecommended: Boolean = false,
+    @EncodeDefault val preferredEntryIds: List<Long> = emptyList(),
+    @EncodeDefault val selectedSources: List<FileSimpleInfo> = emptyList(),
+    @EncodeDefault val retryCount: Int = 1,
+    @EncodeDefault val timeoutSeconds: Int = 120,
+    @EncodeDefault val parallelism: Int = 1,
+    @EncodeDefault val ownerDeviceId: String = "",
+    @EncodeDefault val ownerDeviceName: String = "",
+    @EncodeDefault val mode: SyncMode = SyncMode.Update,
+    @EncodeDefault val bidiConflictPolicy: SyncBidiConflictPolicy = SyncBidiConflictPolicy.KeepBoth,
+    @EncodeDefault val recycleEnabled: Boolean = true,
+    @EncodeDefault val recycleRetentionDays: Int = 30,
+    @EncodeDefault val deleteThreshold: Int = 100,
+    @EncodeDefault val includeRaw: String = "",
+    @EncodeDefault val scheduleTimeMinutes: Int = 120,
+    @EncodeDefault val scheduleWeekdays: Int = 0,
+    @EncodeDefault val triggerOnDeviceConnect: Boolean = false,
+    @EncodeDefault val triggerOnNetworkAvailable: Boolean = false,
+    @EncodeDefault val requireWifi: Boolean = false,
+    @EncodeDefault val requireCharging: Boolean = false,
+    @EncodeDefault val notifyLevel: SyncNotifyLevel = SyncNotifyLevel.FailuresAndConfirmations,
+    @EncodeDefault val currentSourceReferences: Map<String, StorageReference> = emptyMap(),
 )
+
+@Serializable
+enum class SyncRunItemKind { Other, Copy, Rename, CreateDirectory, Unchanged, Skip, Delete, Recycle, Overwrite, Conflict, CleanSource, Recovery }
+
+@Serializable
+data class SyncRunResultCount(val kind: SyncRunItemKind, val successCount: Long = 0, val failureCount: Long = 0)
+
+data class SyncRunDetailRow(val ordinal: Long, val item: SyncRunItem)
 
 @Serializable
 data class SyncRunItem(
     @EncodeDefault val path: String,
     @EncodeDefault val success: Boolean,
     @EncodeDefault val message: String = "",
+    val source: FileSimpleInfo? = null,
+    val kind: SyncRunItemKind = SyncRunItemKind.Other,
+    val participant: String = "",
+    val recoveryGroup: String = "",
+    val recoveryLocations: List<SyncRecoveryLocation> = emptyList(),
+)
+
+@Serializable
+data class SyncRunParticipant(
+    val id: String,
+    val label: String,
+    val type: SyncEndpointType,
+    val ref: String,
+    val paths: List<String>,
 )
 
 @Serializable
@@ -325,6 +406,24 @@ data class SyncRunRecord(
     @EncodeDefault val failureCount: Int,
     @EncodeDefault val message: String = "",
     @EncodeDefault val items: List<SyncRunItem> = emptyList(),
+    val policySnapshot: SyncTask? = null,
+    @EncodeDefault val targets: List<StorageTargetRun> = emptyList(),
+    @EncodeDefault val sourceManifest: List<StorageSourceEntry> = emptyList(),
+    @EncodeDefault val sourceDirectories: List<String> = emptyList(),
+    @EncodeDefault val sourceDigests: Map<String, String> = emptyMap(),
+    @EncodeDefault val copiedCount: Int = 0,
+    @EncodeDefault val renamedCount: Int = 0,
+    @EncodeDefault val createdDirectoryCount: Int = 0,
+    @EncodeDefault val unchangedCount: Int = 0,
+    @EncodeDefault val skippedCount: Int = 0,
+    @EncodeDefault val transferredBytes: Long = 0,
+    @EncodeDefault val transferDurationMillis: Long = 0,
+    @EncodeDefault val unsavedFailureCount: Int = 0,
+    @EncodeDefault val retryOfRunId: Long = 0,
+    @EncodeDefault val participants: List<SyncRunParticipant> = emptyList(),
+    @EncodeDefault val resultCounts: List<SyncRunResultCount> = emptyList(),
+    @EncodeDefault val detailCount: Long = 0,
+    @EncodeDefault val unsavedDetailCount: Long = 0,
 )
 
 data class SyncEndpoint(
@@ -343,6 +442,8 @@ internal data class SyncSourceFileEntry(
 internal data class SyncSourceSnapshot(
     val files: List<SyncSourceFileEntry>,
     val directories: List<String>,
+    val protectedPaths: Set<String> = emptySet(),
+    val ignoreMatcher: ResolvedIgnoreMatcher? = null,
 )
 
 internal data class SyncTargetSnapshot(
@@ -351,6 +452,7 @@ internal data class SyncTargetSnapshot(
     val filesByAbsolute: MutableMap<String, FileSimpleInfo>,
     val directoryPaths: MutableSet<String>,
     val occupiedPaths: MutableSet<String>,
+    val protectedPaths: Set<String> = emptySet(),
 )
 
 internal data class SyncExecutionSummary(
@@ -359,4 +461,212 @@ internal data class SyncExecutionSummary(
     val failureCount: Int,
     val message: String,
     val items: List<SyncRunItem>,
+    val copiedCount: Int = 0,
+    val renamedCount: Int = 0,
+    val createdDirectoryCount: Int = 0,
+    val unchangedCount: Int = 0,
+    val skippedCount: Int = 0,
+    val transferredBytes: Long = 0,
+    val transferDurationMillis: Long = 0,
+    val failedItems: List<SyncFailureItem> = emptyList(),
 )
+
+@Serializable
+data class SyncFailureItem(
+    val relativePath: String,
+    val isDirectory: Boolean,
+    val message: String = "",
+)
+
+fun computeNextRun(task: SyncTask, now: Long, timeZone: TimeZone = currentSyncTimeZone()): Long {
+    if (!task.enabled || task.scheduleType == SyncScheduleType.Manual) return 0
+    if (task.scheduleType == SyncScheduleType.Daily || task.scheduleType == SyncScheduleType.Weekly) {
+        if (task.scheduleTimeMinutes !in 0..1439 || task.scheduleType == SyncScheduleType.Weekly && task.scheduleWeekdays !in 1..127) return 0
+        val today = Instant.fromEpochMilliseconds(now).toLocalDateTime(timeZone).date
+        for (offset in 0..7) {
+            val date = today.plus(offset, DateTimeUnit.DAY)
+            if (task.scheduleType == SyncScheduleType.Weekly && task.scheduleWeekdays and (1 shl (date.dayOfWeek.isoDayNumber - 1)) == 0) continue
+            val candidate = date.atTime(task.scheduleTimeMinutes / 60, task.scheduleTimeMinutes % 60).toInstant(timeZone).toEpochMilliseconds()
+            if (candidate > now) return candidate
+        }
+        return 0
+    }
+    val minutes = task.intervalMinutes.coerceAtLeast(1)
+    return if (minutes > (Long.MAX_VALUE - now.coerceAtLeast(0)) / 60_000L) Long.MAX_VALUE
+    else now + minutes * 60_000L
+}
+
+fun SyncTask.withMode(value: SyncMode): SyncTask = copy(
+    mode = value,
+    conflictPolicy = if (value == SyncMode.BackupThenClean && conflictPolicy == SyncConflictPolicy.Replace) SyncConflictPolicy.Rename else conflictPolicy,
+)
+
+internal fun syncCapabilitySettingsError(task: SyncTask): String? = when {
+    task.recycleRetentionDays !in 1..365 -> AppStrings.sync_invalid_retention
+    task.deleteThreshold !in 1..100_000 -> AppStrings.sync_invalid_delete_threshold
+    task.mode == SyncMode.BackupThenClean && task.conflictPolicy == SyncConflictPolicy.Replace -> AppStrings.sync_backup_replace_forbidden
+    task.scheduleType in listOf(SyncScheduleType.Daily, SyncScheduleType.Weekly) && task.scheduleTimeMinutes !in 0..1439 -> AppStrings.sync_invalid_schedule_time
+    task.scheduleType == SyncScheduleType.Weekly && task.scheduleWeekdays !in 1..127 -> AppStrings.sync_weekday_required
+    else -> null
+}
+
+fun isSyncTaskOwnedBy(task: SyncTask, currentDeviceId: String): Boolean =
+    currentDeviceId.isBlank() || task.ownerDeviceId.isBlank() || task.ownerDeviceId == currentDeviceId
+
+class SyncReverseTaskException(val tasks: List<SyncTask>) : IllegalArgumentException("Reverse synchronization tasks require confirmation")
+
+fun findReverseSyncTasks(
+    candidate: SyncTask,
+    tasks: List<SyncTask>,
+    separatorOf: (SyncEndpointType, String) -> String,
+    currentDeviceId: String = candidate.ownerDeviceId,
+): List<SyncTask> {
+    if (candidate.mode == SyncMode.Bidirectional) return emptyList()
+    fun overlaps(left: String, right: String, separator: String): Boolean =
+        normalizePathForCompare(left, separator) == normalizePathForCompare(right, separator) ||
+            syncTargetInsideSourcePath(left, right, separator) || syncTargetInsideSourcePath(right, left, separator)
+    return tasks.filter { task ->
+        task.id != candidate.id && task.mode != SyncMode.Bidirectional && isSyncTaskOwnedBy(task, currentDeviceId) &&
+            candidate.sourceType == task.targetType && candidate.sourceRef == task.targetRef &&
+            candidate.targetType == task.sourceType && candidate.targetRef == task.sourceRef &&
+            candidate.sourceStorageReference == task.targetStorageReference &&
+            candidate.targetStorageReference == task.sourceStorageReference &&
+            overlaps(candidate.sourcePath, task.targetPath, separatorOf(candidate.sourceType, candidate.sourceRef)) &&
+            overlaps(candidate.targetPath, task.sourcePath, separatorOf(candidate.targetType, candidate.targetRef))
+    }
+}
+
+data class SyncTaskSnapshotMerge(
+    val tasks: List<SyncTask>,
+    val deletedTaskIds: Set<Long>,
+    val clearedRunTaskIds: Set<Long>,
+)
+
+internal fun sameSyncSchedule(previous: SyncTask, incoming: SyncTask): Boolean =
+    previous.enabled == incoming.enabled && previous.scheduleType == incoming.scheduleType && when (incoming.scheduleType) {
+        SyncScheduleType.Manual -> true
+        SyncScheduleType.Interval -> previous.intervalMinutes == incoming.intervalMinutes
+        SyncScheduleType.Daily -> previous.scheduleTimeMinutes == incoming.scheduleTimeMinutes
+        SyncScheduleType.Weekly -> previous.scheduleTimeMinutes == incoming.scheduleTimeMinutes && previous.scheduleWeekdays == incoming.scheduleWeekdays
+    }
+
+internal fun matchesSyncDueRun(expected: SyncTask, current: SyncTask?, scheduledAt: Long, now: Long): Boolean =
+    current != null && current.enabled && current.scheduleType != SyncScheduleType.Manual &&
+        scheduledAt > 0 && scheduledAt <= now && current.nextRunAt == scheduledAt &&
+        current.ownerDeviceId == expected.ownerDeviceId && syncPreviewFingerprint(current) == syncPreviewFingerprint(expected)
+
+internal fun nextSyncRunAfterFinish(
+    current: SyncTask, started: SyncTask, record: SyncRunRecord, now: Long,
+    timeZone: TimeZone = currentSyncTimeZone(),
+): Long = when {
+    !current.enabled || current.scheduleType == SyncScheduleType.Manual -> 0L
+    !sameSyncSchedule(current, started) || current.nextRunAt != started.nextRunAt -> current.nextRunAt
+    record.trigger == "event" && current.nextRunAt > record.endedAt -> current.nextRunAt
+    else -> computeNextRun(current, now, timeZone)
+}
+
+internal fun nextSyncRunOnLoad(task: SyncTask, now: Long, interrupted: Boolean, owned: Boolean,
+    previousTimeZone: String = "", timeZone: TimeZone = currentSyncTimeZone()): Long = when {
+    !owned || !task.enabled || task.scheduleType == SyncScheduleType.Manual -> 0L
+    task.scheduleType in listOf(SyncScheduleType.Daily, SyncScheduleType.Weekly) &&
+        previousTimeZone.isNotEmpty() && previousTimeZone != timeZone.id -> computeNextRun(task, now, timeZone)
+    task.nextRunAt > 0 -> task.nextRunAt
+    interrupted -> now
+    else -> computeNextRun(task, now, timeZone)
+}
+
+fun mergeSyncTaskSnapshot(
+    local: List<SyncTask>,
+    remote: List<SyncTask>,
+    currentDeviceId: String,
+    now: Long,
+): SyncTaskSnapshotMerge {
+    val localById = local.associateBy { it.id }
+    val remoteIds = remote.mapTo(mutableSetOf()) { it.id }
+    val deleted = localById.keys - remoteIds
+    val cleared = deleted.toMutableSet()
+    val merged = remote.map { incoming ->
+        val previous = localById[incoming.id]
+        val sameOwner = previous != null && previous.ownerDeviceId == incoming.ownerDeviceId
+        if (previous != null && !sameOwner) cleared.add(incoming.id)
+        val owned = isSyncTaskOwnedBy(incoming, currentDeviceId)
+        val nextRunAt = when {
+            !owned || !incoming.enabled || incoming.scheduleType == SyncScheduleType.Manual -> 0L
+            sameOwner && sameSyncSchedule(previous, incoming) && previous.nextRunAt > 0 -> previous.nextRunAt
+            else -> computeNextRun(incoming, now)
+        }
+        incoming.copy(
+            lastRunAt = if (sameOwner) previous.lastRunAt else 0,
+            lastStatus = if (sameOwner) previous.lastStatus else SyncRunStatus.Idle,
+            lastMessage = if (sameOwner) previous.lastMessage else "",
+            nextRunAt = nextRunAt,
+        )
+    }
+    return SyncTaskSnapshotMerge(merged, deleted, cleared)
+}
+
+internal enum class SyncPlanAction { CreateDirectory, Copy, RenameCopy, Unchanged, Skip }
+internal enum class SyncPlanSkipReason { Conflict, Protected, SelectedTypeConflict }
+
+internal data class SyncPlanItem(
+    val action: SyncPlanAction,
+    val relativePath: String,
+    val targetPath: String,
+    val source: FileSimpleInfo? = null,
+    val targetExisted: Boolean = false,
+    val targetIsDirectory: Boolean = false,
+    val skipReason: SyncPlanSkipReason = SyncPlanSkipReason.Conflict,
+)
+
+internal fun planDirectorySync(
+    source: SyncSourceSnapshot,
+    target: SyncTargetSnapshot,
+    task: SyncTask,
+    targetSeparator: String = "/",
+    targetRootPath: String = task.targetPath,
+    recoverPendingWrite: Boolean = false,
+    scopeRelativePath: (String) -> String = { it },
+): List<SyncPlanItem> {
+    val occupied = target.occupiedPaths.toMutableSet()
+    val protected = source.protectedPaths + target.protectedPaths
+    val protectedAncestors = syncParentPaths(protected)
+    val files = source.files.filter { (task.includeSubdirectories || '/' !in scopeRelativePath(it.relativePath)) &&
+        !syncPathProtected(it.relativePath, protected) && it.relativePath !in protectedAncestors }
+    val duplicatePaths = files.groupingBy { it.relativePath }.eachCount().filterValues { it > 1 }.keys
+    val fileItems = files.map { entry ->
+        val preferred = joinPath(targetRootPath, entry.relativePath, targetSeparator)
+        val existing = target.filesByAbsolute[preferred]
+        val directoryExists = preferred in target.directoryPaths
+        val exists = preferred in occupied
+        val action = when {
+            recoverPendingWrite -> SyncPlanAction.Copy
+            entry.relativePath !in duplicatePaths && existing != null && !syncFileChanged(entry.file, existing) -> SyncPlanAction.Unchanged
+            exists && task.conflictPolicy == SyncConflictPolicy.Skip -> SyncPlanAction.Skip
+            exists && task.conflictPolicy == SyncConflictPolicy.Rename -> SyncPlanAction.RenameCopy
+            else -> SyncPlanAction.Copy
+        }
+        val path = if (action == SyncPlanAction.RenameCopy) {
+            buildSyncRenamePath(preferred, false, occupied, targetSeparator)
+        } else preferred
+        if (action == SyncPlanAction.Copy || action == SyncPlanAction.RenameCopy) occupied.add(path)
+        SyncPlanItem(action, entry.relativePath, path, entry.file, exists && path == preferred, directoryExists && path == preferred)
+    }
+    val directories = linkedSetOf<String>()
+    if (task.includeEmptyDirectories) {
+        source.directories.filterTo(directories) { (task.includeSubdirectories || '/' !in scopeRelativePath(it)) &&
+            !syncPathProtected(it, protected) }
+    }
+    fileItems.filter { it.action == SyncPlanAction.Copy || it.action == SyncPlanAction.RenameCopy }.forEach { item ->
+        var relative = item.relativePath.substringBeforeLast('/', "")
+        while (relative.isNotEmpty()) {
+            directories.add(relative)
+            relative = relative.substringBeforeLast('/', "")
+        }
+    }
+    val directoryItems = directories.sortedWith(compareBy<String> { it.count { char -> char == '/' } }.thenBy { it }).mapNotNull { relative ->
+        val path = joinPath(targetRootPath, relative, targetSeparator)
+        if (path in target.directoryPaths) null
+        else SyncPlanItem(SyncPlanAction.CreateDirectory, relative, path, targetExisted = path in target.occupiedPaths)
+    }
+    return directoryItems + fileItems
+}

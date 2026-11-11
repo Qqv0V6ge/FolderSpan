@@ -15,6 +15,7 @@ import com.folderspan.ui.state.device.DeviceSharePathScope
 import com.folderspan.utils.ProtoBufCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -477,10 +478,39 @@ class DeviceSessionConnectionTest {
 }
 
 class DeviceSessionProtocolTest {
+    @Test fun localReceiptMetadataNeverChangesPublishedFrameOrControlEncoding() {
+        val frame = DeviceSessionFrame(DeviceSessionFrameType.Data, 0, byteArrayOf(1, 2, 3))
+        val frameBytes = DeviceSessionFrames.encodeAll(listOf(frame))
+        frame.receivedAtMillis = 123
+        assertContentEquals(frameBytes, DeviceSessionFrames.encodeAll(listOf(frame)))
+        assertEquals(null, DeviceSessionFrames.decodeAll(frameBytes).single().receivedAtMillis)
+        val request = DeviceSessionControlRequest(1, DEVICE_SESSION_RPC_ROOT_PATHS)
+        val requestBytes = ProtoBufCodec.encode(request)
+        request.receivedAtMillis = 123
+        assertContentEquals(requestBytes, ProtoBufCodec.encode(request))
+        assertEquals(null, ProtoBufCodec.decode<DeviceSessionControlRequest>(requestBytes).receivedAtMillis)
+    }
+
+    @Test fun fragmentedControlMessagesKeepTheOldestReceiptAndResetAtTheNextEnvelope() {
+        val assembler = DeviceSessionControlAssembler()
+        val payload = byteArrayOf(1, 2, 3, 4)
+        val envelope = DeviceSessionProtocol.envelopeControl(payload)
+        assertTrue(assembler.push(envelope.copyOfRange(0, 2), 1_000).isEmpty())
+        assertContentEquals(payload, assembler.push(envelope.copyOfRange(2, envelope.size), 9_000).single())
+        assertEquals(1_000L, assembler.messageReceivedAtMillis)
+        assertContentEquals(payload, assembler.push(envelope, 10_000).single())
+        assertEquals(10_000L, assembler.messageReceivedAtMillis)
+    }
+
     @Test
     fun shareSessionAllowsOnlyVirtualPathListingAndReadStreams() {
         assertTrue(isDeviceShareSessionRpcAllowed(DEVICE_SESSION_RPC_ROOT_PATHS))
         assertTrue(isDeviceShareSessionRpcAllowed(DEVICE_SESSION_RPC_LIST_PATH))
+        for (method in listOf(DEVICE_SESSION_RPC_SUBSCRIBE_TRANSFER_FEEDBACK, DEVICE_SESSION_RPC_TRANSFER_FEEDBACK)) {
+            assertTrue(isDeviceShareSessionRpcAllowed(method))
+            assertFalse(isDeviceSessionRpcAllowedBeforeAuthorization(method))
+            assertFalse(isDeviceSessionTransferRpc(method))
+        }
         assertFalse(isDeviceShareSessionRpcAllowed(DEVICE_SESSION_RPC_GET_FILE_BY_PATH))
         assertFalse(isDeviceShareSessionRpcAllowed(DEVICE_SESSION_RPC_CREATE_FILES))
         assertTrue(isDeviceShareSessionStreamAllowed(DEVICE_SESSION_STREAM_READ))
@@ -622,6 +652,14 @@ class DeviceSessionProtocolTest {
         assertEquals(3, restored.maxFileStreams)
         assertEquals(512 * 1024, restored.recommendedChunkBytes)
         assertEquals(listOf(FolderSpanArchiveCompressionCodec.NONE), restored.archiveCapabilities.codecs)
+        assertFalse(restored.supportsTransferFeedback)
+        val released = LegacyDeviceSessionConnectResponse(response.connection, response.maxFileStreams,
+            response.recommendedChunkBytes, response.archiveCapabilities)
+        val readReleased = ProtoBufCodec.decode<DeviceSessionConnectResponse>(ProtoBufCodec.encode(released))
+        assertFalse(readReleased.supportsTransferFeedback)
+        val extended = readReleased.copy(supportsTransferFeedback = true)
+        assertTrue(ProtoBufCodec.decode<DeviceSessionConnectResponse>(ProtoBufCodec.encode(extended)).supportsTransferFeedback)
+        assertEquals(released, ProtoBufCodec.decode<LegacyDeviceSessionConnectResponse>(ProtoBufCodec.encode(extended)))
     }
 
     @Test
@@ -718,6 +756,7 @@ private data class LegacyDeviceSessionConnectResponse(
     @ProtoNumber(1) val connection: DeviceConnectResponse,
     @ProtoNumber(2) val maxFileStreams: Int,
     @ProtoNumber(3) val recommendedChunkBytes: Int,
+    @ProtoNumber(4) val archiveCapabilities: FolderSpanArchiveStreamCapabilities? = null,
 )
 
 class DeviceSessionConnectionControlTest {

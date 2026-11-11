@@ -59,6 +59,7 @@ internal fun isWebUiBodyRoute(method: String, path: String): Boolean = when (pat
     "$WEB_UI_PLATFORM_PATH/files/append" -> method == "POST"
     "$WEB_UI_PLATFORM_PATH/networks/downloads", "$WEB_UI_PLATFORM_PATH/http/download", "$WEB_UI_PLATFORM_PATH/devices/read" -> method == "GET"
     "$WEB_UI_PLATFORM_PATH/networks/uploads", "$WEB_UI_PLATFORM_PATH/http/upload", "$WEB_UI_PLATFORM_PATH/compression" -> method == "PUT" || method == "GET"
+    "$WEB_UI_PLATFORM_PATH/networks/advanced/upload-chunk" -> method == "PUT"
     "$WEB_UI_PLATFORM_PATH/devices/write" -> true
     else -> false
 }

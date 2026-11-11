@@ -2,6 +2,9 @@ package com.folderspan.ui.state.main
 
 import strings.AppStrings
 
+import com.folderspan.data.file.FileProtocol
+import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.service.network.StoragePath
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.data.main.network.Network
 import com.folderspan.data.main.network.NetworkDriveExtras
@@ -14,8 +17,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.protobuf.ProtoBuf
 
@@ -30,6 +31,43 @@ class NetworkState(private val database: FolderSpanDatabase) {
     val connectedEntries = mutableStateListOf<NetworkEntry>()
     val connectedNetworks: List<Network>
         get() = connectedEntries.map { item -> item.network }
+
+    suspend fun validateStorageDestination(destination: StorageDestination): Result<Network> {
+        return try {
+            require(destination.type == SyncEndpointType.Network) { AppStrings.ui_target_endpoint_unavailable }
+            val entry = entries.singleOrNull { destination.matches(it) }
+                ?: error(AppStrings.ui_target_network_disk_does_not_exist)
+            check(entry.network.syncReadWrite().getOrThrow().second) {
+                AppStrings.ui_target_endpoint_does_not_support_writing
+            }
+            val location = FileSimpleInfo.pathFileSimpleInfo(destination.path).withCopy(
+                storageReference = destination.storageReference, protocolId = destination.ref,
+                protocol = FileProtocol.Network, isDirectory = true,
+            )
+            entry.network.getList(location).getOrThrow()
+            Result.success(entry.network)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { Result.failure(error) }
+    }
+
+    suspend fun refreshStorageMetadata(destination: StorageDestination): StorageTargetMetadata {
+        val entry = entries.singleOrNull { destination.matches(it) }
+        val network = entry?.network
+        val permissions = network?.syncReadWrite()?.getOrNull()
+        val reachable = if (permissions == null) false else {
+            val location = FileSimpleInfo.pathFileSimpleInfo(destination.path).withCopy(
+                protocol = FileProtocol.Network, protocolId = destination.ref,
+                storageReference = destination.storageReference, isDirectory = true,
+            )
+            network.getList(location).isSuccess
+        }
+        val limits = if (reachable) network?.storageAdvancedCapabilities(
+            StoragePath(destination.path, destination.storageReference))?.getOrNull()?.upload else null
+        return StorageTargetMetadata(
+            destination, reachable = reachable, writable = permissions?.second == true,
+            maxFileSize = limits?.maxFileSize?.takeUnless { it == Long.MAX_VALUE }, refreshedAt = nowMillis(),
+        )
+    }
 
     private var hasLoaded = false
     private var nextSessionId = -1L

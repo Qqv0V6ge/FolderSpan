@@ -259,7 +259,7 @@ internal class FileStateDirectoryCollector(
                     continueOnDirectoryError = continueOnDirectoryError,
                     onDirectoryError = reportDirectoryError,
                 ) { directory ->
-                    networkAccess.getList(directory.path, batchId = requestBatchId).map { entries ->
+                    networkAccess.getList(directory, batchId = requestBatchId).map { entries ->
                         entries.map { entry -> entry.withCopy(protocol = FileProtocol.Network, protocolId = root.protocolId) }
                     }
                 }

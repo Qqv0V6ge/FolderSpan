@@ -116,6 +116,7 @@ internal fun TaskRuntimeQueueEntry.toSourceFileSimpleInfo(): FileSimpleInfo {
         protocolId = srcProtocolId,
         isDirectory = isDirectory,
         size = size,
+        storageReference = src.storageReference,
     )
 }
 
@@ -126,6 +127,7 @@ internal fun TaskRuntimeQueueEntry.toTargetFileSimpleInfo(): FileSimpleInfo {
         protocolId = destProtocolId,
         isDirectory = isDirectory,
         size = size,
+        storageReference = dest.storageReference,
     )
 }
 

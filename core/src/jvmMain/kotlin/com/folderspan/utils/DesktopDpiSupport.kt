@@ -151,6 +151,15 @@ object DesktopDpiSupport {
             abs(targetScale - currentDensity) > SCALE_EPSILON
     }
 
+    fun resolveWindowSizeScale(
+        systemScale: Float?,
+        nativeScale: Float = readGraphicsTransformScale() ?: 1f
+    ): Float {
+        val targetScale = systemScale?.let(::sanitizeScale) ?: return 1f
+        val baseScale = sanitizeScale(nativeScale) ?: return 1f
+        return targetScale / baseScale
+    }
+
     fun resolveWindowResizeRatio(currentScale: Float, targetScale: Float): Float? {
         val normalizedCurrentScale = sanitizeScale(currentScale) ?: return null
         val normalizedTargetScale = sanitizeScale(targetScale) ?: return null

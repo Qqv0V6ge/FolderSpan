@@ -10,6 +10,7 @@ import com.folderspan.data.main.device.DeviceCategory
 import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.network.*
+import com.folderspan.service.network.StoragePath
 import com.folderspan.db.*
 import com.folderspan.ui.state.file.DrawerBookmarkType
 import com.folderspan.utils.*
@@ -38,6 +39,32 @@ class NetworkStateTest {
             assertFailsWith<Exception> { state.removeEntry(saved) }
             assertEquals(listOf(saved), state.entries.toList())
             assertEquals(1, database.networkDriveQueries.selectAll().executeAsListAwait().size)
+        } finally { driver.close() }
+    }
+
+    @Test
+    fun portableLocationReferenceSurvivesSaveEditAndReloadWithoutChangingConnectionIdentity() = runBlocking {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            val database = createInMemoryDatabase(driver)
+            val state = NetworkState(database)
+            val reference = StorageContentLocationReference(
+                enabled = true, root = StoragePath("/backup"), vaultId = "vault-fixture")
+            val network = Network(name = "portable", pathSeparator = "/", protocol = "FTP",
+                host = "fixture.invalid:21", username = "fixture", password = "login-only",
+                extras = NetworkDriveExtras(contentEncryption = reference))
+            state.addNetwork(network, true)
+            val saved = state.entries.single()
+            state.reloadPersisted()
+            assertEquals(saved.id, state.entries.single().id)
+            assertEquals(reference, state.entries.single().network.extras.contentEncryption)
+            val current = state.entries.single()
+            state.updateEntry(current, Network(name = "renamed", pathSeparator = network.pathSeparator,
+                protocol = network.protocol, host = network.host, username = network.username,
+                password = network.password, extras = network.extras))
+            state.reloadPersisted()
+            assertEquals(saved.id, state.entries.single().id)
+            assertEquals(reference, state.entries.single().network.extras.contentEncryption)
         } finally { driver.close() }
     }
 

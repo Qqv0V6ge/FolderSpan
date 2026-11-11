@@ -34,6 +34,7 @@ import com.folderspan.ui.components.dialog.DeviceShareSavePathDialog
 import com.folderspan.ui.components.model.buildDeviceRoleOptionsUiState
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.currentOrThrow
+import com.folderspan.ui.navigation.pushSafe
 import com.folderspan.ui.notification.RequestNotificationInfo
 import com.folderspan.ui.notification.toRequestInfo
 import com.folderspan.ui.state.device.DeviceRoleState
@@ -218,6 +219,10 @@ internal fun DeviceNotificationDetailContent(notification: Notification) {
                                 .fillMaxWidth()
                                 .padding(horizontal = 24.dp, vertical = 24.dp),
                         )
+                    } else if (syncNotificationTarget(notification.metadata) != null) {
+                        SyncNotificationActionRow(notification.metadata, onOpen = {
+                            syncNotificationTarget(notification.metadata)?.let { navigator.pushSafe(it.screen()) }
+                        }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp))
                     } else if (
                         RequestNotificationFactory.isAppUpdateMetadata(notification.metadata) &&
                         RequestNotificationFactory.appUpdateHttpLink(notification.metadata) != null

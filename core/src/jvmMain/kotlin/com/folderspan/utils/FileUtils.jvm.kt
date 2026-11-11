@@ -14,7 +14,14 @@ import okio.BufferedSource
 import okio.buffer
 import okio.source
 import java.awt.Desktop
+import com.sun.jna.Function
+import com.sun.jna.Native
+import com.sun.jna.NativeLibrary
+import com.sun.jna.Platform
+import com.sun.jna.WString
 import java.io.File
+import java.nio.file.attribute.BasicFileAttributeView
+import java.nio.file.attribute.FileTime
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
@@ -24,6 +31,19 @@ import java.nio.file.LinkOption
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFileAttributes
 import java.nio.file.attribute.PosixFilePermission.*
+
+private fun checkedMutableFilePath(path: String): java.nio.file.Path {
+    val target = Paths.get(path).toAbsolutePath()
+    require(target == target.normalize()) { "Invalid file path" }
+    var current = requireNotNull(target.root)
+    for (component in target) {
+        current = current.resolve(component)
+        val systemVarAlias = current.toString() == "/var" && Platform.isMac() &&
+            Files.isSymbolicLink(current) && Files.readSymbolicLink(current).toString() in listOf("private/var", "/private/var")
+        check(!Files.isSymbolicLink(current) || systemVarAlias) { "Cannot modify paths through symbolic links" }
+    }
+    return target
+}
 
 internal actual object NativeFileUtils {
     private const val MAX_IN_MEMORY_READ_BYTES = 64L * 1024 * 1024
@@ -134,6 +154,30 @@ internal actual object NativeFileUtils {
         return File(path).totalSpace
     }
 
+    actual fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            val target = checkedMutableFilePath(path)
+            require(target.parent != null) { "Cannot delete filesystem root" }
+            // Directory-only system calls also reject a file replacing the directory after scanning.
+            val success = if (Platform.isWindows()) {
+                val text = target.toString()
+                val nativePath = when {
+                    text.length <= 247 || text.startsWith("\\\\?\\") -> text
+                    text.startsWith("\\\\") -> "\\\\?\\UNC\\" + text.drop(2)
+                    else -> "\\\\?\\$text"
+                }
+                NativeLibrary.getInstance("kernel32").getFunction("RemoveDirectoryW", Function.ALT_CONVENTION)
+                    .invokeInt(arrayOf(WString(nativePath))) != 0
+            } else {
+                NativeLibrary.getInstance(Platform.C_LIBRARY_NAME).getFunction("rmdir")
+                    .invokeInt(arrayOf(target.toString())) == 0
+            }
+            check(success) { "Cannot delete empty directory (system error ${Native.getLastError()})" }
+            true
+        }
+    }
+
     actual fun freeSpace(permission: FileAccessPermission, path: String): Long {
         requireFileAccess(permission)
         return File(path).freeSpace
@@ -150,6 +194,29 @@ internal actual object NativeFileUtils {
             Result.failure(AuthorityException(AppStrings.message_task_permission_denied))
         } catch (e: Exception) {
             Result.failure(AuthorityException(e.message))
+        }
+    }
+
+    actual fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            val source = checkedMutableFilePath(from)
+            val target = checkedMutableFilePath(to)
+            require(source.normalize() != target.normalize() && !target.normalize().startsWith(source.normalize())) { "Invalid move destination" }
+            Files.move(source, target)
+            true
+        }
+    }
+
+    actual fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            require(millis > 0) { "Invalid modification time" }
+            val target = Paths.get(path)
+            check(!Files.isSymbolicLink(target)) { "Cannot modify symbolic links" }
+            Files.getFileAttributeView(target, BasicFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
+                .setTimes(FileTime.fromMillis(millis), null, null)
+            true
         }
     }
 

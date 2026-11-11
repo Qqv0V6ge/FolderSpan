@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import com.folderspan.data.main.DiskBase
+import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.ui.components.file.FileSelectorEntryRegion
 
 @Composable
@@ -15,13 +16,14 @@ fun SyncPathSelectorDialog(
     deskType: DiskBase,
     selectedPath: String,
     onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onConfirmFile: (FileSimpleInfo?) -> Unit = {},
 ) {
     var currentPath by remember(selectedPath, deskType.pathSeparator) {
         mutableStateOf(selectedPath.ifBlank { deskType.pathSeparator })
     }
-    var selectedItemPath by remember(selectedPath, deskType.pathSeparator) {
-        mutableStateOf<String?>(null)
+    var selectedItem by remember(selectedPath, deskType.pathSeparator) {
+        mutableStateOf<FileSimpleInfo?>(null)
     }
 
     FullSizeFileSelectorDialog(
@@ -39,8 +41,11 @@ fun SyncPathSelectorDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(selectedItemPath ?: currentPath) },
-                enabled = selectedItemPath != null || currentPath.isNotBlank(),
+                onClick = {
+                    onConfirm(selectedItem?.path ?: currentPath)
+                    onConfirmFile(selectedItem)
+                },
+                enabled = selectedItem != null || currentPath.isNotBlank(),
             ) {
                 Text(AppStrings.ui_complete)
             }
@@ -51,7 +56,7 @@ fun SyncPathSelectorDialog(
             openPath = currentPath,
             isSingleSelection = true,
             onFilesSelected = { files ->
-                selectedItemPath = files.lastOrNull()?.path
+                selectedItem = files.lastOrNull()
             },
             onPathChanged = { path ->
                 currentPath = path

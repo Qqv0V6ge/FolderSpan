@@ -4,7 +4,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
-import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -128,33 +127,6 @@ internal class FileAesGcmSecretVault(
     private fun valuesPath(): Path = directory.resolve(VALUES_FILE)
 }
 
-internal fun restrictOwnerOnly(path: Path, directory: Boolean) {
-    try {
-        val permissions = if (directory) {
-            setOf(
-                PosixFilePermission.OWNER_READ,
-                PosixFilePermission.OWNER_WRITE,
-                PosixFilePermission.OWNER_EXECUTE,
-            )
-        } else {
-            setOf(
-                PosixFilePermission.OWNER_READ,
-                PosixFilePermission.OWNER_WRITE,
-            )
-        }
-        Files.setPosixFilePermissions(path, permissions)
-    } catch (_: UnsupportedOperationException) {
-        val file = path.toFile()
-        file.setReadable(false, false)
-        file.setWritable(false, false)
-        file.setExecutable(false, false)
-        file.setReadable(true, true)
-        file.setWritable(true, true)
-        if (directory) {
-            file.setExecutable(true, true)
-        }
-    }
-}
 
 private const val MASTER_KEY_FILE = "master.key"
 private const val VALUES_FILE = "values.v1"

@@ -1,5 +1,7 @@
 package com.folderspan.ui.components.file
 
+import com.folderspan.extensions.fileOperationKey
+
 import com.folderspan.utils.FileAccessPermission
 import strings.AppStrings
 
@@ -27,6 +29,10 @@ import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.Local
+import com.folderspan.data.file.FileProtocol
+import com.folderspan.data.main.share.Share
+import com.folderspan.service.mcp.file.normalizeEndpointPath
+import kotlinx.coroutines.CancellationException
 import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.network.NetworkAccess
 import com.folderspan.db.FileFilter
@@ -60,6 +66,7 @@ internal class FileSelectorDataSource(
     val pathSeparator: String,
     val loadRootPaths: suspend () -> Result<List<PathInfo>>,
     val loadFiles: suspend (String) -> Result<List<FileSimpleInfo>>,
+    val loadDirectory: (suspend (FileSimpleInfo) -> Result<List<FileSimpleInfo>>)? = null,
 )
 
 internal fun createFileSelectorDataSource(deskType: DiskBase): FileSelectorDataSource {
@@ -77,11 +84,13 @@ internal fun createFileSelectorDataSource(deskType: DiskBase): FileSelectorDataS
             loadRootPaths = deskType.paths::getRootPaths,
             loadFiles = deskType.paths::getList,
         )
+        is Share -> createShareFileSelectorDataSource(deskType)
         is NetworkAccess -> FileSelectorDataSource(
             sessionKey = "network:${deskType.protocolId}:$pathSeparator",
             pathSeparator = pathSeparator,
             loadRootPaths = { Result.success(deskType.getRootPaths()) },
             loadFiles = deskType::getList,
+            loadDirectory = { directory -> deskType.getList(directory) },
         )
         else -> FileSelectorDataSource(
             sessionKey = "${deskType.name}:$pathSeparator",
@@ -90,6 +99,35 @@ internal fun createFileSelectorDataSource(deskType: DiskBase): FileSelectorDataS
             loadFiles = { Result.success(emptyList()) },
         )
     }
+}
+
+private fun createShareFileSelectorDataSource(share: Share): FileSelectorDataSource {
+    val session = share.session
+    return FileSelectorDataSource(
+        sessionKey = "share:${share.id}:${session.hashCode()}",
+        pathSeparator = "/",
+        loadRootPaths = {
+            runCatching {
+                check(session?.isActive == true) { AppStrings.message_task_share_session_expired }
+                session.listRoots().getOrThrow().filter { it.isDirectory }.map { PathInfo(it.path, 0L, 0L) }
+                    .also { check(session.isActive) { AppStrings.message_task_share_session_expired } }
+            }.onFailure { if (it is CancellationException) throw it }
+        },
+        loadFiles = { path ->
+            runCatching {
+                check(session?.isActive == true) { AppStrings.message_task_share_session_expired }
+                val normalized = normalizeEndpointPath(path, "/")
+                val roots = session.listRoots().getOrThrow().filter { it.isDirectory }
+                require(normalized == "/" || roots.any { root ->
+                    val rootPath = normalizeEndpointPath(root.path, "/")
+                    normalized == rootPath || normalized.startsWith(rootPath.trimEnd('/') + "/")
+                }) { AppStrings.ui_remote_path_invalid }
+                val entries = if (normalized == "/") session.listRoots().getOrThrow() else session.list(normalized).getOrThrow()
+                check(session.isActive) { AppStrings.message_task_share_session_expired }
+                entries.map { it.copy(protocol = FileProtocol.Share, protocolId = share.id) }
+            }.onFailure { if (it is CancellationException) throw it }
+        },
+    )
 }
 
 private fun splitPathSegments(path: String): List<String> {
@@ -203,6 +241,7 @@ fun FileSelectorEntryRegion(
     isSingleSelection: Boolean = false,
     displayConstraints: FileSelectorConstraints = FileSelectorConstraints.Unrestricted,
     selectionConstraints: FileSelectorConstraints = FileSelectorConstraints.Unrestricted,
+    initialDirectory: FileSimpleInfo? = null,
 ) {
     // 协程作用域
     val scope = rememberCoroutineScope()
@@ -216,6 +255,9 @@ fun FileSelectorEntryRegion(
     val pathSeparator = dataSource.pathSeparator
     val selectorSessionKey = dataSource.sessionKey
 
+    val directoryReferences = remember(selectorSessionKey) { mutableMapOf<String, FileSimpleInfo>().apply {
+        initialDirectory?.let { put(it.path, it.copy()) }
+    } }
     val rootFileInfos = remember { mutableStateListOf<PathInfo>() }
     var rootPath by remember { mutableStateOf("") }
     // 当前路径
@@ -303,8 +345,9 @@ fun FileSelectorEntryRegion(
         refreshErrorMessage = null
         isLoading = true
 
-        dataSource.loadFiles(path)
-            .onSuccess { fileList ->
+        val directory = directoryReferences[path] ?: (deskType as? NetworkAccess)?.getFile(path)?.getOrNull()
+        val result = if (directory != null && dataSource.loadDirectory != null) dataSource.loadDirectory.invoke(directory) else dataSource.loadFiles(path)
+        result.onSuccess { fileList ->
                 files = fileList
                 isLoading = false
             }
@@ -325,6 +368,7 @@ fun FileSelectorEntryRegion(
             resolveFileSelectorConfirmSelection(
                 selectedFiles = selectedFiles,
                 currentPath = path,
+                currentDirectory = directoryReferences[path] ?: (deskType as? NetworkAccess)?.getFile(path)?.getOrNull(),
                 selectionFilterTypes = selectionFilterTypes,
                 selectionConstraints = selectionConstraints,
             ),
@@ -332,6 +376,7 @@ fun FileSelectorEntryRegion(
     }
 
     LaunchedEffect(path) {
+        directoryReferences.keys.filter { it != path && !path.startsWith(it.trimEnd('/') + "/") }.forEach(directoryReferences::remove)
         selectionRejectionMessage = null
         currentOnPathChanged(path)
         loadFilesFromPath()
@@ -565,7 +610,7 @@ fun FileSelectorEntryRegion(
                     checkedFiles.add(entry.file)
                 }
             } else if (entry.isSelected) {
-                checkedFiles.removeAll { selected -> selected.path == entry.file.path }
+                checkedFiles.removeAll { selected -> selected.fileOperationKey() == entry.file.fileOperationKey() }
             } else {
                 checkedFiles.add(entry.file)
             }
@@ -579,6 +624,8 @@ fun FileSelectorEntryRegion(
                 return
             }
             if (entry.file.isDirectory) {
+                directoryReferences.keys.filter { it == entry.file.path || it.startsWith(entry.file.path.trimEnd('/') + "/") }.forEach(directoryReferences::remove)
+                directoryReferences[entry.file.path] = entry.file
                 path = entry.file.path
                 return
             }

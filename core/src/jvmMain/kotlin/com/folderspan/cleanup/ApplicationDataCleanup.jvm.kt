@@ -137,6 +137,9 @@ internal class DesktopApplicationDataCleaner {
                 }
                 add(environment.applicationDataDirectory.resolve("pro_http_cache"))
             }
+            if (ApplicationDataCleanupCategory.PreferencesAndAccount in categories) {
+                add(environment.applicationDataDirectory.resolve("mac-folder-access.json"))
+            }
         }.map { path -> path.toAbsolutePath().normalize() }.distinct()
 }
 

@@ -38,7 +38,7 @@ actual class DriverFactory {
     }
 }
 
-private suspend fun createSchemaWithAwait(driver: SqlDriver) {
+internal suspend fun createSchemaWithAwait(driver: SqlDriver) {
     val currentVersion = FolderSpanDatabase.Schema.version
     val userVersion = readUserVersion(driver)
     val hasTables = hasUserTables(driver)

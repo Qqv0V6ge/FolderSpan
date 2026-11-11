@@ -1,5 +1,10 @@
 package com.folderspan.service.session
 
+import kotlinx.coroutines.withTimeoutOrNull
+import com.folderspan.service.operation.observeOperationTransferWait
+import com.folderspan.service.operation.TransferWaitReason
+import kotlin.time.TimeSource
+import kotlin.time.Duration
 import com.folderspan.service.operation.HttpTransferRuntimeMemoryStatus
 import com.folderspan.service.operation.HttpTransferRuntimeMemoryStatusProvider
 import com.folderspan.service.operation.HttpTransferStatus
@@ -165,26 +170,40 @@ internal class DeviceSessionCredit(
     suspend fun awaitAndConsume(
         streamId: Int,
         bytes: Int,
+        timeoutMillis: Long = 0,
         checkActive: suspend () -> Unit = {},
     ) {
         require(bytes >= 0) { "bytes must be non-negative" }
         if (bytes == 0) return
         require(bytes <= DEVICE_SESSION_MAX_PAYLOAD_BYTES) { "frame exceeds payload cap" }
         require(bytes <= plan.streamWindowBytes) { "frame exceeds stream window" }
-        while (true) {
-            val version = mutex.withLock {
-                if (canConsumeLocked(streamId, bytes)) {
-                    consumeLocked(streamId, bytes)
-                    return
+        val started = TimeSource.Monotonic.markNow()
+        var paused = Duration.ZERO
+        var closeWaiting: (() -> Unit)? = null
+        try {
+            while (true) {
+                val beforeCheck = TimeSource.Monotonic.markNow()
+                checkActive()
+                paused += beforeCheck.elapsedNow()
+                val elapsed = (started.elapsedNow() - paused).inWholeMilliseconds
+                if (timeoutMillis > 0 && elapsed >= timeoutMillis) {
+                    throw DeviceSessionIoException("stream credit timeout: stream=$streamId timeoutMs=$timeoutMillis")
                 }
-                creditVersion.value
+                val version = mutex.withLock {
+                    if (canConsumeLocked(streamId, bytes)) {
+                        consumeLocked(streamId, bytes)
+                        return
+                    }
+                    creditVersion.value
+                }
+                // Each writer must recheck its own stream and the shared session budget.
+                // Capture the version under the same lock as that check so a grant between
+                // unlocking and subscribing cannot be lost or consumed by another writer.
+                val pollMillis = if (timeoutMillis > 0) minOf(100L, timeoutMillis - elapsed).coerceAtLeast(1) else 100L
+                if (closeWaiting == null) closeWaiting = observeOperationTransferWait(TransferWaitReason.Receiver)
+                withTimeoutOrNull(pollMillis) { creditVersion.first { it != version } }
             }
-            // Each writer must recheck its own stream and the shared session budget.
-            // Capture the version under the same lock as that check so a grant between
-            // unlocking and subscribing cannot be lost or consumed by another writer.
-            checkActive()
-            creditVersion.first { it != version }
-        }
+        } finally { closeWaiting?.invoke() }
     }
 
     suspend fun tryConsume(streamId: Int, bytes: Int): Boolean {

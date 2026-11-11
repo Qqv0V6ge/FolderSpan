@@ -19,6 +19,8 @@ internal expect object NativeFileUtils {
 
     fun deleteFile(permission: FileAccessPermission, path: String): Result<Boolean>
 
+    fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean>
+
 
     fun totalSpace(permission: FileAccessPermission, path: String): Long
 
@@ -27,6 +29,10 @@ internal expect object NativeFileUtils {
 
 
     fun createFolder(permission: FileAccessPermission, path: String): Result<Boolean>
+
+    fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean>
+
+    fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean>
 
     fun rename(permission: FileAccessPermission, path: String, oldName: String, newName: String): Result<Boolean>
 

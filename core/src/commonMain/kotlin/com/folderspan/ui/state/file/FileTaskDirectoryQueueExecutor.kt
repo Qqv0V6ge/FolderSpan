@@ -4,6 +4,7 @@ import strings.AppStrings
 
 import com.folderspan.service.operation.OperationParallelismConfig
 import com.folderspan.service.operation.processItemsAdaptive
+import com.folderspan.service.operation.reportOperationFailure
 import com.folderspan.ui.state.main.TaskRuntimeQueueEntry
 import com.folderspan.ui.state.main.TaskRuntimeQueuedEntry
 import com.folderspan.ui.state.main.isTaskLevelTransferFailure
@@ -55,6 +56,7 @@ internal suspend fun executeDirectoryCreateQueueAdaptiveBatch(
             return
         }
         val message = failure?.message ?: retryableFailureFallback
+        reportOperationFailure()
         if (shouldContinueAfterFailure(failure)) {
             onRetryableFailure(queuedEntry, entryPath, message)
             return

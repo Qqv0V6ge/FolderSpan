@@ -17,6 +17,7 @@ import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.SensitiveFileAccessPolicy
 import com.folderspan.utils.isWriteRangeWithinFile
+import com.folderspan.utils.isDropDirectoryWritable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -426,6 +427,16 @@ class DeviceFileService(
             }
             info
         }
+    }
+
+    suspend fun checkDirectoryWriteAccess(authToken: String, path: String): Result<Boolean> {
+        prepareStreamWrite(authToken, path, 0L).getOrElse { return Result.failure(it) }
+        return try {
+            val info = FileUtils.getFile(FileAccessPermission.Allowed, path).getOrThrow()
+            require(info.isDirectory) { AppStrings.ui_target_unavailable }
+            Result.success(isDropDirectoryWritable(path))
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { Result.failure(error) }
     }
 
     suspend fun prepareStreamWrite(authToken: String, path: String, fileSize: Long): Result<Boolean> {

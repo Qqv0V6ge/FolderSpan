@@ -29,6 +29,9 @@ private const val DEVICE_FILE_UPLOAD_BUFFER_BYTES = 256 * 1024
 interface DeviceFileClient {
     fun transferStatus(): HttpTransferStatus = HttpTransferStatus.default()
 
+    suspend fun checkDirectoryWriteAccess(path: String): Result<Boolean> =
+        Result.failure(UnsupportedOperationException(AppStrings.copy_destination_write_check_unsupported))
+
     suspend fun archiveCapabilities(): FolderSpanArchiveStreamCapabilities =
         FolderSpanArchiveStreamCapabilities.unsupported()
 

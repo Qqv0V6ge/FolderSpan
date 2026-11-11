@@ -3,6 +3,7 @@ package com.folderspan.ui.state.file
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.extensions.replaceLast
+import com.folderspan.service.network.forPath
 import com.folderspan.ui.state.file.FileOperationType.Jump
 import com.folderspan.ui.state.file.FileOperationType.Replace
 import com.folderspan.ui.state.file.FileOperationType.Reserve
@@ -131,6 +132,7 @@ internal class FilePasteOperationPlanner(
             path = targetPath,
             protocol = target.protocol,
             protocolId = target.protocolId,
+            storageReference = target.storageReference?.forPath(target.path, targetPath, target.isDirectory),
         )
     }
 

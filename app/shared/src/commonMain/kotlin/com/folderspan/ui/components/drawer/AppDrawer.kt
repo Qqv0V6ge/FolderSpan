@@ -45,6 +45,7 @@ import com.folderspan.clipboard.rememberClipboardFilePasteController
 import com.folderspan.crash.exitApp
 import com.folderspan.extensions.DeviceIcon
 import com.folderspan.proNotificationUnreadCount
+import com.folderspan.service.webui.WebUiAttachment
 import com.folderspan.service.http.server.SocketClientIPEnum
 import com.folderspan.service.http.server.getAllIPAddresses
 import com.folderspan.service.http.clipboard.ClipboardUrlShareInspector
@@ -207,6 +208,9 @@ fun AppDrawerContainer() {
                     onOpenFeedback = if (PRO_AVAILABLE) { { proFeedbackScreen()?.let(mainState::pushScreen) } } else null,
                     onOpenSettings = { mainState.pushScreen(SettingsScreen()) },
                     onExit = ::exitApp,
+                    onSwitchRuntime = if (WebUiAttachment.isAttached) {
+                        { WebUiAttachment.showConnectionDialog = true }
+                    } else null,
                 )
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -608,6 +612,7 @@ internal fun MoreOptionsDropdown(
     onOpenFeedback: (() -> Unit)?,
     onOpenSettings: () -> Unit,
     onExit: () -> Unit,
+    onSwitchRuntime: (() -> Unit)? = null,
 ) {
     Box {
         var showDropdownMenu by remember { mutableStateOf(false) }
@@ -646,6 +651,16 @@ internal fun MoreOptionsDropdown(
                     showDropdownMenu = false
                 }
             )
+            if (onSwitchRuntime != null) {
+                DropdownMenuItem(
+                    leadingIcon = { Icon(Icons.Default.Dns, null) },
+                    text = { Text(AppStrings.ui_web_ui_runtime_reload) },
+                    onClick = {
+                        showDropdownMenu = false
+                        onSwitchRuntime()
+                    },
+                )
+            }
             HorizontalDivider()
             DropdownMenuItem(
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },

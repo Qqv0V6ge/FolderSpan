@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -624,6 +625,9 @@ fun FileMenu(
     onFavorite: () -> Unit = {},
     onShare: () -> Unit = {},
     onInfo: () -> Unit = {},
+    onStorageCopy: (() -> Unit)? = null,
+    onStorageVersions: (() -> Unit)? = null,
+    onStorageSharing: (() -> Unit)? = null,
 ) {
     var internalExpanded by remember { mutableStateOf(false) }
     val menuExpanded = expanded ?: internalExpanded
@@ -657,7 +661,10 @@ fun FileMenu(
                 onRename = onRename,
                 onFavorite = onFavorite,
                 onShare = onShare,
-                onInfo = onInfo
+                onInfo = onInfo,
+                onStorageCopy = onStorageCopy,
+                onStorageVersions = onStorageVersions,
+                onStorageSharing = onStorageSharing,
             )
         }
     }
@@ -693,10 +700,13 @@ internal fun FileMenuItems(
     onFavorite: () -> Unit = {},
     onShare: () -> Unit = {},
     onInfo: () -> Unit = {},
+    onStorageCopy: (() -> Unit)? = null,
+    onStorageVersions: (() -> Unit)? = null,
+    onStorageSharing: (() -> Unit)? = null,
 ) {
     val hasFileOperations = permission.copy || permission.move || permission.delete
     val hasConfigOperations = permission.read || permission.rename
-    val hasShareOperations = permission.favorite || permission.share
+    val hasShareOperations = permission.favorite || permission.share || onStorageVersions != null || onStorageSharing != null
     val hasItemsBeforeConfig = permission.paste || hasFileOperations
     val hasItemsBeforeShare = hasItemsBeforeConfig || hasConfigOperations
     val hasItemsBeforeInfo = hasItemsBeforeShare || hasShareOperations
@@ -726,7 +736,21 @@ internal fun FileMenuItems(
             },
             leadingIcon = {
                 Icon(Icons.Outlined.FileCopy, null)
-            })
+            },
+            trailingIcon = onStorageCopy?.let { action ->
+                {
+                    IconButton(onClick = {
+                        onMenuDismiss()
+                        action()
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = AppStrings.ui_storage_multi_copy,
+                        )
+                    }
+                }
+            },
+        )
     }
 
     if (permission.move) {
@@ -817,6 +841,21 @@ internal fun FileMenuItems(
             leadingIcon = {
                 Icon(Icons.Outlined.Share, null)
             })
+    }
+
+    onStorageVersions?.let { action ->
+        DropdownMenuItem(
+            text = { Text(AppStrings.storage_versions) },
+            onClick = { onMenuDismiss(); action() },
+            leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null) },
+        )
+    }
+    onStorageSharing?.let { action ->
+        DropdownMenuItem(
+            text = { Text(AppStrings.storage_sharing) },
+            onClick = { onMenuDismiss(); action() },
+            leadingIcon = { Icon(Icons.Outlined.ManageAccounts, contentDescription = null) },
+        )
     }
 
     if (hasItemsBeforeInfo && permission.info) {

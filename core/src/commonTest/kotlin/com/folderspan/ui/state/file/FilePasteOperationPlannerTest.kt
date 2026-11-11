@@ -2,6 +2,7 @@ package com.folderspan.ui.state.file
 
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.service.network.StorageReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -77,6 +78,21 @@ class FilePasteOperationPlannerTest {
 
         assertEquals(listOf("/downloads/report.txt", "/downloads/photos"), pending.map { item -> item.dest.path })
         assertEquals(listOf(false, true), pending.map { item -> item.dest.isDirectory })
+    }
+
+    @Test
+    fun crossAccountCopiesUseTheTargetParentReferenceInsteadOfTheSourceObject() {
+        val source = file("report.txt", "/source/report.txt", protocolId = "source-account")
+            .copy(storageReference = StorageReference(id = "source-object"))
+        val target = file("target", "/target", isDirectory = true, protocolId = "target-account")
+            .copy(storageReference = StorageReference(id = "target-folder"))
+        val operations = FileOperationState()
+        planner.updateConflictOperations(listOf(source), target, emptyList(), operations)
+        val pending = planner.buildPendingOperations(operations.files, target, emptyList()).single()
+        assertEquals("source-object", pending.src.storageReference?.id)
+        assertEquals("target-folder", pending.dest.storageReference?.ancestorId)
+        assertEquals("", pending.dest.storageReference?.id)
+        assertEquals("target-account", pending.dest.protocolId)
     }
 
     private fun file(

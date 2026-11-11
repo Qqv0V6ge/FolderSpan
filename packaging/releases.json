@@ -1,0 +1,74 @@
+{
+  "1.0.0": {
+    "linux-arm64": {
+      "name": "desktop-linux-arm64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-linux-arm64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "sha256": "b84a7f785f96df97c4098b695c5aa54bcb4ffc4a1b3a94edcb6fb88918edc098"
+    },
+    "linux-x64": {
+      "name": "desktop-linux-x64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-linux-x64-no-pro-com.folderspan-1.0.0.tar.gz",
+      "sha256": "438166fd28f930dd55c1fa1328a08d6d5371b75326d8086712ddc58b3e8e4a7e"
+    },
+    "windows-arm64": {
+      "name": "desktop-windows-arm64-no-pro-FolderSpan-1.0.0-windows-arm64.zip",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-windows-arm64-no-pro-FolderSpan-1.0.0-windows-arm64.zip",
+      "sha256": "de48e0011ba52fec21b865e9e929b87ec61c06c40d591e8fadbeaf73a8cc7f06"
+    },
+    "windows-x64": {
+      "name": "desktop-windows-x64-no-pro-FolderSpan-1.0.0.msi",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.0/desktop-windows-x64-no-pro-FolderSpan-1.0.0.msi",
+      "sha256": "57bc44d7feb3724205bce4abb25455d103a18b06189fc59818e212c0bf9f3173"
+    }
+  },
+  "1.0.1": {
+    "linux-arm64": {
+      "name": "desktop-linux-arm64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-linux-arm64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "sha256": "634a1a0e5dc77da81ac0582d610af1f715e04a295240b7b74d21c219edcff721"
+    },
+    "linux-x64": {
+      "name": "desktop-linux-x64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-linux-x64-no-pro-com.folderspan-1.0.1.tar.gz",
+      "sha256": "58d8958d1777eee2590b28b83c12bb92e2e21ca5d4f12a794c109b04660b53c8"
+    },
+    "windows-arm64": {
+      "name": "desktop-windows-arm64-no-pro-FolderSpan-1.0.1-windows-arm64.zip",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-arm64-no-pro-FolderSpan-1.0.1-windows-arm64.zip",
+      "sha256": "942ef0e0fa04fb2ae40746c10d023e83973e171eba6c4330aec7d8e3c05f0862"
+    },
+    "windows-x64": {
+      "name": "desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/desktop-windows-x64-no-pro-FolderSpan-1.0.1.msi",
+      "sha256": "3b570c9aa31c0dd20cadca98d6a695c4198e7af24d2eeee6fd0b3a4603b3d8a2"
+    },
+    "supplemental-notices": {
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/THIRD_PARTY_NOTICES-2026-10-27.txt",
+      "sha256": "d81da23f22a5bd68b4c9ef773f5a018c404a9d5f9a52ec79e01f526343ad8e86",
+      "scope": "Current Android/Linux Maven metadata and collected upstream terms; native/version review limits remain stated in the document."
+    },
+    "original-notice-sha256": {
+      "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "NOTICE": "e399249d2bfd3592bef3a2653f4bf9eaf46472483b4c0e3fba4dba4d518a26be",
+      "LICENSING.md": "95e2304219f85ee88e72c2b74af4b696f4b47047c99daeaee131de69ccea3130",
+      "THIRD_PARTY_NOTICES.txt": "f1e7de3eca810b7fe2dcb82410fa7febbf5c5c1d33a0e9d8b8230e2efd232b5a"
+    },
+    "linux-x64-appimage": {
+      "name": "FolderSpan-1.0.1-x86_64.AppImage",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/FolderSpan-1.0.1-x86_64.AppImage",
+      "sha256": "a53281e97b645a488a6510b17a30854adb69f6fcab96ab1e15272914b032e558",
+      "bytes": 190351864,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470"
+    },
+    "linux-amd64-snap-candidate": {
+      "name": "folderspan-1.0.1-amd64-candidate.snap",
+      "url": "https://github.com/Qqv0V6ge/FolderSpan/releases/download/v1.0.1/folderspan-1.0.1-amd64-candidate.snap",
+      "sha256": "ad5a83ecba684496cf41c979b0882f7c4339e94c8ebfe66017557a5a53b2b8e7",
+      "bytes": 187408384,
+      "source_run": "https://github.com/Qqv0V6ge/FolderSpan/actions/runs/40429645470",
+      "confinement": "strict",
+      "grade": "devel",
+      "store_status": "not submitted"
+    }
+  }
+}

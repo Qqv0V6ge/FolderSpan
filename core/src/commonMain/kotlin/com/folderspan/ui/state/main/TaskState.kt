@@ -18,6 +18,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotApplyConflictException
 import com.folderspan.data.StatusEnum
+import com.folderspan.service.network.StorageUploadSessions
+import com.folderspan.service.network.StorageContentPlatform
 import com.folderspan.ui.state.file.ExternalFileResourceLeaseRegistry
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
@@ -29,6 +31,9 @@ import kotlin.time.Clock
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import com.folderspan.service.operation.OperationTransferWaitObserver
+import com.folderspan.service.operation.TransferWaitReason
 
 class TaskState(
     private val failureResultStore: TaskFailureResultStore = TempTaskFailureResultStore(),
@@ -41,6 +46,10 @@ class TaskState(
     private val failureRevisions = mutableStateMapOf<Long, Int>()
 
     private val artifactDisplayPaths = mutableMapOf<Pair<Long, String>, String>()
+    private val transferWaitCounts = mutableMapOf<Long, MutableMap<TransferWaitReason, Int>>()
+    private val runtimeProgressAt = mutableMapOf<Pair<Long, String>, Long>()
+    private val runtimeProgressBytes = mutableMapOf<Pair<Long, String>, Long>()
+    private val runtimeProgressObservers = mutableMapOf<Pair<Long, String>, MutableList<(Long) -> Unit>>()
     private val byteMetricTrackers = mutableMapOf<Long, RuntimeByteMetricTracker>()
     private val rateMetricTrackers = mutableMapOf<Long, RuntimeMetricRateTracker>()
     private val snapshotLock = TaskRuntimeStoreLock()
@@ -88,6 +97,7 @@ class TaskState(
         withMutableTaskSnapshot {
             sessionTaskControls[task.key] = SessionTaskControl(onCancel, onRetry, MutableStateFlow(task.status))
             cancelledRuntimeKeys.remove(task.key)
+            automaticallyCancelledKeys.remove(task.key)
             val index = findIndexByKey(task.key)
             if (index >= 0) {
                 replaceTask(index, task)
@@ -155,6 +165,7 @@ class TaskState(
 
     private val deletionMutex = Mutex()
     private val cancelledRuntimeKeys = mutableSetOf<Long>()
+    private val automaticallyCancelledKeys = mutableSetOf<Long>()
     private val deletingKeys = MutableStateFlow<Set<Long>>(emptySet())
     private val taskScheduler = TaskSerialScheduler(
         updateStatus = { task, status -> updateStatus(task, status) },
@@ -183,6 +194,51 @@ class TaskState(
         } finally {
             snapshotLock.unlock()
         }
+    }
+
+    private inline fun <T> withRuntimeMetricsLock(block: () -> T): T {
+        snapshotLock.lock()
+        try { return block() } finally { snapshotLock.unlock() }
+    }
+
+    fun transferWaitReasons(taskKey: Long): Set<TransferWaitReason> = withRuntimeMetricsLock {
+        transferWaitCounts[taskKey]?.keys?.toSet().orEmpty()
+    }
+
+    internal suspend fun <T> withTransferWaitObservation(task: Task, block: suspend () -> T): T =
+        withContext(OperationTransferWaitObserver { reason, waiting ->
+            withRuntimeMetricsLock {
+                val counts = transferWaitCounts.getOrPut(task.key) { mutableMapOf() }
+                val next = (counts.getOrElse(reason) { 0 } + if (waiting) 1 else -1).coerceAtLeast(0)
+                if (next == 0) counts.remove(reason) else counts[reason] = next
+                if (counts.isEmpty()) transferWaitCounts.remove(task.key)
+            }
+        }) { block() }
+
+    fun lastRuntimeProgressAt(taskKey: Long, targetPath: String): Long? = withRuntimeMetricsLock {
+        runtimeProgressAt[taskKey to taskArtifactDisplayPath(taskKey, targetPath)]
+    }
+
+    internal fun observeRuntimeByteProgress(taskKey: Long, path: String, observer: (Long) -> Unit): () -> Unit {
+        val key = taskKey to taskArtifactDisplayPath(taskKey, path)
+        withRuntimeMetricsLock { runtimeProgressObservers.getOrPut(key) { mutableListOf() }.add(observer) }
+        return {
+            withRuntimeMetricsLock {
+                runtimeProgressObservers[key]?.let { observers ->
+                    observers.remove(observer)
+                    if (observers.isEmpty()) runtimeProgressObservers.remove(key)
+                }
+            }
+        }
+    }
+
+    fun recordRuntimeByteProgress(task: Task, path: String, bytes: Long) = withRuntimeMetricsLock {
+        val sourceKey = task.key to path
+        val targetKey = task.key to taskArtifactDisplayPath(task.key, path)
+        val previous = runtimeProgressBytes[sourceKey]
+        if (previous == null || bytes > previous) runtimeProgressAt[targetKey] = Clock.System.now().toEpochMilliseconds()
+        runtimeProgressBytes[sourceKey] = maxOf(bytes, previous ?: 0L)
+        if (bytes > (previous ?: 0L)) runtimeProgressObservers[targetKey]?.forEach { it(bytes - (previous ?: 0L)) }
     }
 
     private data class RuntimeByteMetricTracker(
@@ -258,6 +314,7 @@ class TaskState(
         shutdownStarted.value = true
         taskScheduler.stop()
         deletionScope.coroutineContext[Job]?.cancelAndJoin()
+        withRuntimeMetricsLock { transferWaitCounts.clear() }
     }
 
     private fun notifyChanged() {
@@ -340,6 +397,8 @@ class TaskState(
             if (findIndexByKey(key) < 0) return@withMutableTaskSnapshot false
             // Remove the journal first: failure must leave a visible record that can be retried.
             cleanupStore.remove(key)
+            StorageUploadSessions.removeTask(key)
+            deletionScope.launch { StorageContentPlatform.cleanup(key) }
             failureResultStore.deleteTask(key)
             runtimeStore.deleteTaskSnapshot(key)
             runtimeStore.clearTaskRuntime(key)
@@ -347,6 +406,7 @@ class TaskState(
             sessionTaskControls.remove(key)?.status?.value = null
             clearSignals(key)
             cancelledRuntimeKeys.add(key)
+            automaticallyCancelledKeys.remove(key)
             clearRuntimeMetricTrackers(key)
             failureRevisions.remove(key)
             cleanupFailuresState.update { failures -> failures.filterNot { it.taskKey == key } }
@@ -460,7 +520,15 @@ class TaskState(
         } else taskScheduler.requestResume(task)
     }
 
-    fun requestCancel(task: Task, reason: String = AppStrings.ui_user_cancels_task) {
+    fun requestCancel(task: Task, reason: String = AppStrings.ui_user_cancels_task) =
+        requestCancel(task, reason, userInitiated = true)
+
+    internal fun requestCancel(task: Task, reason: String, userInitiated: Boolean) {
+        snapshotLock.lock()
+        try {
+            if (userInitiated) automaticallyCancelledKeys.remove(task.key)
+            else if (!isTaskCancelled(task.key)) automaticallyCancelledKeys.add(task.key)
+        } finally { snapshotLock.unlock() }
         val control = sessionTaskControl(task.key)
         if (control != null) {
             control.status.value = null
@@ -468,6 +536,7 @@ class TaskState(
         } else if (task.key in externalTaskWriters.value) {
             // The external owner will signal completion after its own writer finally blocks finish.
             markTaskCancelled(task, reason)
+            taskScheduler.clearSignals(task.key)
         } else taskScheduler.requestCancel(task, reason)
     }
 
@@ -500,17 +569,31 @@ class TaskState(
         finally { snapshotLock.unlock() }
     }
 
+    /** Connection loss uses the same cancellation mechanics, but must not discard a sync condition wait. */
+    internal fun isTaskCanceledByUser(taskKey: Long): Boolean {
+        snapshotLock.lock()
+        return try { isTaskCancelled(taskKey) && taskKey !in automaticallyCancelledKeys }
+        finally { snapshotLock.unlock() }
+    }
+
     fun isTaskPaused(taskKey: Long): Boolean = sessionTaskControl(taskKey)?.let {
         it.status.value == StatusEnum.PAUSE
     } ?: taskScheduler.isTaskPaused(taskKey)
 
     suspend fun awaitIfPaused(taskKey: Long): Boolean {
         return if (sessionTaskControl(taskKey) != null) awaitSessionTaskRunning(taskKey)
-        else taskScheduler.awaitIfPaused(taskKey)
+        else taskScheduler.awaitIfPaused(taskKey) && !isTaskCancelled(taskKey)
     }
 
     fun clearSignals(taskKey: Long) {
         taskScheduler.clearSignals(taskKey)
+    }
+
+    internal fun loadCopyValidation(taskKey: Long): ByteArray? = runtimeStore.loadCopyValidation(taskKey)
+
+    internal fun saveCopyValidation(taskKey: Long, payload: ByteArray) {
+        snapshotLock.lock()
+        try { if (taskKey !in cancelledRuntimeKeys) runtimeStore.saveCopyValidation(taskKey, payload) } finally { snapshotLock.unlock() }
     }
 
     fun loadRuntimeMeta(taskKey: Long): TaskRuntimeMeta? = runtimeStore.loadMeta(taskKey)
@@ -609,104 +692,118 @@ class TaskState(
     }
 
     fun clearRuntime(taskKey: Long) {
+        val validation = runtimeStore.loadCopyValidation(taskKey)
         clearRuntimeMetricTrackers(taskKey)
         runtimeStore.clearTaskRuntime(taskKey)
+        if (validation != null) saveCopyValidation(taskKey, validation)
     }
 
     fun beginRuntimeByteMetrics(task: Task, totalBytes: Long): Boolean {
-        return beginRuntimeByteMetrics(task, totalBytes, Clock.System.now().toEpochMilliseconds())
+        return withRuntimeMetricsLock {
+            return beginRuntimeByteMetrics(task, totalBytes, Clock.System.now().toEpochMilliseconds())
+        }
     }
 
     fun beginRuntimeByteMetrics(task: Task, totalBytes: Long, startedAt: Long): Boolean {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val normalizedTotal = totalBytes.coerceAtLeast(0L)
-        val normalizedStartedAt = startedAt.takeIf { item -> item > 0L } ?: now
-        byteMetricTrackers[task.key] = RuntimeByteMetricTracker(
-            totalBytes = normalizedTotal,
-            startedAt = normalizedStartedAt,
-        )
-        resetRuntimeMetricRateTracker(
-            taskKey = task.key,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            total = normalizedTotal,
-            completed = 0L,
-            sampleAt = normalizedStartedAt,
-        )
-        return putRuntimeMetricValues(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = 0L,
-            total = normalizedTotal,
-            speed = 0.0,
-            etaMs = -1L,
-            startedAt = normalizedStartedAt,
-            updatedAt = now,
-        )
+        return withRuntimeMetricsLock {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val normalizedTotal = totalBytes.coerceAtLeast(0L)
+            val normalizedStartedAt = startedAt.takeIf { item -> item > 0L } ?: now
+            byteMetricTrackers[task.key] = RuntimeByteMetricTracker(
+                totalBytes = normalizedTotal,
+                startedAt = normalizedStartedAt,
+            )
+            resetRuntimeMetricRateTracker(
+                taskKey = task.key,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                total = normalizedTotal,
+                completed = 0L,
+                sampleAt = normalizedStartedAt,
+            )
+            return putRuntimeMetricValues(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = 0L,
+                total = normalizedTotal,
+                speed = 0.0,
+                etaMs = -1L,
+                startedAt = normalizedStartedAt,
+                updatedAt = now,
+            )
+        }
     }
 
     fun ensureRuntimeByteMetrics(task: Task, totalBytes: Long): Boolean {
-        val currentTask = getTask(task.key) ?: task
-        val normalizedTotal = totalBytes.coerceAtLeast(0L)
-        return when (currentTask.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY]) {
-            TASK_RUNTIME_METRIC_KIND_BYTES -> {
-                val currentTotal = currentTask.values[TASK_RUNTIME_METRIC_TOTAL_VALUE_KEY]
-                    ?.toLongOrNull()
-                    ?.coerceAtLeast(0L)
-                    ?: 0L
-                currentTotal <= 0L && normalizedTotal > 0L && !byteMetricTrackers.containsKey(task.key) && beginRuntimeByteMetrics(task, normalizedTotal)
+        return withRuntimeMetricsLock {
+            val currentTask = getTask(task.key) ?: task
+            val normalizedTotal = totalBytes.coerceAtLeast(0L)
+            return when (currentTask.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY]) {
+                TASK_RUNTIME_METRIC_KIND_BYTES -> {
+                    val currentTotal = currentTask.values[TASK_RUNTIME_METRIC_TOTAL_VALUE_KEY]
+                        ?.toLongOrNull()
+                        ?.coerceAtLeast(0L)
+                        ?: 0L
+                    currentTotal <= 0L && normalizedTotal > 0L && !byteMetricTrackers.containsKey(task.key) && beginRuntimeByteMetrics(task, normalizedTotal)
+                }
+
+                TASK_RUNTIME_METRIC_KIND_ITEMS -> false
+
+                else -> beginRuntimeByteMetrics(task, normalizedTotal)
             }
-
-            TASK_RUNTIME_METRIC_KIND_ITEMS -> false
-
-            else -> beginRuntimeByteMetrics(task, normalizedTotal)
         }
     }
 
     fun updateRuntimeByteMetrics(task: Task, totalBytes: Long): Boolean {
-        if (usesRuntimeItemMetrics(task)) return false
-        val currentTracker = byteMetricTrackers[task.key] ?: return beginRuntimeByteMetrics(task, totalBytes)
-        val now = Clock.System.now().toEpochMilliseconds()
-        val normalizedTotal = totalBytes.coerceAtLeast(0L)
-        val updatedTracker = currentTracker.copy(totalBytes = normalizedTotal)
-        byteMetricTrackers[task.key] = updatedTracker
-        return putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = updatedTracker.displayCompleted(),
-            total = normalizedTotal,
-            now = now,
-            startedAtOverride = updatedTracker.startedAt,
-        )
+        return withRuntimeMetricsLock {
+            if (usesRuntimeItemMetrics(task)) return false
+            val currentTracker = byteMetricTrackers[task.key] ?: return beginRuntimeByteMetrics(task, totalBytes)
+            val now = Clock.System.now().toEpochMilliseconds()
+            val normalizedTotal = totalBytes.coerceAtLeast(0L)
+            val updatedTracker = currentTracker.copy(totalBytes = normalizedTotal)
+            byteMetricTrackers[task.key] = updatedTracker
+            return putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = updatedTracker.displayCompleted(),
+                total = normalizedTotal,
+                now = now,
+                startedAtOverride = updatedTracker.startedAt,
+            )
+        }
     }
 
     fun beginRuntimeItemMetrics(task: Task, completed: Int = 0, total: Int): Boolean {
-        return beginRuntimeItemMetrics(task, completed, total, Clock.System.now().toEpochMilliseconds())
+        return withRuntimeMetricsLock {
+            return beginRuntimeItemMetrics(task, completed, total, Clock.System.now().toEpochMilliseconds())
+        }
     }
 
     fun beginRuntimeItemMetrics(task: Task, completed: Int = 0, total: Int, startedAt: Long): Boolean {
-        byteMetricTrackers.remove(task.key)
-        val now = Clock.System.now().toEpochMilliseconds()
-        val normalizedTotal = total.coerceAtLeast(0).toLong()
-        val normalizedCompleted = completed.coerceAtLeast(0).toLong().coerceAtMost(normalizedTotal)
-        val normalizedStartedAt = startedAt.takeIf { item -> item > 0L } ?: now
-        resetRuntimeMetricRateTracker(
-            taskKey = task.key,
-            kind = TASK_RUNTIME_METRIC_KIND_ITEMS,
-            total = normalizedTotal,
-            completed = normalizedCompleted,
-            sampleAt = normalizedStartedAt,
-        )
-        val etaMs = if (normalizedCompleted >= normalizedTotal) 0L else -1L
-        return putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_ITEMS,
-            completed = normalizedCompleted,
-            total = normalizedTotal,
-            now = now,
-            startedAtOverride = normalizedStartedAt,
-            presetSpeed = 0.0,
-            presetEtaMs = etaMs,
-        )
+        return withRuntimeMetricsLock {
+            byteMetricTrackers.remove(task.key)
+            val now = Clock.System.now().toEpochMilliseconds()
+            val normalizedTotal = total.coerceAtLeast(0).toLong()
+            val normalizedCompleted = completed.coerceAtLeast(0).toLong().coerceAtMost(normalizedTotal)
+            val normalizedStartedAt = startedAt.takeIf { item -> item > 0L } ?: now
+            resetRuntimeMetricRateTracker(
+                taskKey = task.key,
+                kind = TASK_RUNTIME_METRIC_KIND_ITEMS,
+                total = normalizedTotal,
+                completed = normalizedCompleted,
+                sampleAt = normalizedStartedAt,
+            )
+            val etaMs = if (normalizedCompleted >= normalizedTotal) 0L else -1L
+            return putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_ITEMS,
+                completed = normalizedCompleted,
+                total = normalizedTotal,
+                now = now,
+                startedAtOverride = normalizedStartedAt,
+                presetSpeed = 0.0,
+                presetEtaMs = etaMs,
+            )
+        }
     }
 
     fun beginRuntimeDirectoryItemMetrics(task: Task, completed: Int = 0, total: Int, startedAt: Long): Boolean {
@@ -785,82 +882,97 @@ class TaskState(
     }
 
     fun startRuntimeByteItem(task: Task, path: String, totalBytes: Long): Boolean {
-        if (usesRuntimeItemMetrics(task)) return false
-        val currentTracker = byteMetricTrackers[task.key]
-            ?: RuntimeByteMetricTracker(
-                totalBytes = currentRuntimeMetricTotal(task),
-                startedAt = currentRuntimeMetricStartedAt(task) ?: Clock.System.now().toEpochMilliseconds(),
-                completedBytes = currentRuntimeMetricCompleted(task),
-            )
-        val tracker = currentTracker.started(path, totalBytes)
-        byteMetricTrackers[task.key] = tracker
-        return putRuntimeByteProgress(task, path, 0L)
+        return withRuntimeMetricsLock {
+            val key = task.key to taskArtifactDisplayPath(task.key, path)
+            if (key !in runtimeProgressAt) runtimeProgressAt[key] = Clock.System.now().toEpochMilliseconds()
+            if (usesRuntimeItemMetrics(task)) return false
+            val currentTracker = byteMetricTrackers[task.key]
+                ?: RuntimeByteMetricTracker(
+                    totalBytes = currentRuntimeMetricTotal(task),
+                    startedAt = currentRuntimeMetricStartedAt(task) ?: Clock.System.now().toEpochMilliseconds(),
+                    completedBytes = currentRuntimeMetricCompleted(task),
+                )
+            val tracker = currentTracker.started(path, totalBytes)
+            byteMetricTrackers[task.key] = tracker
+            return putRuntimeByteProgress(task, path, 0L)
+        }
     }
 
     fun putRuntimeByteProgress(task: Task, path: String, transferredBytes: Long): Boolean {
-        if (usesRuntimeItemMetrics(task)) return false
-        val tracker = byteMetricTrackers[task.key] ?: return false
-        val updated = tracker.progress(path, transferredBytes)
-        byteMetricTrackers[task.key] = updated
-        return putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = updated.displayCompleted(),
-            total = updated.totalBytes,
-            now = Clock.System.now().toEpochMilliseconds(),
-            startedAtOverride = updated.startedAt,
-        )
+        return withRuntimeMetricsLock {
+            recordRuntimeByteProgress(task, path, transferredBytes)
+            if (usesRuntimeItemMetrics(task)) return false
+            val tracker = byteMetricTrackers[task.key] ?: return false
+            val updated = tracker.progress(path, transferredBytes)
+            byteMetricTrackers[task.key] = updated
+            return putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = updated.displayCompleted(),
+                total = updated.totalBytes,
+                now = Clock.System.now().toEpochMilliseconds(),
+                startedAtOverride = updated.startedAt,
+            )
+        }
     }
 
     fun finishRuntimeByteItem(task: Task, path: String, totalBytes: Long): Boolean {
-        if (usesRuntimeItemMetrics(task)) return false
-        val tracker = byteMetricTrackers[task.key] ?: return false
-        val updated = tracker.finished(path, totalBytes)
-        byteMetricTrackers[task.key] = updated
-        return putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = updated.displayCompleted(),
-            total = updated.totalBytes,
-            now = Clock.System.now().toEpochMilliseconds(),
-            startedAtOverride = updated.startedAt,
-        )
+        return withRuntimeMetricsLock {
+            if (usesRuntimeItemMetrics(task)) return false
+            val tracker = byteMetricTrackers[task.key] ?: return false
+            val updated = tracker.finished(path, totalBytes)
+            byteMetricTrackers[task.key] = updated
+            return putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = updated.displayCompleted(),
+                total = updated.totalBytes,
+                now = Clock.System.now().toEpochMilliseconds(),
+                startedAtOverride = updated.startedAt,
+            )
+        }
     }
 
     fun clearRuntimeByteItem(task: Task, path: String): Boolean {
-        if (usesRuntimeItemMetrics(task)) return false
-        val tracker = byteMetricTrackers[task.key] ?: return false
-        val updated = tracker.cleared(path)
-        byteMetricTrackers[task.key] = updated
-        return putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = updated.displayCompleted(),
-            total = updated.totalBytes,
-            now = Clock.System.now().toEpochMilliseconds(),
-            startedAtOverride = updated.startedAt,
-        )
+        return withRuntimeMetricsLock {
+            runtimeProgressBytes.remove(task.key to path)
+            runtimeProgressAt.remove(task.key to taskArtifactDisplayPath(task.key, path))
+            if (usesRuntimeItemMetrics(task)) return false
+            val tracker = byteMetricTrackers[task.key] ?: return false
+            val updated = tracker.cleared(path)
+            byteMetricTrackers[task.key] = updated
+            return putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = updated.displayCompleted(),
+                total = updated.totalBytes,
+                now = Clock.System.now().toEpochMilliseconds(),
+                startedAtOverride = updated.startedAt,
+            )
+        }
     }
 
     private fun updateRuntimeByteMetricFromMessage(task: Task, path: String, message: String) {
-        if (usesRuntimeItemMetrics(task)) return
-        val percent = TASK_PROGRESS_PERCENT_REGEX.find(message)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toDoubleOrNull()
-            ?: return
-        val tracker = byteMetricTrackers[task.key] ?: return
-        val updated = tracker.progressPercent(path, percent)
-        if (updated == tracker) return
-        byteMetricTrackers[task.key] = updated
-        putRuntimeMetricProgress(
-            task = task,
-            kind = TASK_RUNTIME_METRIC_KIND_BYTES,
-            completed = updated.displayCompleted(),
-            total = updated.totalBytes,
-            now = Clock.System.now().toEpochMilliseconds(),
-            startedAtOverride = updated.startedAt,
-        )
+        return withRuntimeMetricsLock {
+            if (usesRuntimeItemMetrics(task)) return
+            val percent = TASK_PROGRESS_PERCENT_REGEX.find(message)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toDoubleOrNull()
+                ?: return
+            val tracker = byteMetricTrackers[task.key] ?: return
+            val updated = tracker.progressPercent(path, percent)
+            if (updated == tracker) return
+            byteMetricTrackers[task.key] = updated
+            putRuntimeMetricProgress(
+                task = task,
+                kind = TASK_RUNTIME_METRIC_KIND_BYTES,
+                completed = updated.displayCompleted(),
+                total = updated.totalBytes,
+                now = Clock.System.now().toEpochMilliseconds(),
+                startedAtOverride = updated.startedAt,
+            )
+        }
     }
 
     private fun currentRuntimeMetricTotal(task: Task): Long {
@@ -898,48 +1010,50 @@ class TaskState(
         presetSpeed: Double? = null,
         presetEtaMs: Long? = null,
     ): Boolean {
-        val currentTask = getTask(task.key) ?: task
-        val normalizedTotal = total.coerceAtLeast(0L)
-        val normalizedCompleted = completed.coerceIn(0L, normalizedTotal)
-        val currentKind = currentTask.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY]
-        val currentTotal = currentTask.values[TASK_RUNTIME_METRIC_TOTAL_VALUE_KEY]?.toLongOrNull()
-        val startedAt = when {
-            startedAtOverride != null -> startedAtOverride
-            forceResetStart || currentKind != kind || currentTotal != normalizedTotal ->
-                now
+        return withRuntimeMetricsLock {
+            val currentTask = getTask(task.key) ?: task
+            val normalizedTotal = total.coerceAtLeast(0L)
+            val normalizedCompleted = completed.coerceIn(0L, normalizedTotal)
+            val currentKind = currentTask.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY]
+            val currentTotal = currentTask.values[TASK_RUNTIME_METRIC_TOTAL_VALUE_KEY]?.toLongOrNull()
+            val startedAt = when {
+                startedAtOverride != null -> startedAtOverride
+                forceResetStart || currentKind != kind || currentTotal != normalizedTotal ->
+                    now
 
-            else -> currentTask.values[TASK_RUNTIME_METRIC_STARTED_AT_VALUE_KEY]
-                ?.toLongOrNull()
-                ?.takeIf { item -> item > 0L }
-                ?: now
-        }
-        val rateSample = if (presetSpeed != null && presetEtaMs != null) {
-            TaskProgressRateSample(presetSpeed, presetEtaMs)
-        } else {
-            val rateTracker = runtimeMetricRateTracker(
-                task = currentTask,
+                else -> currentTask.values[TASK_RUNTIME_METRIC_STARTED_AT_VALUE_KEY]
+                    ?.toLongOrNull()
+                    ?.takeIf { item -> item > 0L }
+                    ?: now
+            }
+            val rateSample = if (presetSpeed != null && presetEtaMs != null) {
+                TaskProgressRateSample(presetSpeed, presetEtaMs)
+            } else {
+                val rateTracker = runtimeMetricRateTracker(
+                    task = currentTask,
+                    kind = kind,
+                    total = normalizedTotal,
+                    startedAt = startedAt,
+                    forceResetStart = forceResetStart,
+                )
+                rateTracker.sampler.update(
+                    completed = normalizedCompleted,
+                    total = normalizedTotal,
+                    now = now,
+                    force = normalizedTotal in 1..normalizedCompleted,
+                )
+            }
+            return putRuntimeMetricValues(
+                task = task,
                 kind = kind,
-                total = normalizedTotal,
-                startedAt = startedAt,
-                forceResetStart = forceResetStart,
-            )
-            rateTracker.sampler.update(
                 completed = normalizedCompleted,
                 total = normalizedTotal,
-                now = now,
-                force = normalizedTotal in 1..normalizedCompleted,
+                speed = rateSample.speedPerSecond,
+                etaMs = rateSample.etaMs,
+                startedAt = startedAt,
+                updatedAt = now,
             )
         }
-        return putRuntimeMetricValues(
-            task = task,
-            kind = kind,
-            completed = normalizedCompleted,
-            total = normalizedTotal,
-            speed = rateSample.speedPerSecond,
-            etaMs = rateSample.etaMs,
-            startedAt = startedAt,
-            updatedAt = now,
-        )
     }
 
     private fun runtimeMetricRateTracker(
@@ -949,33 +1063,35 @@ class TaskState(
         startedAt: Long,
         forceResetStart: Boolean,
     ): RuntimeMetricRateTracker {
-        val current = rateMetricTrackers[task.key]
-        if (!forceResetStart && current != null && current.kind == kind && current.total == total) {
-            return current
+        return withRuntimeMetricsLock {
+            val current = rateMetricTrackers[task.key]
+            if (!forceResetStart && current != null && current.kind == kind && current.total == total) {
+                return current
+            }
+            val baselineCompleted = if (task.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY] == kind) {
+                task.values[TASK_RUNTIME_METRIC_COMPLETED_VALUE_KEY]
+                    ?.toLongOrNull()
+                    ?.coerceIn(0L, total)
+                    ?: 0L
+            } else {
+                0L
+            }
+            val baselineAt = if (forceResetStart) {
+                startedAt
+            } else {
+                task.values[TASK_RUNTIME_METRIC_UPDATED_AT_VALUE_KEY]
+                    ?.toLongOrNull()
+                    ?.takeIf { item -> item > 0L }
+                    ?: startedAt
+            }
+            return resetRuntimeMetricRateTracker(
+                taskKey = task.key,
+                kind = kind,
+                total = total,
+                completed = baselineCompleted,
+                sampleAt = baselineAt,
+            )
         }
-        val baselineCompleted = if (task.values[TASK_RUNTIME_METRIC_KIND_VALUE_KEY] == kind) {
-            task.values[TASK_RUNTIME_METRIC_COMPLETED_VALUE_KEY]
-                ?.toLongOrNull()
-                ?.coerceIn(0L, total)
-                ?: 0L
-        } else {
-            0L
-        }
-        val baselineAt = if (forceResetStart) {
-            startedAt
-        } else {
-            task.values[TASK_RUNTIME_METRIC_UPDATED_AT_VALUE_KEY]
-                ?.toLongOrNull()
-                ?.takeIf { item -> item > 0L }
-                ?: startedAt
-        }
-        return resetRuntimeMetricRateTracker(
-            taskKey = task.key,
-            kind = kind,
-            total = total,
-            completed = baselineCompleted,
-            sampleAt = baselineAt,
-        )
     }
 
     private fun resetRuntimeMetricRateTracker(
@@ -985,21 +1101,27 @@ class TaskState(
         completed: Long,
         sampleAt: Long,
     ): RuntimeMetricRateTracker {
-        val tracker = RuntimeMetricRateTracker(
-            kind = kind,
-            total = total.coerceAtLeast(0L),
-            sampler = TaskProgressRateSampler(
-                initialCompleted = completed.coerceAtLeast(0L),
-                initialAt = sampleAt,
-            ),
-        )
-        rateMetricTrackers[taskKey] = tracker
-        return tracker
+        return withRuntimeMetricsLock {
+            val tracker = RuntimeMetricRateTracker(
+                kind = kind,
+                total = total.coerceAtLeast(0L),
+                sampler = TaskProgressRateSampler(
+                    initialCompleted = completed.coerceAtLeast(0L),
+                    initialAt = sampleAt,
+                ),
+            )
+            rateMetricTrackers[taskKey] = tracker
+            return tracker
+        }
     }
 
     private fun clearRuntimeMetricTrackers(taskKey: Long) {
-        byteMetricTrackers.remove(taskKey)
-        rateMetricTrackers.remove(taskKey)
+        return withRuntimeMetricsLock {
+            runtimeProgressAt.keys.removeAll { it.first == taskKey }
+            runtimeProgressBytes.keys.removeAll { it.first == taskKey }
+            byteMetricTrackers.remove(taskKey)
+            rateMetricTrackers.remove(taskKey)
+        }
     }
 
     private fun putRuntimeMetricValues(
@@ -1600,6 +1722,10 @@ class TaskState(
 
     /** The scheduler invokes this only after all writer finally blocks have completed. */
     private fun finalizeCompletedTask(taskKey: Long, cancelledBeforeStart: Boolean) {
+        if (isTaskCancelled(taskKey)) {
+            StorageUploadSessions.removeTask(taskKey)
+            deletionScope.launch { StorageContentPlatform.cleanup(taskKey) }
+        }
         val currentTask = getTask(taskKey)
         if (currentTask?.status in setOf(StatusEnum.SUCCESS, StatusEnum.FAILURE) && !shutdownStarted.value) {
             scheduleTaskResidualCheck(taskKey, cancelledBeforeStart = cancelledBeforeStart)
@@ -1613,7 +1739,11 @@ class TaskState(
         val writer = externalTaskWriters.value[task.key]
         externalTaskWriters.update { it - task.key }
         writer?.complete(Unit)
-        if (cancelled) updateStatus(task, StatusEnum.FAILURE)
+        if (cancelled) {
+            StorageUploadSessions.removeTask(task.key)
+            deletionScope.launch { StorageContentPlatform.cleanup(task.key) }
+            updateStatus(task, StatusEnum.FAILURE)
+        }
         if (!shutdownStarted.value && task.key !in interruptedExternalTaskKeys.value) scheduleTaskResidualCheck(task.key)
     }
 

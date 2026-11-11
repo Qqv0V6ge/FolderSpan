@@ -15,6 +15,68 @@ import kotlin.test.assertTrue
 import strings.AppStrings
 
 class FileUtilsJvmTest {
+    @Test fun emptyDirectoryDeletionPreservesNewChildrenFilesAndLinks(): Unit = runBlocking {
+        withTempDir("fileutils-empty-") { root ->
+            val directory = File(root, "directory").apply { mkdir() }
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Denied, directory.path).isFailure)
+            assertTrue(directory.isDirectory)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, directory.path).getOrThrow())
+            directory.mkdir()
+            val newChild = File(directory, "new").apply { writeText("keep") }
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, directory.path).isFailure)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, newChild.path).isFailure)
+            assertEquals("keep", newChild.readText())
+            val empty = File(root, "empty").apply { mkdir() }
+            val link = Files.createSymbolicLink(File(root, "link").toPath(), empty.toPath())
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, link.toString()).isFailure)
+            val nested = File(empty, "nested").apply { mkdir() }
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, link.resolve("nested").toString()).isFailure)
+            assertTrue(nested.isDirectory)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, File(root, "missing").path).isFailure)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, root.toPath().root.toString()).isFailure)
+        }
+    }
+
+    @Test fun movePreservesContentAndNeverOverwritesOrFollowsLinks() = runBlocking {
+        withTempDir("fileutils-jvm-move-") { directory ->
+            val first = File(directory, "first").apply { writeText("original") }
+            val renamed = File(directory, "renamed")
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, first.path, renamed.path).getOrThrow())
+            val folder = File(directory, "folder").apply { mkdir() }
+            val moved = File(folder, "moved")
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, renamed.path, moved.path).getOrThrow())
+            assertEquals("original", moved.readText())
+            val occupied = File(directory, "occupied").apply { writeText("keep") }
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, moved.path, occupied.path).isFailure)
+            assertTrue(FileUtils.move(FileAccessPermission.Denied, moved.path, renamed.path).isFailure)
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, moved.path, File(directory, "missing/leaf").path).isFailure)
+            assertEquals("original", moved.readText())
+            assertEquals("keep", occupied.readText())
+            val link = Files.createSymbolicLink(File(directory, "link").toPath(), folder.toPath())
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, link.resolve("moved").toString(), renamed.path).isFailure)
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, moved.path, link.resolve("new").toString()).isFailure)
+            assertTrue(FileUtils.move(FileAccessPermission.Allowed, folder.path, File(folder, "inside").path).isFailure)
+            assertEquals("original", moved.readText())
+        }
+    }
+
+    @Test
+    fun setModifiedTimeReadsBackAndRejectsDeniedMissingAndLinkTargets() = runBlocking {
+        withTempDir("fileutils-jvm-modified-") { directory ->
+            val file = File(directory, "photo.jpg").apply { writeText("photo") }
+            val millis = 1_700_000_000_123L
+            assertTrue(FileUtils.setLastModified(FileAccessPermission.Allowed, file.absolutePath, millis).getOrThrow())
+            assertEquals(millis, Files.getLastModifiedTime(file.toPath()).toMillis())
+            assertTrue(FileUtils.setLastModified(FileAccessPermission.Denied, file.absolutePath, millis + 1000).isFailure)
+            assertTrue(FileUtils.setLastModified(FileAccessPermission.Allowed, File(directory, "missing").absolutePath, millis).isFailure)
+            val link = File(directory, "link.jpg").toPath()
+            Files.createSymbolicLink(link, file.toPath())
+            assertTrue(FileUtils.setLastModified(FileAccessPermission.Allowed, link.toString(), millis + 1000).isFailure)
+            assertEquals(millis, Files.getLastModifiedTime(file.toPath()).toMillis())
+            assertEquals("photo", file.readText())
+        }
+    }
+
     @Test
     fun writeBytesCreatesFileAndWritesAtZeroOffset() = runBlocking {
         withTempDir("fileutils-jvm-create-") { tempDir ->

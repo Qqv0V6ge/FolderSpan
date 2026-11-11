@@ -62,9 +62,14 @@ class FileState : KoinComponent {
     private val fileRecentState: FileRecentState by inject()
     private val shareHistoryStore: ShareHistoryStore by inject()
     val deviceState: DeviceState by inject()
-    private val networkState: NetworkState by inject()
+    internal val networkState: NetworkState by inject()
     private val mainState: MainState by inject()
     val mainScope = MainScope()
+    internal val copyDestinationController by lazy { FileCopyDestinationController(this) }
+
+    fun createCopyDestinationRequest(files: List<FileSimpleInfo>, sourceDesk: DiskBase? = null): CopyDestinationRequest =
+        copyDestinationController.create(files, sourceDesk)
+
     private val webRtcBrowserZipDownloader by lazy {
         FileStateWebRtcBrowserZipDownloader(
             taskState = taskState,
@@ -104,12 +109,14 @@ class FileState : KoinComponent {
         FileStateEntryReader(
             currentDesk = { _deskType.value },
             directoryCollector = directoryCollector,
+            networkDirectory = ::networkDirectory,
         )
     }
     private val basicOperations by lazy {
         FileStateBasicOperations(
             currentDesk = { _deskType.value },
             updateFileAndFolder = { updateFileAndFolder() },
+            directoryReference = { path -> networkDirectory(_deskType.value, path) },
         )
     }
     private val deskSwitcher by lazy {
@@ -182,6 +189,7 @@ class FileState : KoinComponent {
     }
     private val runtimeTaskExecutor by lazy {
         FileRuntimeTaskExecutor(
+            validateCopyDestination = { task, file -> copyDestinationController.validateTask(task, file) },
             taskState = taskState,
             deviceState = deviceState,
             directoryCollector = directoryCollector,
@@ -195,7 +203,7 @@ class FileState : KoinComponent {
             resolveNetworkAccess = { preferredDesk, protocolId -> resolveNetworkAccess(preferredDesk, protocolId) },
         )
     }
-    private val pasteTaskExecutor by lazy {
+    internal val pasteTaskExecutor by lazy {
         FilePasteTaskExecutor(
             taskState = taskState,
             webRtcBrowserZipDownloader = webRtcBrowserZipDownloader,
@@ -399,6 +407,21 @@ class FileState : KoinComponent {
         updateFileAndFolder()
     }
 
+    private val networkDirectories = mutableMapOf<String, MutableMap<String, FileSimpleInfo>>()
+
+    private fun networkDirectory(desk: DiskBase, path: String): FileSimpleInfo? =
+        networkDirectories[buildDiskPathKey(desk)]?.get(path)
+
+    suspend fun updatePath(directory: FileSimpleInfo) {
+        val desk = _deskType.value
+        if (desk is NetworkAccess && directory.protocolId == desk.protocolId) {
+            val references = networkDirectories.getOrPut(buildDiskPathKey(desk)) { mutableMapOf() }
+            references.keys.filter { it == directory.path || it.startsWith(directory.path.trimEnd('/') + "/") }.forEach(references::remove)
+            references[directory.path] = directory
+        }
+        updatePath(directory.path)
+    }
+
     private val _path: MutableStateFlow<String> = MutableStateFlow(homePath)
     val path: StateFlow<String> = _path
 
@@ -406,6 +429,9 @@ class FileState : KoinComponent {
     suspend fun updatePath(value: String) {
         cancelListRequestsForDesk(_deskType.value)
         _path.value = value
+        networkDirectories[buildDiskPathKey(_deskType.value)]?.let { references ->
+            references.keys.filter { it != value && !value.startsWith(it.trimEnd('/') + "/") }.forEach(references::remove)
+        }
         val pathInfo =
             _rootPaths.value
                 .sortedByDescending { it.path.pathLevel() }
@@ -673,6 +699,8 @@ class FileState : KoinComponent {
     // 重命名文件或文件夹
     suspend fun rename(path: String, oldName: String, newName: String): Result<Boolean> =
         basicOperations.rename(path, oldName, newName)
+
+    suspend fun rename(file: FileSimpleInfo, newName: String): Result<Boolean> = basicOperations.rename(file, newName)
 
     // 创建文件夹
     suspend fun createFolder(path: String, name: String): Result<Boolean> =

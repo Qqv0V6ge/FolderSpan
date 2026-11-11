@@ -42,7 +42,8 @@ object AppRoutePayloadStore {
 
     fun release(route: AppRoute) {
         if (route is AppRoute.Payload) {
-            payloads.remove(route.payloadId)
+            val screen = payloads.remove(route.payloadId)
+            if (screen is AutoCloseable && payloads.values.none { it === screen }) screen.close()
         }
     }
 

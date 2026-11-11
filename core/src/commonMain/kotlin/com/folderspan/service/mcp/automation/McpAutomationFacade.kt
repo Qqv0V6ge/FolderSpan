@@ -42,6 +42,9 @@ import com.folderspan.ui.state.main.NetworkState
 import com.folderspan.ui.state.main.SyncRunStatus
 import com.folderspan.ui.state.main.SyncState
 import com.folderspan.ui.state.main.SyncTask
+import com.folderspan.ui.state.main.SyncMode
+import com.folderspan.ui.state.main.requiresSyncPreview
+import com.folderspan.ui.state.main.requestSyncPreviewConfirmation
 import com.folderspan.ui.state.main.Task
 import com.folderspan.ui.state.main.TaskState
 import com.folderspan.utils.SyncSnapshotChangeNotifier
@@ -519,20 +522,43 @@ data class McpSyncTaskDto(
     val lastStatus: String,
     val lastRunAt: Long,
     val nextRunAt: Long,
+    val ownedByCurrentDevice: Boolean = true,
+    val ownerDeviceName: String = "",
+    val mode: String = "update",
+    val pendingState: String = "none",
 )
 
 class McpSyncFacade(private val state: SyncState) {
     fun list(cursor: String?, limit: Int?): McpPage<McpSyncTaskDto> = catchingSync {
-        McpOpaqueCursor.page(state.snapshotTasks().map(SyncTask::toMcpDto), cursor, limit)
+        McpOpaqueCursor.page(state.snapshotTasks().map(::dto), cursor, limit)
     }
 
     fun run(id: Long): McpSyncTaskDto = catchingSync {
         val current = state.getTask(id) ?: throw NoSuchElementException()
+        if (!state.isTaskOwnedByCurrentDevice(current)) {
+            throw McpAutomationException("invalid_state", "sync task belongs to " + current.ownerDeviceName.ifBlank { current.ownerDeviceId })
+        }
+        if (state.requiresSyncPreview(current)) {
+            state.requestSyncPreviewConfirmation(id)
+            throw McpAutomationException("invalid_state", "sync task requires preview confirmation")
+        }
         if (current.lastStatus == SyncRunStatus.Running || current.lastStatus == SyncRunStatus.Queued) {
             throw McpAutomationException("conflict", "sync task is already active")
         }
-        state.runNowIfIdle(id)?.toMcpDto()
-            ?: throw McpAutomationException("conflict", "sync task is already active")
+        val accepted = state.runNowIfIdle(id) ?: throw McpAutomationException("conflict", "sync task is already active")
+        dto(accepted)
+    }
+
+    private fun dto(task: SyncTask): McpSyncTaskDto {
+        val owned = state.isTaskOwnedByCurrentDevice(task)
+        val pending = when {
+            !owned -> "none"
+            state.requiresSyncPreview(task) -> "preview_required"
+            task.id in state.waitingRunConditions -> "waiting_conditions"
+            (state.taskAttention[task.id]?.pendingDeletionCount ?: 0) > 0 -> "pending_deletions"
+            else -> "none"
+        }
+        return task.toMcpDto(owned, pending)
     }
 }
 
@@ -963,7 +989,7 @@ private fun SocketDevice.toMcpDto(approvalRequired: Boolean): McpDeviceDto = Mcp
     },
 )
 
-private fun SyncTask.toMcpDto(): McpSyncTaskDto = McpSyncTaskDto(
+private fun SyncTask.toMcpDto(ownedByCurrentDevice: Boolean, pendingState: String): McpSyncTaskDto = McpSyncTaskDto(
     id = id,
     name = name,
     enabled = enabled,
@@ -976,4 +1002,13 @@ private fun SyncTask.toMcpDto(): McpSyncTaskDto = McpSyncTaskDto(
     lastStatus = lastStatus.name.lowercase(),
     lastRunAt = lastRunAt,
     nextRunAt = nextRunAt,
+    ownedByCurrentDevice = ownedByCurrentDevice,
+    ownerDeviceName = ownerDeviceName,
+    mode = when (mode) {
+        SyncMode.Update -> "update"
+        SyncMode.Mirror -> "mirror"
+        SyncMode.BackupThenClean -> "backup_then_clean"
+        SyncMode.Bidirectional -> "bidirectional"
+    },
+    pendingState = pendingState,
 )

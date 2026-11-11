@@ -10,6 +10,24 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class FileUtilsIosTest {
+    @Test fun emptyDirectoryDeletionNeverRemovesFilesOrNonEmptyDirectories(): Unit = runBlocking {
+        val directory = "${NSTemporaryDirectory().trimEnd('/')}/empty-${NSUUID().UUIDString}"
+        val child = "$directory/new.txt"
+        try {
+            assertTrue(FileUtils.createFolder(FileAccessPermission.Allowed, directory).getOrThrow())
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Denied, directory).isFailure)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, directory).getOrThrow())
+            assertTrue(FileUtils.createFolder(FileAccessPermission.Allowed, directory).getOrThrow())
+            assertTrue(FileUtils.writeBytes(FileAccessPermission.Allowed, child, 4, "keep".encodeToByteArray(), 0).getOrThrow())
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, directory).isFailure)
+            assertTrue(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, child).isFailure)
+            assertContentEquals("keep".encodeToByteArray(), FileUtils.readFile(FileAccessPermission.Allowed, child).getOrThrow())
+        } finally {
+            FileUtils.deleteFile(FileAccessPermission.Allowed, child)
+            FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, directory)
+        }
+    }
+
     @Test
     fun rangeFlowFirstOrNullReturnsTheFirstChunk() = runBlocking {
         val bytes = "FolderSpan iOS range read".encodeToByteArray()

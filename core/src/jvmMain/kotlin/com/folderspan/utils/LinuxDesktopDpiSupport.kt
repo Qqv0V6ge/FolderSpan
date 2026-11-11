@@ -2,6 +2,7 @@ package com.folderspan.utils
 
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
+import java.awt.Toolkit
 import java.io.StringReader
 import java.nio.file.Files
 import java.nio.file.Path
@@ -25,6 +26,7 @@ internal object LinuxDesktopDpiSupport {
         if (!DesktopDpiSupport.isLinuxOs(osName)) return null
 
         return LinuxDesktopScaleDetection(
+            gnomeXSettingsScale = readGnomeXSettingsScale(),
             gnomeDisplayConfigScale = readGnomeDisplayConfigScale(),
             gnomeMonitorsXmlScale = readGnomeMonitorsXmlScale(),
             gnomeSettingsScale = readGnomeSettingsScale(),
@@ -40,6 +42,16 @@ internal object LinuxDesktopDpiSupport {
             deepinWindowScale = readDeepinWindowScale(),
             deepinXftDpiScale = readDeepinXftDpiScale()
         )
+    }
+
+    private fun readGnomeXSettingsScale(): Float? {
+        if (!isGnomeSession()) return null
+        // XWayland may render at 200% for a 125% monitor; XSettings also works inside Flatpak.
+        return runCatching {
+            (Toolkit.getDefaultToolkit().getDesktopProperty("gnome.Gdk/WindowScalingFactor") as? Number)
+                ?.toFloat()
+                ?.let(DesktopDpiSupport::sanitizeScale)
+        }.getOrNull()
     }
 
     internal fun readGnomeDisplayConfigScale(): Float? {
@@ -502,6 +514,7 @@ internal object LinuxDesktopDpiSupport {
 }
 
 internal data class LinuxDesktopScaleDetection(
+    val gnomeXSettingsScale: Float?,
     val gnomeDisplayConfigScale: Float?,
     val gnomeMonitorsXmlScale: Float?,
     val gnomeSettingsScale: Float?,
@@ -518,7 +531,8 @@ internal data class LinuxDesktopScaleDetection(
     val deepinXftDpiScale: Float?
 ) {
     val selectedScale: Float?
-        get() = gnomeDisplayConfigScale
+        get() = gnomeXSettingsScale
+            ?: gnomeDisplayConfigScale
             ?: gnomeMonitorsXmlScale
             ?: gnomeSettingsScale
             ?: kdeKscreenDoctorScale
@@ -535,6 +549,7 @@ internal data class LinuxDesktopScaleDetection(
 
     fun asLogFields(): String {
         return buildString {
+            append("gnomeXSettings=${gnomeXSettingsScale?.let(DesktopDpiSupport::formatScale) ?: "unknown"}, ")
             append("gnomeDisplay=${gnomeDisplayConfigScale?.let(DesktopDpiSupport::formatScale) ?: "unknown"}, ")
             append("gnomeXml=${gnomeMonitorsXmlScale?.let(DesktopDpiSupport::formatScale) ?: "unknown"}, ")
             append("gnomeSettings=${gnomeSettingsScale?.let(DesktopDpiSupport::formatScale) ?: "unknown"}, ")

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS SyncPendingDeletion (
+    taskId INTEGER NOT NULL,
+    participant TEXT NOT NULL,
+    relativePath TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    runId INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, participant, relativePath)
+);
+
+upsert:
+INSERT OR REPLACE INTO SyncPendingDeletion(taskId, participant, relativePath, fingerprint, runId, payload) VALUES (?, ?, ?, ?, ?, ?);
+
+selectPage:
+SELECT * FROM SyncPendingDeletion WHERE taskId = :taskId AND fingerprint = :fingerprint ORDER BY participant, relativePath LIMIT :pageLimit OFFSET :pageOffset;
+
+countTask:
+SELECT count(*) FROM SyncPendingDeletion WHERE taskId = ?;
+
+deleteTask:
+DELETE FROM SyncPendingDeletion WHERE taskId = ?;

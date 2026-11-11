@@ -144,6 +144,11 @@ internal fun errorLogNotificationActions(platformType: DeviceType): List<Notific
 }
 
 internal fun notificationActionsFor(payloadData: NotificationPayload): List<NotificationAction> {
+    if (payloadData[RequestNotificationFactory.META_NOTIFICATION_KIND] == SYNC_RUN_NOTIFICATION_KIND) {
+        val target = syncNotificationTarget(payloadData) ?: return emptyList()
+        return listOf(NotificationAction(if (target.opensPreview) NotificationActionKeys.ACTION_VIEW else NotificationActionKeys.ACTION_OPEN,
+            AppStrings.android_action_view))
+    }
     if (RequestNotificationFactory.isErrorLogMetadata(payloadData)) {
         return errorLogNotificationActions(PlatformType)
     }

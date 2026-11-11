@@ -1,5 +1,7 @@
 package com.folderspan.service.webui
 
+import com.folderspan.service.network.StorageContentErrorCode
+import com.folderspan.service.network.StorageContentException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
@@ -14,6 +16,12 @@ object WebUiPlatformClient {
         lateinit var worker: Job
     }
     internal var connection: WebUiManagementConnection? = null
+        set(value) {
+            if (field !== value) {
+                field = value
+                WebUiAttachment.advanceSessionGeneration()
+            }
+        }
     private val listeners = mutableMapOf<String, Listener>()
 
     suspend fun register(handle: String, failed: (Throwable) -> Unit, event: suspend (WebUiPlatformEvent) -> ByteArray) {
@@ -74,11 +82,14 @@ object WebUiPlatformClient {
         val target = checkNotNull(WebUiAttachment.target) { "Select a Runtime before using host services" }
         val token = WebUiAttachment.sessionToken
         check(token.isNotBlank()) { "Runtime login required" }
-        val result = if (isWebUiBodyRoute(method, path)) WebUiBrowserHttp.exchange(method, target.httpUrl(path), mapOf(
+        val management = if (isWebUiBodyRoute(method, path)) null
+            else checkNotNull(connection) { "Runtime management connection required" }
+        val result = if (management == null) WebUiBrowserHttp.exchange(method, target.httpUrl(path), mapOf(
             WEB_UI_SESSION_HEADER to token, WEB_UI_PROTOCOL_HEADER to WEB_UI_PROTOCOL_VERSION.toString(),
         ), body, contentType)
-        else checkNotNull(connection) { "Runtime management connection required" }.request(method, path, body, contentType)
-        check(WebUiAttachment.target == target && WebUiAttachment.sessionToken == token) { "Runtime session changed" }
+        else management.request(method, path, body, contentType)
+        check(WebUiAttachment.target == target && WebUiAttachment.sessionToken == token &&
+            (management == null || connection === management)) { "Runtime session changed" }
         if (result.status == 401) {
             WebUiAttachment.hasSession = false
             WebUiAttachment.connected = false
@@ -87,6 +98,13 @@ object WebUiPlatformClient {
         if (result.status !in 200..299) {
             val failure = runCatching { json.decodeFromString<WebUiJsonError>(result.body.decodeToString()) }.getOrNull()
             val message = failure?.error ?: "Runtime HTTP ${result.status}"
+            if (path.substringBefore('?').startsWith("$WEB_UI_PLATFORM_PATH/storage/content/") &&
+                failure?.code?.startsWith(STORAGE_CONTENT_ERROR_PREFIX) == true) {
+                val contentCode = StorageContentErrorCode.entries.firstOrNull {
+                    it.name == failure.code.removePrefix(STORAGE_CONTENT_ERROR_PREFIX)
+                }
+                if (contentCode != null) throw StorageContentException(contentCode, message)
+            }
             if (result.status == 403) throw com.folderspan.exception.AuthorityException(message)
             val code = com.folderspan.service.mcp.file.FileEndpointErrorCode.entries.firstOrNull { it.wireValue == failure?.code }
             if (code != null) throw com.folderspan.service.mcp.file.FileEndpointException(code, message)

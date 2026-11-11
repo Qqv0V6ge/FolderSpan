@@ -1,5 +1,6 @@
 package com.folderspan.service.network
 
+import java.nio.file.attribute.FileTime
 import strings.AppStrings
 
 import com.folderspan.PlatformType
@@ -38,7 +39,7 @@ internal class SftpNetworkClient(
     private val network: NetworkConnectionConfig,
     private val hostKeyTrust: SftpHostKeyTrust? = SftpHostKeyTrust.shared,
     private val verifyHostKey: suspend (SftpHostKey) -> Boolean = { checkNotNull(hostKeyTrust).verify(it) },
-) : NetworkClient, ChunkReadableNetworkClient {
+) : StorageProvider, ChunkReadableNetworkClient {
     private suspend fun <T> withClient(block: suspend (SftpClient) -> T): Result<T> =
         hostKeyTrust?.withTrust { withClientAttempt(block) } ?: withClientAttempt(block)
 
@@ -252,11 +253,23 @@ internal class SftpNetworkClient(
         }
     }
 
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> = withClient { client ->
+        require(millis > 0) { "Invalid modification time" }
+        val time = FileTime.fromMillis(millis)
+        client.setStat(checkedPath(client, path), SftpClient.Attributes().accessTime(time).modifyTime(time))
+        true
+    }
+
     override suspend fun rename(path: String, newPath: String): Result<Boolean> {
         return withClient { client ->
             client.rename(checkedPath(client, path), checkedPath(client, newPath, allowMissingLeaf = true))
             true
         }
+    }
+
+    override suspend fun deleteEmptyDirectory(path: String): Result<Boolean> = withClient { client ->
+        client.rmdir(checkedPath(client, checkedEmptyDirectoryDeletionPath(path)))
+        true
     }
 
     override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> {

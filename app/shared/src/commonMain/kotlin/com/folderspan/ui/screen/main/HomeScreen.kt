@@ -37,6 +37,7 @@ import com.folderspan.ui.components.dialog.*
 import com.folderspan.ui.components.file.FileIcon
 import com.folderspan.ui.components.file.FileMenu
 import com.folderspan.ui.components.scaffold.AppScaffold
+import com.folderspan.ui.screen.file.CopyDestinationScreen
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.currentOrThrow
 import com.folderspan.ui.screen.file.FileScreen
@@ -515,6 +516,10 @@ object HomeScreen : AppScreenRoute {
                     permission = menuPermission,
                     isFavorite = isAllFavorite,
                     onCopy = { homeState.copyFile() },
+                    onStorageCopy = {
+                        runCatching { navigator.push(CopyDestinationScreen(fileState.createCopyDestinationRequest(selectedFiles.map { it.copy() }, deskType))) }
+                            .onFailure { error -> scope.launch { snackbarHostState.showSnackbar(error.message ?: AppStrings.ui_source_endpoint_unavailable) } }
+                    },
                     onMove = { homeState.moveFile() },
                     onDelete = {
                         val filesToDelete = selectedFiles.toList()

@@ -45,6 +45,9 @@ expect object FileUtils {
      */
     suspend fun deleteFile(permission: FileAccessPermission, path: String): Result<Boolean>
 
+    /** Rejects files, links and non-empty directories, including entries added after scanning. */
+    suspend fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean>
+
     /**
      * 计算指定路径的总空间大小。
      *
@@ -77,6 +80,10 @@ expect object FileUtils {
      * @param newName 重命名后的新名称。
      * @return 包含操作结果的 [Result]，如果重命名成功返回 true，否则返回 false。
      */
+    suspend fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean>
+
+    suspend fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean>
+
     suspend fun rename(permission: FileAccessPermission, path: String, oldName: String, newName: String): Result<Boolean>
 
     /**

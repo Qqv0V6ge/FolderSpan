@@ -97,7 +97,7 @@ class TempTaskCleanupStore(
 }
 
 internal data class LocalTaskArtifactIdentity(val identity: String, val fingerprint: String)
-internal data class LocalTaskArtifactDescription(val sizeBytes: Long?)
+internal data class LocalTaskArtifactDescription(val sizeBytes: Long?, val identity: String = "")
 
 /** Platforms without exclusive creation and stable identity explicitly fall back to retention. */
 internal expect object LocalTaskArtifacts {

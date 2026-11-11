@@ -14,6 +14,7 @@ import com.folderspan.ui.state.device.DeviceSharePathScope
 import com.folderspan.utils.ProtoBufCodec
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.protobuf.ProtoNumber
 
 internal const val DEVICE_SESSION_RPC_CONNECT = "Connect"
@@ -32,7 +33,10 @@ internal const val DEVICE_SESSION_RPC_DELETE = "Delete"
 internal const val DEVICE_SESSION_RPC_COPY_PATH = "CopyPath"
 internal const val DEVICE_SESSION_RPC_COPY_CONTROL = "CopyControl"
 internal const val DEVICE_SESSION_RPC_COPY_PROGRESS = "CopyProgress"
+internal const val DEVICE_SESSION_RPC_SUBSCRIBE_TRANSFER_FEEDBACK = "SubscribeTransferFeedback"
+internal const val DEVICE_SESSION_RPC_TRANSFER_FEEDBACK = "TransferFeedback"
 internal const val DEVICE_SESSION_RPC_GET_FILE_BY_PATH = "GetFileByPath"
+internal const val DEVICE_SESSION_RPC_CHECK_DIRECTORY_WRITE_ACCESS = "CheckDirectoryWriteAccess"
 internal const val DEVICE_SESSION_RPC_GET_FILE_INFO_BY_PATH = "GetFileInfoByPath"
 internal const val DEVICE_SESSION_RPC_GET_FILE_BY_PATH_AND_NAME = "GetFileByPathAndName"
 internal const val DEVICE_SESSION_RPC_GET_FILE_INFO_BY_PATH_AND_NAME = "GetFileInfoByPathAndName"
@@ -73,8 +77,20 @@ internal fun isDeviceSessionRpcAllowedBeforeAuthorization(method: String): Boole
     return method == DEVICE_SESSION_RPC_CONNECT || method == DEVICE_SESSION_RPC_IDENTIFY
 }
 
+private val deviceSessionTransferMethods = setOf(
+    DEVICE_SESSION_RPC_ROOT_PATHS, DEVICE_SESSION_RPC_LIST_PATH, DEVICE_SESSION_RPC_PATH_EXISTS,
+    DEVICE_SESSION_RPC_CREATE_DIRECTORY, DEVICE_SESSION_RPC_DELETE_DIRECTORY, DEVICE_SESSION_RPC_CREATE_FOLDERS,
+    DEVICE_SESSION_RPC_CREATE_EMPTY_DIRECTORIES, DEVICE_SESSION_RPC_CREATE_FILES, DEVICE_SESSION_RPC_RENAME,
+    DEVICE_SESSION_RPC_DELETE, DEVICE_SESSION_RPC_COPY_PATH, DEVICE_SESSION_RPC_GET_FILE_BY_PATH,
+    DEVICE_SESSION_RPC_GET_FILE_INFO_BY_PATH, DEVICE_SESSION_RPC_GET_FILE_BY_PATH_AND_NAME,
+    DEVICE_SESSION_RPC_GET_FILE_INFO_BY_PATH_AND_NAME, DEVICE_SESSION_RPC_READ_FILE_LINES, DEVICE_SESSION_RPC_APPEND_TO_FILE,
+)
+
+internal fun isDeviceSessionTransferRpc(method: String): Boolean = method in deviceSessionTransferMethods
+
 internal fun isDeviceShareSessionRpcAllowed(method: String): Boolean {
-    return method == DEVICE_SESSION_RPC_ROOT_PATHS || method == DEVICE_SESSION_RPC_LIST_PATH
+    return method == DEVICE_SESSION_RPC_ROOT_PATHS || method == DEVICE_SESSION_RPC_LIST_PATH ||
+        method == DEVICE_SESSION_RPC_SUBSCRIBE_TRANSFER_FEEDBACK || method == DEVICE_SESSION_RPC_TRANSFER_FEEDBACK
 }
 
 internal fun isDeviceShareSessionStreamAllowed(kind: String): Boolean {
@@ -131,6 +147,7 @@ internal data class DeviceSessionConnectResponse(
     @ProtoNumber(2) val maxFileStreams: Int,
     @ProtoNumber(3) val recommendedChunkBytes: Int,
     @ProtoNumber(4) val archiveCapabilities: FolderSpanArchiveStreamCapabilities,
+    @ProtoNumber(5) val supportsTransferFeedback: Boolean = false,
 ) {
     init {
         require(maxFileStreams > 0) { "maxFileStreams must be positive" }
@@ -161,6 +178,8 @@ internal data class DeviceSessionControlRequest(
     @ProtoNumber(2) val method: String,
     @ProtoNumber(3) val payload: ByteArray = ByteArray(0),
 ) {
+    @Transient
+    var receivedAtMillis: Long? = null
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is DeviceSessionControlRequest) return false
@@ -317,13 +336,24 @@ internal class DeviceSessionControlAssembler(
     private val maxMessageBytes: Int = DEVICE_SESSION_CONTROL_MAX_MESSAGE_BYTES,
 ) {
     private var buffer = ByteArray(0)
+    private var pendingReceivedAtMillis: Long? = null
+    var messageReceivedAtMillis: Long? = null
+        private set
 
     fun reset() {
         buffer = ByteArray(0)
+        pendingReceivedAtMillis = null
+        messageReceivedAtMillis = null
     }
 
-    fun push(chunk: ByteArray): List<ByteArray> {
+    fun push(chunk: ByteArray): List<ByteArray> = push(chunk, null)
+
+    fun push(chunk: ByteArray, receivedAtMillis: Long?): List<ByteArray> {
         if (chunk.isEmpty()) return emptyList()
+        val oldest = if (buffer.isEmpty()) receivedAtMillis else
+            listOfNotNull(pendingReceivedAtMillis, receivedAtMillis).minOrNull()
+        pendingReceivedAtMillis = oldest
+        messageReceivedAtMillis = oldest
         if (buffer.size + chunk.size > maxMessageBytes + 4) {
             reset()
             throw DeviceSessionIoException("control assembler overflow")
@@ -351,6 +381,7 @@ internal class DeviceSessionControlAssembler(
         } else {
             buffer.copyOfRange(offset, buffer.size)
         }
+        if (buffer.isEmpty()) pendingReceivedAtMillis = null
         return messages
     }
 }

@@ -55,6 +55,7 @@ import com.folderspan.service.http.tls.TrustedDeviceCertificateStore
 import com.folderspan.service.http.tls.createDeviceIdentityProof
 import com.folderspan.service.http.tls.normalizeTlsFingerprintSha256
 import com.folderspan.service.message.DeviceMessageClient
+import com.folderspan.service.operation.reportOperationFailure
 import com.folderspan.service.operation.HttpTransferStatus
 import com.folderspan.service.http.archive.FolderSpanArchiveReadRequest
 import com.folderspan.service.http.archive.FolderSpanArchiveStreamCapabilities
@@ -74,6 +75,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -523,26 +525,33 @@ internal fun createDeviceSessionClients(
     peer: DeviceSessionPeer,
     transferStatus: HttpTransferStatus,
     archiveCapabilities: FolderSpanArchiveStreamCapabilities,
+    transferStatusProvider: (() -> HttpTransferStatus)? = null,
 ): DeviceSessionClients = DeviceSessionClients(
     peer = peer,
     transferStatus = transferStatus,
     archiveCapabilities = archiveCapabilities,
+    transferStatusProvider = transferStatusProvider,
 )
 
 internal class DeviceSessionClients(
     private val peer: DeviceSessionPeer,
     private val transferStatus: HttpTransferStatus,
     private val archiveCapabilities: FolderSpanArchiveStreamCapabilities,
-) : ContinuousRangeDeviceFileClient, DevicePathClient, DeviceBookmarkClient, HostDeviceFileClient {
+    private val transferStatusProvider: (() -> HttpTransferStatus)? = null,
+) : ContinuousRangeDeviceFileClient, DevicePathClient, DeviceBookmarkClient, HostDeviceFileClient, DeviceTransferBudgetOwner {
+    override val transferBudget get() = peer.transferBudget
+    init { transferBudget.bind(transferStatus.maxParallelRequests) { this.transferStatus() } }
     override val hostTransfersAvailable: Boolean get() = peer.connection.supportsHostTransfers
 
+    @Volatile private var directoryWriteCheckUnsupported = false
+
     override suspend fun hostFileTransfer(open: DeviceSessionStreamOpen, transfer: DeviceSessionHostTransfer, onProgress: suspend (Map<String, Long>) -> Unit, isPaused: suspend () -> Boolean): Result<FolderSpanArchiveTransferResult> = runCatching {
-        peer.transferHostStream(open, transfer, onProgress, isPaused)
+        withDeviceTransferBudgets(this) { peer.transferHostStream(open, transfer, onProgress, isPaused) }
     }
 
     override suspend fun hostRelay(target: HostDeviceFileClient, sourceOpen: DeviceSessionStreamOpen, targetOpen: DeviceSessionStreamOpen, transfer: DeviceSessionHostTransfer, onProgress: suspend (Map<String, Long>) -> Unit, isPaused: suspend () -> Boolean): Result<FolderSpanArchiveTransferResult> = runCatching {
         require(target is DeviceSessionClients)
-        peer.transferHostRelay(target.peer, sourceOpen, targetOpen, transfer, onProgress, isPaused)
+        withDeviceTransferBudgets(this, target) { peer.transferHostRelay(target.peer, sourceOpen, targetOpen, transfer, onProgress, isPaused) }
     }
 
     private data class CopyProgressSubscription(
@@ -552,9 +561,8 @@ internal class DeviceSessionClients(
     private val copyProgressMutex = Mutex()
     private val copyProgressSubscriptions = mutableMapOf<String, CopyProgressSubscription>()
 
-    override fun transferStatus(): HttpTransferStatus = transferStatus.copy(
-        sampledAtMillis = Clock.System.now().toEpochMilliseconds(),
-    )
+    override fun transferStatus(): HttpTransferStatus = transferStatusProvider?.invoke()
+        ?: transferStatus.copy(sampledAtMillis = 0, recommendedParallelRequests = 1)
 
     override suspend fun archiveCapabilities(): FolderSpanArchiveStreamCapabilities = archiveCapabilities
 
@@ -563,7 +571,7 @@ internal class DeviceSessionClients(
         onChunk: suspend (ByteArray) -> Unit,
     ): Result<Boolean> = runCatching {
         require(archiveCapabilities.supports(request.options)) { "archive stream options are not supported" }
-        peer.openArchiveReadStream(request, onChunk)
+        withDeviceTransferBudgets(this) { peer.openArchiveReadStream(request, onChunk) }
         true
     }
 
@@ -572,7 +580,7 @@ internal class DeviceSessionClients(
         chunks: Flow<ByteArray>,
     ): Result<FolderSpanArchiveTransferResult> = runCatching {
         check(archiveCapabilities.codecs.isNotEmpty()) { "archive streaming is not supported" }
-        peer.openArchiveWriteStream(request, chunks)
+        withDeviceTransferBudgets(this) { peer.openArchiveWriteStream(request, chunks) }
     }
 
     override suspend fun renames(renameInfos: List<RenameInfo>): Result<List<Result<Boolean>>> {
@@ -606,7 +614,7 @@ internal class DeviceSessionClients(
         chunks: Flow<ByteArray>,
     ): Result<Boolean> {
         return runCatching {
-            peer.openWriteStream(path, fileSize, startOffset, endOffset, chunks)
+            withDeviceTransferBudgets(this) { peer.openWriteStream(path, fileSize, startOffset, endOffset, chunks) }
             true
         }
     }
@@ -618,7 +626,7 @@ internal class DeviceSessionClients(
         onChunk: suspend (ByteArray) -> Unit,
     ): Result<Boolean> {
         return runCatching {
-            peer.openReadStream(path, startOffset, endOffset, onChunk)
+            withDeviceTransferBudgets(this) { peer.openReadStream(path, startOffset, endOffset, onChunk) }
             true
         }
     }
@@ -641,13 +649,15 @@ internal class DeviceSessionClients(
             ) {
                 "invalid device session write range"
             }
-            peer.openWriteStream(
-                path = path,
-                fileSize = fileSize,
-                startOffset = startOffset,
-                endOffset = startOffset + blockLength,
-                data = flow { emit(byteArray) },
-            )
+            withDeviceTransferBudgets(this) {
+                peer.openWriteStream(
+                    path = path,
+                    fileSize = fileSize,
+                    startOffset = startOffset,
+                    endOffset = startOffset + blockLength,
+                    data = flow { emit(byteArray) },
+                )
+            }
             true
         }
     }
@@ -655,7 +665,7 @@ internal class DeviceSessionClients(
     override suspend fun readBytes(path: String, startOffset: Long, endOffset: Long): Result<ByteArray> {
         return runCatching {
             val chunks = ArrayList<ByteArray>()
-            peer.openReadStream(path, startOffset, endOffset) { chunk -> chunks += chunk }
+            withDeviceTransferBudgets(this) { peer.openReadStream(path, startOffset, endOffset) { chunk -> chunks += chunk } }
             val size = chunks.sumOf { item -> item.size }
             val result = ByteArray(size)
             var offset = 0
@@ -665,6 +675,18 @@ internal class DeviceSessionClients(
             }
             result
         }
+    }
+
+    override suspend fun checkDirectoryWriteAccess(path: String): Result<Boolean> {
+        if (directoryWriteCheckUnsupported) return Result.failure(UnsupportedOperationException(AppStrings.copy_destination_write_check_unsupported))
+        return peer.rpcResult<GetFileByPathRequest, Boolean>(DEVICE_SESSION_RPC_CHECK_DIRECTORY_WRITE_ACCESS, GetFileByPathRequest(path))
+            .recoverCatching { error ->
+                if (error is DeviceSessionRpcException && error.status == DEVICE_SESSION_RPC_NOT_FOUND) {
+                    directoryWriteCheckUnsupported = true
+                    throw UnsupportedOperationException(AppStrings.copy_destination_write_check_unsupported)
+                }
+                throw error
+            }
     }
 
     override suspend fun getFileByPath(path: String): Result<FileSimpleInfo> {
@@ -712,13 +734,17 @@ internal class DeviceSessionClients(
             )
         }
         return try {
-            peer.rpcResult(
-                DEVICE_SESSION_RPC_COPY_PATH,
-                CopyPathRequest(srcPath, destPath, resolvedRequestId),
-            )
+            withDeviceTransferBudgets(this) {
+                val result = peer.rpcResult<CopyPathRequest, Boolean>(
+                    DEVICE_SESSION_RPC_COPY_PATH,
+                    CopyPathRequest(srcPath, destPath, resolvedRequestId),
+                )
+                if (!result.getOrDefault(false)) reportOperationFailure()
+                result
+            }
         } finally {
-            copyProgressMutex.withLock {
-                copyProgressSubscriptions.remove(resolvedRequestId)
+            withContext(NonCancellable) {
+                copyProgressMutex.withLock { copyProgressSubscriptions.remove(resolvedRequestId) }
             }
         }
     }

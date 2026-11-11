@@ -5,8 +5,6 @@ import strings.AppStrings
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import com.folderspan.data.main.network.FtpPathEncoding
@@ -17,7 +15,6 @@ import com.folderspan.ui.screen.network.NetworkEditSectionTitle
 internal fun LazyGridScope.NetworkFtpForm(
     name: String,
     onNameChange: (String) -> Unit,
-    nameError: Boolean,
     host: String,
     onHostChange: (String) -> Unit,
     hostError: Boolean,
@@ -39,7 +36,6 @@ internal fun LazyGridScope.NetworkFtpForm(
     NetworkStandardForm(
         name = name,
         onNameChange = onNameChange,
-        nameError = nameError,
         host = host,
         onHostChange = onHostChange,
         hostError = hostError,
@@ -66,28 +62,10 @@ internal fun LazyGridScope.NetworkFtpForm(
         )
     }
     item(span = { GridItemSpan(maxLineSpan) }) {
-        ListItem(
-            headlineContent = { Text(AppStrings.ui_passive_mode) },
-            trailingContent = {
-                Switch(
-                    checked = passiveMode,
-                    onCheckedChange = onPassiveModeChange
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkFormSwitch(AppStrings.ui_passive_mode, passiveMode, onPassiveModeChange)
     }
     item(span = { GridItemSpan(maxLineSpan) }) {
-        ListItem(
-            headlineContent = { Text(AppStrings.ui_enable_ftps) },
-            trailingContent = {
-                Switch(
-                    checked = ftpsEnabled,
-                    onCheckedChange = onFtpsEnabledChange
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+        NetworkFormSwitch(AppStrings.ui_enable_ftps, ftpsEnabled, onFtpsEnabledChange)
     }
 }
 

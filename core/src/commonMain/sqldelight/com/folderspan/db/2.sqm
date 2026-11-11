@@ -1,0 +1,53 @@
+CREATE TABLE IF NOT EXISTS SyncBaselineEntry (
+    taskId INTEGER NOT NULL,
+    relativePath TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, relativePath)
+);
+
+CREATE TABLE IF NOT EXISTS SyncPendingDeletion (
+    taskId INTEGER NOT NULL,
+    participant TEXT NOT NULL,
+    relativePath TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    runId INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, participant, relativePath)
+);
+
+CREATE TABLE IF NOT EXISTS SyncTaskLocalState (
+    taskId INTEGER NOT NULL PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    confirmedFingerprint TEXT NOT NULL DEFAULT '',
+    baselineEstablished INTEGER NOT NULL DEFAULT 0,
+    pendingRunId INTEGER NOT NULL DEFAULT 0,
+    confirmationNotified INTEGER NOT NULL DEFAULT 0,
+    scheduleTimeZone TEXT NOT NULL DEFAULT '',
+    fixedTargetsJson TEXT NOT NULL DEFAULT '[]',
+    fixedSourceBinding TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS SyncFileRecovery (
+    id TEXT NOT NULL PRIMARY KEY,
+    taskId INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    groupId TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS SyncFileRecoveryTaskGroup ON SyncFileRecovery(taskId, groupId);
+
+CREATE TABLE IF NOT EXISTS SyncRunDetail (
+    taskId INTEGER NOT NULL,
+    ownerDeviceId TEXT NOT NULL,
+    runId INTEGER NOT NULL,
+    ordinal INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    success INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (taskId, ownerDeviceId, runId, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS SyncRunDetailOrder ON SyncRunDetail(taskId, ownerDeviceId, runId, success, ordinal);
+CREATE INDEX IF NOT EXISTS SyncRunDetailKindOrder ON SyncRunDetail(taskId, ownerDeviceId, runId, kind, success, ordinal);

@@ -9,7 +9,11 @@ import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.exception.AuthorityException
 import com.folderspan.exception.NetworkUnsupportedException
-import com.folderspan.service.network.NetworkClient
+import com.folderspan.service.network.StorageReference
+import com.folderspan.service.network.StorageProvider
+import com.folderspan.service.network.StorageAdvancedFeature
+import com.folderspan.service.network.StorageFeatureAvailability
+import com.folderspan.service.network.StoragePath
 import com.folderspan.service.network.NetworkFileEntry
 import com.folderspan.ui.state.main.Task
 import com.folderspan.ui.state.main.TaskState
@@ -17,6 +21,7 @@ import com.folderspan.ui.state.main.TaskType
 import com.folderspan.ui.state.main.TestTaskRuntimePersistenceStore
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
@@ -389,6 +394,7 @@ class NetworkCopyToTest : ChineseLocalizationTest() {
                         path = "/remote-root/file.txt",
                         isDirectory = false,
                         size = 5L,
+                        reference = StorageReference(id = "stable-file-id", parentId = "root-id"),
                     )
                 )
             ),
@@ -432,6 +438,11 @@ class NetworkCopyToTest : ChineseLocalizationTest() {
                 localTaskState.getFailedRetryEntries(storedTask)
                     .first { it.resultPath == childTargetPath }
                     .failureMessage
+            )
+            assertEquals(
+                "stable-file-id",
+                localTaskState.getFailedRetryEntries(storedTask)
+                    .first { it.resultPath == childTargetPath }.srcStorageReference?.id,
             )
             assertTrue(storedTask.result[targetRoot.absolutePath]!!.contains(AppStrings.ui_test_network_copy_to_batch_download_failed))
             assertFalse(File(childTargetPath).exists())
@@ -495,19 +506,101 @@ class NetworkCopyToTest : ChineseLocalizationTest() {
         }
     }
 
+    @Test
+    fun duplicateCloudNamesFailBeforeCreatingTheDownloadDirectory() = runBlocking {
+        val parent = createTempDirectory(prefix = "network-copy-duplicate-").toFile()
+        val target = File(parent, "destination")
+        val state = TaskState(runtimeStore = TestTaskRuntimePersistenceStore())
+        val provider = FakeNetworkClient(
+            listedEntries = mapOf(
+                "/cloud" to listOf("first-id", "second-id").map { id ->
+                    NetworkFileEntry(
+                        name = "same.txt",
+                        path = "/cloud/same.txt",
+                        isDirectory = false,
+                        size = 5L,
+                        reference = StorageReference(id = id, parentId = "root-id"),
+                    )
+                },
+            ),
+        )
+        val network = buildTestNetwork(provider, state)
+        val task = Task(taskType = TaskType.Copy, status = StatusEnum.LOADING, protocol = FileProtocol.Network, protocolId = network.protocolId)
+        state.addOrUpdate(task)
+        val source = FileSimpleInfo.nullFileSimpleInfo().withCopy(
+            path = "/cloud", isDirectory = true, protocol = FileProtocol.Network, protocolId = network.protocolId,
+            storageReference = StorageReference(id = "root-id"),
+        )
+        val destination = FileSimpleInfo.nullFileSimpleInfo().withCopy(
+            path = target.absolutePath, isDirectory = true, protocol = FileProtocol.Local,
+        )
+        try {
+            val result = network.copyTo(task, source, destination)
+            assertTrue(result.isFailure)
+            assertEquals(0, provider.downloadCalls)
+            assertFalse(target.exists())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun unsupportedCloudSessionsRetryTheWholeFileWithoutCreatingUploadCheckpoints() = runBlocking {
+        for (protocol in listOf(NetworkProtocol.Nextcloud, NetworkProtocol.Seafile)) {
+            val directory = createTempDirectory(prefix = "network-file-retry-").toFile()
+            val payload = ByteArray(65_537) { (it % 251).toByte() }
+            val sourceFile = File(directory, "source.bin").apply { writeBytes(payload) }
+            val store = TestTaskRuntimePersistenceStore()
+            val state = TaskState(runtimeStore = store)
+            val attempts = mutableListOf<ByteArray>()
+            val provider = FakeNetworkClient(uploadHandler = { path, _, size ->
+                assertEquals(payload.size.toLong(), size)
+                attempts += File(path).readBytes()
+                if (attempts.size == 1) Result.failure(IOException("interrupted whole-file upload"))
+                else Result.success(true)
+            })
+            val network = buildTestNetwork(provider, state, protocol)
+            val task = Task(taskType = TaskType.Copy, status = StatusEnum.LOADING, protocol = FileProtocol.Local)
+            state.addOrUpdate(task)
+            val source = FileSimpleInfo.nullFileSimpleInfo().withCopy(
+                path = sourceFile.absolutePath, name = sourceFile.name,
+                protocol = FileProtocol.Local, size = sourceFile.length(),
+            )
+            val target = source.withCopy(path = "/target.bin", protocol = FileProtocol.Network, protocolId = network.protocolId)
+            try {
+                assertEquals(StorageFeatureAvailability.UNSUPPORTED,
+                    provider.advancedCapabilities(StoragePath(target.path)).getOrThrow()
+                        .availability(StorageAdvancedFeature.RESUMABLE_UPLOAD))
+                assertNull(network.uploadTaskFile(task, source, target, {},
+                    readRange = { _, _ -> error("File-level fallback must not read resumable chunks") }))
+                assertTrue(network.copyTo(task, source, target).isFailure)
+                assertTrue(store.transferCheckpoints.isEmpty())
+                assertTrue(network.copyTo(task, source, target).getOrThrow())
+                assertEquals(2, attempts.size)
+                attempts.forEach { assertContentEquals(payload, it) }
+                assertTrue(store.transferCheckpoints.isEmpty())
+                assertTrue(sourceFile.exists())
+                assertContentEquals(payload, sourceFile.readBytes())
+            } finally {
+                directory.deleteRecursively()
+            }
+        }
+    }
+
     private fun buildTestNetwork(
-        fakeClient: NetworkClient,
+        fakeClient: StorageProvider,
         localTaskState: TaskState,
+        protocol: NetworkProtocol = NetworkProtocol.S3,
     ): Network {
         return object : Network(
             name = "S3",
             pathSeparator = "/",
-            protocol = NetworkProtocol.S3.name,
+            protocol = protocol.name,
             host = "http://127.0.0.1:9000",
             username = "minioadmin",
             password = "minioadmin"
         ) {
-            override val client: NetworkClient = fakeClient
+            override val client: StorageProvider = fakeClient
             override val taskState: TaskState = localTaskState
         }
     }
@@ -518,7 +611,8 @@ class NetworkCopyToTest : ChineseLocalizationTest() {
         private val listedEntries: Map<String, List<NetworkFileEntry>> = emptyMap(),
         private val downloadResults: Map<String, Result<Boolean>> = emptyMap(),
         private val uploadProgressSteps: List<Long> = emptyList(),
-    ) : NetworkClient {
+        private val uploadHandler: ((String, String, Long) -> Result<Boolean>)? = null,
+    ) : StorageProvider {
         val recordedPaths = mutableListOf<String>()
         val uploadedLocalPaths = mutableListOf<String>()
         val streamedUploads = mutableListOf<Pair<String, ByteArray>>()
@@ -558,7 +652,7 @@ class NetworkCopyToTest : ChineseLocalizationTest() {
             uploadProgressSteps.forEach { doneBytes ->
                 onProgress(doneBytes, size)
             }
-            return uploadResult
+            return uploadHandler?.invoke(localPath, remotePath, size) ?: uploadResult
         }
 
         override suspend fun uploadFromSource(

@@ -1,5 +1,7 @@
 package com.folderspan.data.main.device
 
+import com.folderspan.service.operation.withOperationTransferControl
+import com.folderspan.service.session.withDeviceTransferBudgets
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.isPathInsideRootLexically
 import com.folderspan.data.file.FileInfo
@@ -313,6 +315,15 @@ data class Device(
     }
 
     inner class FileOperations {
+        // Missing preflight is unknown; the existing create/write RPCs still enforce authorization.
+        suspend fun checkDirectoryWriteAccess(path: String): Result<Boolean?> =
+            getFileClient().checkDirectoryWriteAccess(path).fold(
+                onSuccess = { Result.success(it) },
+                onFailure = { error ->
+                    if (error is UnsupportedOperationException) Result.success(null) else Result.failure(error)
+                },
+            )
+
         private fun getFileClient(): DeviceFileClient {
             return fileClient ?: getConnect().fileRouteClient
         }
@@ -435,6 +446,27 @@ data class Device(
             targetDevice: Device?,
             reportTaskChunkProgress: Boolean = true,
         ): Result<Boolean> {
+            val sourceClient = sourceDevice?.resolveTransferFileClient()
+            val targetClient = targetDevice?.resolveTransferFileClient()
+            return withOperationTransferControl({ ensureTransportCopyActive(task, sourceDevice, targetDevice) }) {
+                withDeviceTransferBudgets(sourceClient, targetClient) {
+                    transferSingleFileWithPermits(task, sourcePath, targetPath, file, sourceDevice, targetDevice,
+                        sourceClient, targetClient, reportTaskChunkProgress)
+                }
+            }
+        }
+
+        private suspend fun transferSingleFileWithPermits(
+            task: Task,
+            sourcePath: String,
+            targetPath: String,
+            file: FileSimpleInfo,
+            sourceDevice: Device?,
+            targetDevice: Device?,
+            sourceClient: DeviceFileClient?,
+            targetClient: DeviceFileClient?,
+            reportTaskChunkProgress: Boolean,
+        ): Result<Boolean> {
             suspend fun ensureRunning() = ensureTransportCopyActive(task, sourceDevice, targetDevice)
             val progressLabel = when {
                 sourceDevice == null && targetDevice != null -> AppStrings.ui_upload
@@ -464,7 +496,7 @@ data class Device(
                 sourceDevice.id == targetDevice.id
             ) {
                 val copyRequestId = "device-copy:${task.key}:${file.path.ifBlank { file.name }}"
-                val activeFileClient = sourceDevice.resolveTransferFileClient()
+                val activeFileClient = checkNotNull(sourceClient)
                 return activeFileClient.copyPath(
                     srcPath = sourcePath,
                     destPath = targetPath,
@@ -486,13 +518,11 @@ data class Device(
 
             if (file.size == 0L) {
                 return when {
-                    targetDevice != null -> createRemoteFile(targetPath, targetDevice.resolveTransferFileClient())
+                    targetDevice != null -> createRemoteFile(targetPath, checkNotNull(targetClient))
                     else -> FileUtils.createFile(FileAccessPermission.Allowed, targetPath)
                 }
             }
 
-            val sourceClient = sourceDevice?.resolveTransferFileClient()
-            val targetClient = targetDevice?.resolveTransferFileClient()
             val useSessionStreams = (sourceClient != null || targetClient != null) &&
                 listOfNotNull(sourceClient, targetClient).any { client -> client !is FileRouteClient }
             if (useSessionStreams) {
@@ -1000,6 +1030,7 @@ data class Device(
                     targetClient = targetArchiveClient,
                     transportPreference = SmallFileArchiveTransportPreference.LAN,
                     isPaused = { hostCopyPaused(task, sourceDevice, targetDevice) },
+                    ensureRunning = { ensureTransportCopyActive(task, sourceDevice, targetDevice) },
                 )
                 val archiveSelection = archiveCoordinator.select(
                     items = files,

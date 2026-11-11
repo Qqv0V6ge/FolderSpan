@@ -33,7 +33,7 @@ private val S3_ERROR_RESPONSE_REGEX = "(?is)<\\s*Error\\b".toRegex()
 internal class KtorS3NetworkClient(
     private val network: NetworkConnectionConfig,
     overrideClient: HttpClient? = null,
-) : NetworkClient, ChunkReadableNetworkClient {
+) : StorageProvider, ChunkReadableNetworkClient {
     private val extras = network.extras.s3
     private val bucketName = extras.bucket.trim()
     private val region = extras.region.trim()
@@ -62,6 +62,7 @@ internal class KtorS3NetworkClient(
         return runWithConfig(operation = AppStrings.ui_list, detail = normalizedPath) {
             val entriesByPath = LinkedHashMap<String, NetworkFileEntry>()
             var continuationToken: String? = null
+            val seenCursors = mutableSetOf<String>()
             do {
                 val query = linkedMapOf(
                     "list-type" to "2",
@@ -138,6 +139,10 @@ internal class KtorS3NetworkClient(
                 }
 
                 continuationToken = page.nextContinuationToken
+                check(continuationToken == null || continuationToken.length <= 64 * 1024 && seenCursors.add(continuationToken)) {
+                    "S3 pagination cursor is invalid or repeated"
+                }
+                check(entriesByPath.size <= 500_000) { "S3 directory exceeds the entry limit" }
             } while (!continuationToken.isNullOrBlank())
 
             val entries = entriesByPath.values.toList()
@@ -405,6 +410,14 @@ internal class KtorS3NetworkClient(
             LogKit.i(AppStrings.ui_s3_rename_succeeded_arg0_arg1.format(arg0 = (sourceKey), arg1 = (targetKey)))
             Result.success(true)
         }
+    }
+
+    override suspend fun deleteEmptyDirectory(path: String): Result<Boolean> = runWithConfig(operation = AppStrings.ui_delete, detail = path) {
+        val key = ensureDirectoryKey(normalizeObjectKey(checkedEmptyDirectoryDeletionPath(path), keepTrailingSlash = true))
+        val entries = list("/$key").getOrElse { return@runWithConfig Result.failure(it) }
+        if (entries.isNotEmpty()) return@runWithConfig Result.failure(IllegalStateException("Directory is not empty"))
+        // Removing the marker never deletes a child object added after the listing.
+        deleteObject(key)
     }
 
     override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> {
@@ -1292,6 +1305,7 @@ internal class KtorS3NetworkClient(
 
     private suspend fun listAllKeys(prefix: String): Result<List<String>> {
         val keys = mutableListOf<String>()
+        val seenCursors = mutableSetOf<String>()
         var continuationToken: String? = null
         do {
             val query = linkedMapOf("list-type" to "2", "prefix" to prefix)
@@ -1312,6 +1326,10 @@ internal class KtorS3NetworkClient(
                 if (key.isNotBlank()) keys += key
             }
             continuationToken = page.nextContinuationToken
+            check(continuationToken == null || continuationToken.length <= 64 * 1024 && seenCursors.add(continuationToken)) {
+                "S3 pagination cursor is invalid or repeated"
+            }
+            check(keys.size <= 500_000) { "S3 directory exceeds the entry limit" }
         } while (!continuationToken.isNullOrBlank())
         return Result.success(keys)
     }
@@ -1530,6 +1548,9 @@ internal class KtorS3NetworkClient(
     }
 
     private fun parseListObjectsPage(xml: String): ListObjectsPage {
+        require(xml.contains("<ListBucketResult") && xml.contains("</ListBucketResult>")) { "S3 directory page is incomplete" }
+        val truncated = extractTagValue(xml, "IsTruncated")?.trim()?.toBooleanStrictOrNull()
+        require(truncated != null) { "S3 directory page has no valid continuation status" }
         val commonPrefixes = COMMON_PREFIX_REGEX.findAll(xml)
             .mapNotNull { match ->
                 match.groupValues.getOrNull(1)?.trim()?.let(::unescapeXml)
@@ -1541,7 +1562,9 @@ internal class KtorS3NetworkClient(
             val block = match.groupValues.getOrNull(1) ?: return@mapNotNull null
             val key = extractTagValue(block, "Key")?.let(::unescapeXml)?.trim().orEmpty()
             if (key.isBlank()) return@mapNotNull null
-            val size = extractTagValue(block, "Size")?.trim()?.toLongOrNull() ?: 0L
+            val size = requireNotNull(extractTagValue(block, "Size")?.trim()?.toLongOrNull()?.takeIf { it >= 0 }) {
+                "S3 directory page has an invalid object length"
+            }
             val lastModified = extractTagValue(block, "LastModified")?.trim().orEmpty()
             S3ObjectItem(key = key, size = size, lastModified = lastModified)
         }.toList()
@@ -1550,6 +1573,7 @@ internal class KtorS3NetworkClient(
             ?.let(::unescapeXml)
             ?.trim()
             ?.ifBlank { null }
+        require(truncated == (nextContinuationToken != null)) { "S3 directory page is missing or contradicts its continuation cursor" }
         return ListObjectsPage(
             commonPrefixes = commonPrefixes,
             contents = contents,

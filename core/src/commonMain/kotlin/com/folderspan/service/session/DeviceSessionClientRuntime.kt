@@ -11,6 +11,7 @@ import com.folderspan.service.message.newDeviceMessageId
 import com.folderspan.service.operation.HttpTransferStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
@@ -32,11 +33,13 @@ internal class DeviceSessionClientRuntime internal constructor(
     val clients: DeviceSessionClients,
     val transferStatus: HttpTransferStatus,
     private val messageEndpoint: DeviceSessionClientMessageEndpoint?,
+    private val transferFeedback: DeviceSessionTransferFeedback? = null,
 ) {
     val messageClient: DeviceMessageClient?
         get() = messageEndpoint?.client
 
     suspend fun close() {
+        transferFeedback?.close()
         messageEndpoint?.close()
         peer.close()
     }
@@ -58,7 +61,8 @@ internal object DeviceSessionClientRuntimeLauncher {
         )
         val peer = DeviceSessionPeer(transport, sessionPlan)
         var messageEndpoint: DeviceSessionClientMessageEndpoint? = null
-        peer.setCloseHandler { messageEndpoint?.close() }
+        var transferFeedback: DeviceSessionTransferFeedback? = null
+        peer.setCloseHandler { transferFeedback?.close(); messageEndpoint?.close() }
         val sessionJob = peer.start(scope)
         try {
             val response = authentication.authenticate(peer)
@@ -67,10 +71,14 @@ internal object DeviceSessionClientRuntimeLauncher {
                 remoteRecommendedChunkBytes = response.recommendedChunkBytes,
                 sampledAtMillis = Clock.System.now().toEpochMilliseconds(),
             )
+            if (response.supportsTransferFeedback && peer.connection.supportsFeedbackTiming && response.connection.token.isNotBlank()) {
+                transferFeedback = DeviceSessionTransferFeedback(scope, transferStatus, peer.transferActivity(), peer::rpc)
+            }
             val clients = createDeviceSessionClients(
                 peer = peer,
                 transferStatus = transferStatus,
                 archiveCapabilities = response.archiveCapabilities.normalized(),
+                transferStatusProvider = transferFeedback?.let { it::current },
             )
             if (
                 response.connection.connectType == DeviceConnectType.APPROVED &&
@@ -84,13 +92,17 @@ internal object DeviceSessionClientRuntimeLauncher {
                 )
             }
             peer.setRequestHandler { request ->
-                clients.handleIncomingRequest(request)
+                transferFeedback?.handle(request)
+                    ?: clients.handleIncomingRequest(request)
                     ?: messageEndpoint?.handleIncomingRequest(request)
                     ?: DeviceSessionControlResponse(
                         requestId = request.requestId,
                         status = DEVICE_SESSION_RPC_NOT_FOUND,
                         errorMessage = request.method,
                     )
+            }
+            transferFeedback?.let { feedback ->
+                if (withTimeoutOrNull(5_000) { feedback.subscribe() } != true) feedback.close()
             }
             return DeviceSessionClientRuntime(
                 peer = peer,
@@ -99,8 +111,10 @@ internal object DeviceSessionClientRuntimeLauncher {
                 clients = clients,
                 transferStatus = transferStatus,
                 messageEndpoint = messageEndpoint,
+                transferFeedback = transferFeedback,
             )
         } catch (error: Throwable) {
+            transferFeedback?.close()
             messageEndpoint?.close()
             runCatching { peer.close() }
             throw error

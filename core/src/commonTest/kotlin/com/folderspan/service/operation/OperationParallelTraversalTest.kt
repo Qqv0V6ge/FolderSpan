@@ -20,6 +20,73 @@ import kotlin.time.Duration.Companion.milliseconds
 import strings.AppStrings
 
 class OperationParallelTraversalTest {
+    @Test fun copyWithoutLiveFeedbackUsesAConservativeBoundUntilANewSampleArrives() {
+        var sample: HttpTransferStatus? = null
+        val tuning = CopyOperationTuning(setOf(TraversalEndpointKind.Device), remoteStatuses = { listOfNotNull(sample) }, maxFileParallelism = 8)
+        try {
+            HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(HttpTransferRuntimeMemoryStatus.unknown())
+            assertEquals(1, tuning.currentMaxParallelism())
+            sample = HttpTransferStatus(maxParallelRequests = 8, recommendedParallelRequests = 8, sampledAtMillis = 0)
+            assertEquals(1, tuning.currentMaxParallelism())
+            sample = checkNotNull(sample).copy(sampledAtMillis = 1)
+            assertEquals(8, tuning.currentMaxParallelism())
+        } finally { HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(null) }
+    }
+
+    @Test fun sharedCopyTuningCombinesBothEndpointsAndResamplesLocalAndRemoteBounds() {
+        var target = HttpTransferStatus(recommendedParallelRequests = 1, maxParallelRequests = 8, sampledAtMillis = 1)
+        val source = target.copy(recommendedParallelRequests = 4)
+        val tuning = CopyOperationTuning(setOf(TraversalEndpointKind.Device, TraversalEndpointKind.Network),
+            remoteStatuses = { listOf(source, target) }, maxFileParallelism = 8)
+        try {
+            HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(HttpTransferRuntimeMemoryStatus.unknown())
+            assertEquals(1, tuning.config().initialParallelism)
+            assertEquals(1, tuning.currentMaxParallelism())
+            target = target.copy(recommendedParallelRequests = 8)
+            assertEquals(4, tuning.currentMaxParallelism())
+            target = target.copy(busy = true)
+            assertEquals(2, tuning.currentMaxParallelism())
+            target = target.copy(busy = false)
+            HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(HttpTransferRuntimeMemoryStatus(4_000_000, 128_000_000, true))
+            assertEquals(1, tuning.currentMaxParallelism())
+        } finally { HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(null) }
+    }
+
+    @Test fun sharedCopyTuningNeverExceedsTheMaximumFileConcurrency() = runSuspendTest {
+        try {
+            HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(HttpTransferRuntimeMemoryStatus.unknown())
+            for (limit in listOf(1, 8)) {
+                val tuning = CopyOperationTuning(setOf(TraversalEndpointKind.Device), remoteStatuses = {
+                    listOf(HttpTransferStatus(recommendedParallelRequests = 8, maxParallelRequests = 8, sampledAtMillis = 1))
+                }, maxFileParallelism = limit)
+                val config = tuning.config()
+                assertEquals(limit, config.hardMaxParallelism)
+                val mutex = Mutex()
+                var peak = 0
+                var active = 0
+                processItemsAdaptive((1..40).toList(), config, dynamicMaxParallelismProvider = tuning::currentMaxParallelism) {
+                    mutex.withLock { active++; peak = maxOf(peak, active) }
+                    delay(5.milliseconds)
+                    mutex.withLock { active-- }
+                }
+                assertTrue(peak in 1..limit, "maximum $limit, observed $peak")
+                assertEquals(0, active)
+            }
+        } finally { HttpTransferRuntimeTuning.setMemoryStatusOverrideForTests(null) }
+    }
+
+    @Test fun itemCancellationStopsTheWholeOperationWithAnOpenOrClosedProducer() = runSuspendTest {
+        for (size in listOf(1, 100)) {
+            val canceled = assertFailsWith<CancellationException> {
+                withTimeout(2_000) {
+                    processItemsAdaptive((1..size).toList(), OperationParallelismConfig(1, 1, 4, 1)) {
+                        throw CancellationException("item canceled")
+                    }
+                }
+            }
+            assertEquals("item canceled", canceled.message)
+        }
+    }
 
     @Test
     fun traversalListsChildDirectoriesConcurrentlyAndDeduplicatesPaths() = runSuspendTest {

@@ -94,6 +94,9 @@ import com.folderspan.notification.DeviceConnectActionResult
 import com.folderspan.notification.DeviceShareRequestAction
 import com.folderspan.notification.RequestNotificationFactory
 import com.folderspan.notification.RequestNotificationKind
+import com.folderspan.notification.SyncNotificationActionRow
+import com.folderspan.notification.syncNotificationTarget
+import com.folderspan.notification.screen
 import com.folderspan.notification.StartupPermissionReminderCoordinator
 import com.folderspan.notification.handleDeviceConnectRequest
 import com.folderspan.notification.handleDeviceShareRequest
@@ -1161,6 +1164,7 @@ private fun TimelineNotificationRow(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else if (!selectionMode && item is TimelineNotification.Local) {
+                    SyncNotificationActionRow(item.notification.metadata, onOpen = onClick, modifier = Modifier.fillMaxWidth())
                     AppUpdateActionRow(
                         metadata = item.notification.metadata,
                         modifier = Modifier.fillMaxWidth(),
@@ -1333,6 +1337,9 @@ private fun NotificationDetailPane(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
                     )
                 } else if (local != null) {
+                    SyncNotificationActionRow(local.metadata, onOpen = {
+                        syncNotificationTarget(local.metadata)?.let { mainState.requestOpenScreen(it.screen()) }
+                    }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp))
                     AppUpdateActionRow(
                         metadata = local.metadata,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),

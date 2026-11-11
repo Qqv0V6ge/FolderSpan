@@ -23,6 +23,12 @@ internal fun requireSafeNetworkWritePath(path: String) {
     require(!containsUnsafeNetworkPathSegment(path)) { AppStrings.ui_remote_path_invalid }
 }
 
+internal fun checkedEmptyDirectoryDeletionPath(path: String): String {
+    requireSafeNetworkWritePath(path)
+    require(path.trim('/', '\\').isNotBlank()) { "Cannot delete storage root" }
+    return path
+}
+
 internal fun unsafeNetworkWritePathError(path: String): Throwable? {
     if (containsUnsafeNetworkPathSegment(path)) {
         return AuthorityException(AppStrings.ui_remote_path_invalid)

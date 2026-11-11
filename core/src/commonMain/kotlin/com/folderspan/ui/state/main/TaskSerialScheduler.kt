@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -14,6 +15,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -133,6 +136,7 @@ internal class TaskSerialScheduler(
             var pauseWaiter: CompletableDeferred<TaskResumeSignal>? = null
             var shouldContinue = false
             var shouldCancel = false
+            var unscheduledPaused = false
             queueMutex.withLock {
                 when {
                     isTaskCancelled(taskKey) -> shouldCancel = true
@@ -140,8 +144,7 @@ internal class TaskSerialScheduler(
                     else -> {
                         val scheduled = scheduledTasks[taskKey]
                         if (scheduled == null) {
-                            shouldCancel = isTaskCancelled(taskKey)
-                            shouldContinue = !shouldCancel
+                            unscheduledPaused = true
                         } else {
                             pauseWaiter = scheduled.pauseWaiter ?: CompletableDeferred<TaskResumeSignal>().also { waiter ->
                                 scheduled.pauseWaiter = waiter
@@ -159,6 +162,12 @@ internal class TaskSerialScheduler(
             }
             if (shouldContinue) {
                 return true
+            }
+            if (unscheduledPaused) {
+                combine(pauseKeys, cancelKeys) { paused, cancelled ->
+                    taskKey !in paused || taskKey in cancelled
+                }.first { it }
+                continue
             }
             when (pauseWaiter?.await()) {
                 TaskResumeSignal.Resume -> Unit
@@ -194,7 +203,7 @@ internal class TaskSerialScheduler(
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
     private fun launchTask(taskKey: Long, task: ScheduledTask) {
         task.started = true
         val ready = CompletableDeferred<Unit>()

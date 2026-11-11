@@ -1,5 +1,8 @@
 package com.folderspan.utils
 
+import com.sun.jna.Native
+import com.sun.jna.NativeLibrary
+
 import strings.AppStrings
 
 import android.content.Intent
@@ -28,6 +31,11 @@ import okio.buffer
 import okio.sink
 import okio.source
 import java.io.File
+import java.nio.file.attribute.BasicFileAttributeView
+import java.nio.file.attribute.FileTime
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.nio.file.LinkOption
 import java.util.*
 
 internal actual object NativeFileUtils {
@@ -156,6 +164,52 @@ internal actual object NativeFileUtils {
             primary = { localCreateFolder(path) },
             fallback = { client -> client.createDirectory(path) }
         )
+    }
+
+    actual fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            val target = checkedMutableFilePath(path)
+            require(target.parent != null) { "Cannot delete filesystem root" }
+            val result = NativeLibrary.getInstance("c").getFunction("rmdir")
+                .invokeInt(arrayOf(target.toString()))
+            check(result == 0) { "Cannot delete empty directory (system error ${Native.getLastError()})" }
+            true
+        }
+    }
+
+    private fun checkedMutableFilePath(path: String): java.nio.file.Path {
+        val target = Paths.get(path).toAbsolutePath()
+        require(target == target.normalize()) { "Invalid file path" }
+        var current = requireNotNull(target.root)
+        for (component in target) {
+            current = current.resolve(component)
+            check(!Files.isSymbolicLink(current)) { "Cannot modify paths through symbolic links" }
+        }
+        return target
+    }
+
+    actual fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            val source = checkedMutableFilePath(from)
+            val target = checkedMutableFilePath(to)
+            require(source.normalize() != target.normalize() && !target.normalize().startsWith(source.normalize())) { "Invalid move destination" }
+            Files.move(source, target)
+            true
+        }
+    }
+
+    actual fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean> {
+        if (!hasFileAccess(permission)) return deniedFileAccessResult()
+        return runCatching {
+            require(millis > 0) { "Invalid modification time" }
+            val target = Paths.get(path)
+            check(!Files.isSymbolicLink(target)) { "Cannot modify symbolic links" }
+            Files.getFileAttributeView(target, BasicFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
+                .setTimes(FileTime.fromMillis(millis), null, null)
+            true
+        }
     }
 
     actual fun rename(

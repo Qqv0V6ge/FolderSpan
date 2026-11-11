@@ -19,6 +19,11 @@ object WebUiAttachment {
     var rootPaths: List<PathInfo> = emptyList()
     var hostInfo: WebUiHostInfo? = null
     var sessionToken = ""
+    var sessionGeneration by mutableStateOf(0L)
+        private set
+
+    internal fun advanceSessionGeneration() { sessionGeneration++ }
+
     val isAttached get() = mode == WebUiMode.Attached
 
     fun applyHostInfo(host: WebUiHostInfo) {
@@ -30,6 +35,7 @@ object WebUiAttachment {
     }
 
     fun reset() {
+        advanceSessionGeneration()
         mode = WebUiMode.Native
         showConnectionDialog = false
         target = null

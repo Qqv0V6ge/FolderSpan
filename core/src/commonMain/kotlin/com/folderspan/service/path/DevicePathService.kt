@@ -1,6 +1,9 @@
 package com.folderspan.service.path
 
 import com.folderspan.createSettings
+import com.folderspan.PlatformType
+import com.folderspan.data.file.forRemoteAccess
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
@@ -21,6 +24,7 @@ import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SensitiveFileAccessPolicy
 import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.isAndroidContentUriPath
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import strings.AppStrings
@@ -32,6 +36,7 @@ class DevicePathService internal constructor(
     private val listDirectory: suspend (String) -> Result<List<FileSimpleInfo>>,
     private val listLimiter: DirectoryListLimiter,
     private val localDeviceIdProvider: () -> String,
+    private val hostPlatform: DeviceType = PlatformType,
 ) {
     internal fun isAuthorizedWebRtcPeerToken(authToken: String, remoteDeviceId: String): Boolean {
         return remoteDeviceId.isNotBlank() &&
@@ -124,7 +129,18 @@ class DevicePathService internal constructor(
             return Result.success(listOf(PathInfo("/", 0L, 0L)))
         }
         val rootPaths = withContext(Dispatchers.Default) {
-            PathUtils.getRootPaths(FileAccessPermission.Allowed)
+            PathUtils.getRootPaths(FileAccessPermission.Allowed).map { roots ->
+                val homePath = PathUtils.getHomePath()
+                val home = roots.firstOrNull { it.path == homePath && it.totalSpace > 0 } ?: try {
+                    PathInfo(homePath, FileUtils.totalSpace(FileAccessPermission.Allowed, homePath),
+                        FileUtils.freeSpace(FileAccessPermission.Allowed, homePath))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    PathInfo(homePath, 0L, 0L)
+                }
+                (listOf(home) + roots).distinctBy { it.path }
+            }
         }
         return rootPaths.map { paths ->
             paths.filter { root ->
@@ -134,7 +150,7 @@ class DevicePathService internal constructor(
                     root.path,
                     "read",
                 )
-            }
+            }.map { it.forRemoteAccess(hostPlatform) }
         }
     }
 

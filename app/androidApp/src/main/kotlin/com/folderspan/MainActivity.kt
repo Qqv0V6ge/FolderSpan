@@ -32,6 +32,7 @@ import com.folderspan.ui.screen.file.share.FileShareScreen
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.main.MainState
+import com.folderspan.ui.state.main.SyncState
 import com.folderspan.ui.state.settings.SettingsState
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SettingsUtils
@@ -50,6 +51,7 @@ import org.koin.java.KoinJavaComponent.inject
 import strings.AppStrings
 
 class AndroidApp : Application() {
+    private val syncState: SyncState by inject(SyncState::class.java)
     @OptIn(DelicateCoroutinesApi::class)
     override fun onCreate() {
         super.onCreate()
@@ -70,6 +72,7 @@ class AndroidApp : Application() {
         ApplicationDataCleanup.completePendingCleanup()
             .onFailure { error -> Napier.e(AppStrings.ui_clear_folderspan_local_data_failed, error) }
         initKoin()
+        syncState.startInBackground()
         ShizukuManager.initialize(this)
         RootManager.initialize(this)
         if (SettingsUtils.isRootRequestOnStartupEnabled() && !RootManager.hasPermission()) {

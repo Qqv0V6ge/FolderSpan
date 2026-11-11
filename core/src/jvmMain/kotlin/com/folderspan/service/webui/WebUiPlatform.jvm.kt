@@ -1,5 +1,11 @@
 package com.folderspan.service.webui
 
+import com.folderspan.createSettings
+import com.folderspan.PlatformType
+import com.folderspan.data.file.forRemoteAccess
+import com.folderspan.data.file.shouldHideRemoteDiskSpace
+import com.folderspan.currentDeviceName
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.service.http.server.linkshare.LinkShareHttpHeader
 import com.folderspan.service.http.server.linkshare.LinkShareHttpRequest
@@ -141,9 +147,11 @@ class JvmWebUiPlatform : WebUiPlatform {
         restrictOwnerOnlyPath(cache, directory = true)
         session.own(cache) { PathUtils.deleteDirectory(FileAccessPermission.Allowed, cache.toString()) }
         return WebUiHostInfo(
+            deviceId = createSettings().getString(SettingsUtils.KEY_DEVICE_ID, ""),
+            deviceName = currentDeviceName(),
             separator = PathUtils.getPathSeparator(), home = PathUtils.getHomePath(),
             cache = cache.toString(), app = PathUtils.getAppPath(),
-            roots = PathUtils.getRootPaths(FileAccessPermission.Allowed).getOrThrow(),
+            roots = PathUtils.getRootPaths(FileAccessPermission.Allowed).getOrThrow().map { it.forRemoteAccess(PlatformType) },
             interfaces = com.folderspan.service.http.getNetworkInterfacesInfo(),
             fingerprint = com.folderspan.service.http.tls.currentDeviceTlsFingerprint(),
             publicKey = com.folderspan.service.http.tls.DeviceTlsIdentity.publicKeyPem().orEmpty(),
@@ -166,6 +174,8 @@ class JvmWebUiPlatform : WebUiPlatform {
     }
 
     private suspend fun handleOperation(request: LinkShareHttpRequest, session: WebUiPlatformSession): LinkShareHttpResponse {
+        if (request.path.startsWith(WEB_UI_PLATFORM_PATH + "/storage/content/")) return storageContentPlatformRequest(request, session)
+        if (request.path.startsWith(WEB_UI_PLATFORM_PATH + "/storage/")) return storagePlatformRequest(request, session)
         if (request.path == "$WEB_UI_PLATFORM_PATH/networks" || request.path.startsWith("$WEB_UI_PLATFORM_PATH/networks/")) return networkPlatformRequest(request, session)
         if (request.path == "$WEB_UI_PLATFORM_PATH/listeners" || request.path.startsWith("$WEB_UI_PLATFORM_PATH/listeners/")) return httpListenerRequest(request, session)
         if (request.path.startsWith("$WEB_UI_PLATFORM_PATH/devices/")) return devicePlatformRequest(request, session)
@@ -186,7 +196,12 @@ class JvmWebUiPlatform : WebUiPlatform {
             }
             "GET" to "/files/space" -> {
                 checkedPlatformPath(path)
-                platformResponse(listOf(FileUtils.totalSpace(FileAccessPermission.Allowed, path), FileUtils.freeSpace(FileAccessPermission.Allowed, path)))
+                val space = if (shouldHideRemoteDiskSpace(PlatformType)) {
+                    listOf(-1L, -1L)
+                } else {
+                    listOf(FileUtils.totalSpace(FileAccessPermission.Allowed, path), FileUtils.freeSpace(FileAccessPermission.Allowed, path))
+                }
+                platformResponse(space)
             }
             "GET" to "/files/exists" -> {
                 checkedPlatformPath(path, true)
@@ -257,6 +272,22 @@ class JvmWebUiPlatform : WebUiPlatform {
                 val input = request.platformBody<WebUiPathRequest>()
                 files.createFile(checkedFileEndpointPath(input.path)).getOrThrow()
                 platformResponse(true)
+            }
+            "POST" to "/files/set-modified-time" -> {
+                val input = request.platformBody<WebUiSetModifiedTimeRequest>()
+                val checked = checkedPlatformPath(input.path, rejectSymbolicLinks = true)
+                platformResponse(FileUtils.setLastModified(FileAccessPermission.Allowed, checked, input.millis).getOrThrow())
+            }
+            "POST" to "/files/move" -> {
+                val input = request.platformBody<WebUiMoveRequest>()
+                val from = checkedPlatformPath(input.from, rejectSymbolicLinks = true)
+                val to = checkedPlatformPath(input.to, allowMissing = true, rejectSymbolicLinks = true)
+                platformResponse(FileUtils.move(FileAccessPermission.Allowed, from, to).getOrThrow())
+            }
+            "POST" to "/files/delete-empty-directory" -> {
+                val input = request.platformBody<WebUiPathRequest>()
+                val checked = checkedPlatformPath(input.path, rejectSymbolicLinks = true)
+                platformResponse(FileUtils.deleteEmptyDirectory(FileAccessPermission.Allowed, checked).getOrThrow())
             }
             "POST" to "/files/rename" -> {
                 val input = request.platformBody<WebUiRenameRequest>()

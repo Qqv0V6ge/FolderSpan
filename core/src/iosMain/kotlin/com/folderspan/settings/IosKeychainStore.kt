@@ -35,6 +35,7 @@ import platform.Foundation.NSLock
 import platform.Security.SecItemAdd
 import platform.Security.SecItemCopyMatching
 import platform.Security.SecItemDelete
+import platform.Security.SecItemUpdate
 import platform.Security.errSecItemNotFound
 import platform.Security.errSecMissingEntitlement
 import platform.Security.errSecNotAvailable
@@ -209,21 +210,114 @@ internal object IosKeychainStore : StringSecretVault {
     }
 }
 
+
+/** Content keys must remain protected by Keychain; never use the process-memory fallback. */
+@OptIn(ExperimentalForeignApi::class)
+internal object IosStrictKeychainStore : StringSecretVault {
+    override fun get(key: String): String? = withKeychainQuery(key) { query ->
+        query.setValue(kSecReturnData, kCFBooleanTrue)
+        query.setValue(kSecMatchLimit, kSecMatchLimitOne)
+        memScoped {
+            val result = alloc<CFTypeRefVar>()
+            val status = SecItemCopyMatching(query, result.ptr)
+            requireStrictKeychainStatus(status, "read", allowNotFound = true)
+            if (status == errSecItemNotFound) return@memScoped null
+            val data = checkNotNull(result.value) { "Keychain read returned no data" }
+            try {
+                val bytes = data.toByteArray()
+                try { bytes.decodeToString(throwOnInvalidSequence = true) } finally { bytes.fill(0) }
+            } finally {
+                CFRelease(data)
+            }
+        }
+    }
+
+    override fun put(key: String, value: String) {
+        val bytes = value.encodeToByteArray()
+        val payload = try { bytes.toCFData() } finally { bytes.fill(0) }
+        val updates = createKeychainDictionary()
+        try {
+            updates.setValue(kSecValueData, payload)
+            updates.setValue(kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+            val updateStatus = withKeychainQuery(key) { SecItemUpdate(it, updates) }
+            requireStrictKeychainStatus(updateStatus, "update", allowNotFound = true)
+            if (updateStatus == errSecItemNotFound) {
+                val addStatus = withKeychainQuery(key) { attributes ->
+                    attributes.setValue(kSecValueData, payload)
+                    attributes.setValue(kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+                    SecItemAdd(attributes, null)
+                }
+                requireStrictKeychainStatus(addStatus, "write")
+            }
+        } finally {
+            CFRelease(updates)
+            CFRelease(payload)
+        }
+    }
+
+    override fun remove(key: String) {
+        val status = withKeychainQuery(key) { SecItemDelete(it) }
+        requireStrictKeychainStatus(status, "delete", allowNotFound = true)
+    }
+
+    override fun contains(key: String): Boolean = get(key) != null
+
+    override fun keys(): Set<String> = withKeychainQuery { query ->
+        query.setValue(kSecReturnAttributes, kCFBooleanTrue)
+        query.setValue(kSecMatchLimit, kSecMatchLimitAll)
+        memScoped {
+            val result = alloc<CFTypeRefVar>()
+            val status = SecItemCopyMatching(query, result.ptr)
+            requireStrictKeychainStatus(status, "list", allowNotFound = true)
+            if (status == errSecItemNotFound) return@memScoped emptySet()
+            val resultValue = checkNotNull(result.value) { "Keychain list returned no data" }
+            try {
+                val items: CFArrayRef = resultValue.reinterpret()
+                buildSet {
+                    repeat(CFArrayGetCount(items).toInt()) { index ->
+                        val item = CFArrayGetValueAtIndex(items, index.toLong())
+                            ?.let { raw -> interpretCPointer<cnames.structs.__CFDictionary>(raw.rawValue) }
+                            ?: return@repeat
+                        val account = CFDictionaryGetValue(item, kSecAttrAccount)?.toKotlinString()
+                        if (!account.isNullOrEmpty()) add(account)
+                    }
+                }
+            } finally {
+                CFRelease(resultValue)
+            }
+        }
+    }
+
+    override fun clear() {
+        val status = withKeychainQuery { SecItemDelete(it) }
+        requireStrictKeychainStatus(status, "clear", allowNotFound = true)
+    }
+}
+
+internal fun requireStrictKeychainStatus(status: Int, operation: String, allowNotFound: Boolean = false) {
+    check(status == errSecSuccess || (allowNotFound && status == errSecItemNotFound)) {
+        "Content Keychain $operation failed: $status"
+    }
+}
+
 @OptIn(ExperimentalForeignApi::class)
 internal fun createKeychainQuery(account: String? = null): CFMutableDictionaryRef {
-    val query = requireNotNull(
-        CFDictionaryCreateMutable(
-            allocator = null,
-            capacity = 0,
-            keyCallBacks = kCFTypeDictionaryKeyCallBacks.ptr,
-            valueCallBacks = kCFTypeDictionaryValueCallBacks.ptr,
-        ),
-    ) { "Unable to create Keychain query" }
+    val query = createKeychainDictionary()
     query.setValue(kSecClass, kSecClassGenericPassword)
     query.setString(kSecAttrService, KEYCHAIN_SERVICE)
     if (account != null) query.setString(kSecAttrAccount, account)
     return query
 }
+
+@OptIn(ExperimentalForeignApi::class)
+private fun createKeychainDictionary(): CFMutableDictionaryRef = requireNotNull(
+    CFDictionaryCreateMutable(
+        allocator = null,
+        capacity = 0,
+        keyCallBacks = kCFTypeDictionaryKeyCallBacks.ptr,
+        valueCallBacks = kCFTypeDictionaryValueCallBacks.ptr,
+    ),
+) { "Unable to create Keychain dictionary" }
 
 @OptIn(ExperimentalForeignApi::class)
 private inline fun <T> withKeychainQuery(

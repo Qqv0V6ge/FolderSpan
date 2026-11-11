@@ -547,6 +547,10 @@ internal fun openLocalNotification(
     navigator: AppNavigator,
     notification: Notification,
 ) {
+    syncNotificationTarget(notification.metadata)?.let { target ->
+        navigator.pushSafe(target.screen())
+        return
+    }
     val feedbackScreen = if (shouldOpenLocalNotificationDirectly(notification)) {
         proFeedbackScreen(RequestNotificationFactory.errorLogSummary(notification.metadata))
     } else null
@@ -555,7 +559,7 @@ internal fun openLocalNotification(
 }
 
 internal fun shouldOpenLocalNotificationDirectly(notification: Notification): Boolean =
-    PRO_AVAILABLE && RequestNotificationFactory.isErrorLogMetadata(notification.metadata)
+    syncNotificationTarget(notification.metadata) != null || PRO_AVAILABLE && RequestNotificationFactory.isErrorLogMetadata(notification.metadata)
 
 internal enum class NotificationTab { Local, Account, Announcement }
 
@@ -795,7 +799,9 @@ private fun NotificationItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (isPermissionReminder) {
+                    if (syncNotificationTarget(notification.metadata) != null) {
+                        SyncNotificationActionRow(notification.metadata, onOpen = onClick, modifier = Modifier.weight(1f))
+                    } else if (isPermissionReminder) {
                         FilledTonalButton(
                             onClick = onOpenPermissionReminder,
                             modifier = Modifier.weight(1f)

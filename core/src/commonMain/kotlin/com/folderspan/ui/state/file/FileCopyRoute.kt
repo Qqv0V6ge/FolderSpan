@@ -2,6 +2,7 @@ package com.folderspan.ui.state.file
 
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.main.share.SYSTEM_SHARE_DESK_ID
+import strings.AppStrings
 
 internal enum class CopyRoute {
     // 本地文件复制到本地。
@@ -50,6 +51,7 @@ internal fun resolveCopyRoute(
     srcProtocolId: String = "",
 ): CopyRoute {
     return when {
+        destProtocol == FileProtocol.Share -> CopyRoute.Unsupported
         srcProtocol == FileProtocol.Local && destProtocol == FileProtocol.Local -> CopyRoute.LocalToLocal
         srcProtocol == FileProtocol.Network && destProtocol == FileProtocol.Device -> CopyRoute.NetworkToDevice
         srcProtocol == FileProtocol.Device && destProtocol == FileProtocol.Network -> CopyRoute.DeviceToNetwork
@@ -72,3 +74,7 @@ internal fun isSameNetworkEndpoint(
     sourceProtocolId: String,
     targetProtocolId: String,
 ): Boolean = sourceProtocolId.isNotBlank() && sourceProtocolId == targetProtocolId
+
+internal fun requireWritableCopyDestination(protocol: FileProtocol) {
+    require(protocol != FileProtocol.Share) { AppStrings.ui_read_only }
+}

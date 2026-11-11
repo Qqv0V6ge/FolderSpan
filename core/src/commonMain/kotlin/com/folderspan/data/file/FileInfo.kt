@@ -1,5 +1,9 @@
 package com.folderspan.data.file
 
+import com.folderspan.service.network.StoragePath
+import com.folderspan.service.network.StorageReference
+import com.folderspan.service.network.forPath
+
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileSensitivity
 import com.folderspan.extensions.*
@@ -75,6 +79,7 @@ data class FileSimpleInfo(
     @ProtoNumber(14) val isSymbolicLinkKnown: Boolean = false,
     @ProtoNumber(15) val sensitivity: FileSensitivity = FileSensitivity.None,
     @ProtoNumber(16) val sensitivityCategory: String = "",
+    @ProtoNumber(17) val storageReference: StorageReference? = null,
 ) {
     @Transient
     var fileFilterType: FileFilterType =
@@ -107,6 +112,8 @@ data class FileSimpleInfo(
         )
     }
 
+    val storagePath: StoragePath get() = StoragePath(path, storageReference)
+
     fun withCopy(
         name: String? = null,
         description: String? = null,
@@ -124,7 +131,10 @@ data class FileSimpleInfo(
         isSymbolicLinkKnown: Boolean? = null,
         sensitivity: FileSensitivity? = null,
         sensitivityCategory: String? = null,
+        storageReference: StorageReference? = null,
     ): FileSimpleInfo {
+        val sameEndpoint = (protocol == null || protocol == this.protocol) && (protocolId == null || protocolId == this.protocolId)
+        val inheritedReference = if (sameEndpoint) this.storageReference?.forPath(this.path, path ?: this.path, this.isDirectory) else null
         val copied = FileSimpleInfo(
             name = name ?: this.name,
             description = description ?: this.description,
@@ -142,6 +152,7 @@ data class FileSimpleInfo(
             isSymbolicLinkKnown = isSymbolicLinkKnown ?: this.isSymbolicLinkKnown,
             sensitivity = sensitivity ?: this.sensitivity,
             sensitivityCategory = sensitivityCategory ?: this.sensitivityCategory,
+            storageReference = storageReference ?: inheritedReference,
         )
         copied.fileFilterType = if (copied.isDirectory == this.isDirectory) {
             fileFilterType

@@ -19,6 +19,22 @@ import java.net.URI
 import kotlin.test.*
 
 class WebUiPlatformBridgeTest {
+    @Test fun emptyDirectoryDeletionRetainsChildrenAndRejectsLinks(): Unit = runBlocking {
+        val root = Files.createTempDirectory("platform-empty")
+        val session = WebUiPlatformSession("empty-test")
+        try {
+            val empty = Files.createDirectory(root.resolve("empty"))
+            assertTrue(post<WebUiPathRequest, Boolean>(session, "/files/delete-empty-directory", WebUiPathRequest(empty.toString())))
+            Files.createDirectory(empty)
+            val child = Files.writeString(empty.resolve("new"), "keep")
+            assertFails { post<WebUiPathRequest, Boolean>(session, "/files/delete-empty-directory", WebUiPathRequest(empty.toString())) }
+            assertFails { post<WebUiPathRequest, Boolean>(session, "/files/delete-empty-directory", WebUiPathRequest(child.toString())) }
+            val link = Files.createSymbolicLink(root.resolve("link"), empty)
+            assertFails { post<WebUiPathRequest, Boolean>(session, "/files/delete-empty-directory", WebUiPathRequest(link.toString())) }
+            assertEquals("keep", Files.readString(child))
+        } finally { session.close(); root.toFile().deleteRecursively() }
+    }
+
     private val platform = JvmWebUiPlatform()
     private val json = WebUiPlatformClient.json
 
@@ -28,6 +44,50 @@ class WebUiPlatformBridgeTest {
     private inline fun <reified T> LinkShareHttpResponse.value(): T = json.decodeFromString(bytes().decodeToString())
     private suspend inline fun <reified T, reified R> post(session: WebUiPlatformSession, path: String, value: T): R =
         request(session, "POST", path, json.encodeToString(value).encodeToByteArray()).value()
+
+    @Test fun moveUsesValidatedPathsAndRefusesExistingTargets(): Unit = runBlocking {
+        val root = Files.createTempDirectory("platform-move")
+        val session = WebUiPlatformSession("move-test")
+        try {
+            val source = Files.writeString(root.resolve("source"), "payload")
+            val folder = Files.createDirectory(root.resolve("folder"))
+            val target = folder.resolve("target")
+            assertTrue(post<WebUiMoveRequest, Boolean>(session, "/files/move", WebUiMoveRequest(source.toString(), target.toString())))
+            val occupied = Files.writeString(root.resolve("occupied"), "keep")
+            assertFails { post<WebUiMoveRequest, Boolean>(session, "/files/move", WebUiMoveRequest(target.toString(), occupied.toString())) }
+            val link = Files.createSymbolicLink(root.resolve("link"), folder)
+            assertFails { post<WebUiMoveRequest, Boolean>(session, "/files/move", WebUiMoveRequest(link.resolve("target").toString(), source.toString())) }
+            assertFails { post<WebUiMoveRequest, Boolean>(session, "/files/move", WebUiMoveRequest(target.toString(), link.resolve("new").toString())) }
+            assertEquals("payload", Files.readString(target))
+            assertEquals("keep", Files.readString(occupied))
+            assertEquals(404, request(session, "POST", "/files/unknown-operation").statusCode)
+        } finally { session.close(); root.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun modificationTimeUsesValidatedHostPathsAndPreservesContent(): Unit = runBlocking {
+        val directory = Files.createTempDirectory("platform-modified-time")
+        val session = WebUiPlatformSession("modified-time-test")
+        try {
+            val file = Files.writeString(directory.resolve("payload.txt"), "keep content")
+            val timestamp = 1_700_000_000_000L
+            assertTrue(post<WebUiSetModifiedTimeRequest, Boolean>(session, "/files/set-modified-time",
+                WebUiSetModifiedTimeRequest(file.toString(), timestamp)))
+            assertEquals(timestamp, Files.getLastModifiedTime(file).toMillis())
+            assertEquals("keep content", Files.readString(file))
+            val link = Files.createSymbolicLink(directory.resolve("link"), file)
+            assertFails { post<WebUiSetModifiedTimeRequest, Boolean>(session, "/files/set-modified-time",
+                WebUiSetModifiedTimeRequest(link.toString(), timestamp + 1000)) }
+            assertFails { post<WebUiSetModifiedTimeRequest, Boolean>(session, "/files/set-modified-time",
+                WebUiSetModifiedTimeRequest(file.toString(), -1)) }
+            assertEquals(404, request(session, "POST", "/files/unknown-operation").statusCode)
+            assertEquals(com.folderspan.createSettings().getString(com.folderspan.utils.SettingsUtils.KEY_DEVICE_ID, ""),
+                platform.hostInfo(session).deviceId)
+        } finally {
+            session.close()
+            directory.toFile().deleteRecursively()
+        }
+    }
 
     @Test
     fun sftpHostTrustAndBinaryTransfersUseSessionCallbacks(): Unit = runBlocking {

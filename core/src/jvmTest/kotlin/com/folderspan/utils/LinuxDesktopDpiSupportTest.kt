@@ -8,6 +8,31 @@ import kotlin.test.assertTrue
 
 class LinuxDesktopDpiSupportTest {
     @Test
+    fun gnomeXSettingsScaleTakesPrecedenceOverFractionalMonitorScale() {
+        val detection = LinuxDesktopScaleDetection(
+            gnomeXSettingsScale = 2f,
+            gnomeDisplayConfigScale = 1.25f,
+            gnomeMonitorsXmlScale = null,
+            gnomeSettingsScale = null,
+            kdeKscreenDoctorScale = null,
+            hyprlandHyprctlScale = null,
+            hyprlandConfigScale = null,
+            xfceWindowScale = null,
+            xfceDpiScale = null,
+            cinnamonScale = null,
+            mateScale = null,
+            deepinDbusScale = null,
+            deepinGsettingsScale = null,
+            deepinWindowScale = null,
+            deepinXftDpiScale = null
+        )
+
+        assertEquals(2f, detection.selectedScale)
+        assertEquals(2f, detection.copy(gnomeDisplayConfigScale = null).selectedScale)
+        assertEquals(1.25f, detection.copy(gnomeXSettingsScale = null).selectedScale)
+    }
+
+    @Test
     fun parseGnomeDisplayConfigScaleExtractsPrimaryScale() {
         val output = """
             (uint32 11, [], [(0, 0, 1.5, uint32 0, true, [('eDP-1', 'BOE', '0x0c11', '0x00000000')], @a{sv} {}), (1920, 0, 1, uint32 0, false, [('DP-3', 'HWV', 'ZQE-CBA', '0xc080f622')], @a{sv} {})], {'layout-mode': <uint32 1>})

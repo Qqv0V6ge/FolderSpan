@@ -18,8 +18,11 @@ private const val SYNC_TASK_STORE_TASK_FILE_PREFIX = "task-"
 private const val SYNC_TASK_STORE_TASK_FILE_SUFFIX = ".pb64"
 private const val SYNC_TASK_STORE_RUN_FILE_SUFFIX = ".pb64l"
 private const val SYNC_TASK_STORE_RUN_HISTORY_LIMIT = 30
+internal const val SYNC_FAILED_ITEM_LIMIT = 10_000
 
 interface SyncTaskStore {
+    fun <T> withExclusiveAccess(block: () -> T): T = block()
+
     fun loadTasks(): List<SyncTask>
 
     fun saveTask(task: SyncTask): SyncTask
@@ -31,6 +34,10 @@ interface SyncTaskStore {
     fun loadRuns(taskId: Long): List<SyncRunRecord>
 
     fun deleteRuns(taskId: Long)
+
+    fun saveFailedItems(taskId: Long, runId: Long, items: List<SyncFailureItem>): Int = items.size
+
+    fun loadFailedItems(taskId: Long, runId: Long): List<SyncFailureItem>? = null
 }
 
 @Serializable
@@ -44,6 +51,8 @@ class TempSyncTaskStore(
     private companion object {
         val operationLock = TaskRuntimeStoreLock()
     }
+
+    override fun <T> withExclusiveAccess(block: () -> T): T = withOperationLock(block)
 
     override fun loadTasks(): List<SyncTask> = withOperationLock {
         val taskDir = buildTaskDirPath()
@@ -88,18 +97,38 @@ class TempSyncTaskStore(
             )
         }.onFailure { error ->
             LogKit.e(AppStrings.ui_failed_append_synchronization_running_record_taskid_arg0.format(arg0 = (record.taskId).toString()), error)
-        }
+        }.getOrThrow()
         trimRunsLocked(record.taskId)
     }
 
     override fun loadRuns(taskId: Long): List<SyncRunRecord> = withOperationLock {
         loadRunRecordsLocked(taskId)
+            .asReversed().distinctBy { it.runId }
             .sortedByDescending { record -> record.startedAt }
             .take(SYNC_TASK_STORE_RUN_HISTORY_LIMIT)
     }
 
     override fun deleteRuns(taskId: Long) = withOperationLock {
         deleteRunsLocked(taskId)
+    }
+
+    override fun saveFailedItems(taskId: Long, runId: Long, items: List<SyncFailureItem>): Int = withOperationLock {
+        replaceTextFile(
+            buildFailedItemsPath(taskId, runId),
+            items.take(SYNC_FAILED_ITEM_LIMIT).joinToString("\n", postfix = if (items.isEmpty()) "" else "\n") { encodeProtoLine(it) },
+            AppStrings.ui_synchronize_running_records,
+        )
+        (items.size - SYNC_FAILED_ITEM_LIMIT).coerceAtLeast(0)
+    }
+
+    override fun loadFailedItems(taskId: Long, runId: Long): List<SyncFailureItem>? = withOperationLock {
+        val path = buildFailedItemsPath(taskId, runId)
+        if (!PrivateFileStorage.exists(FileAccessPermission.Allowed, path)) return@withOperationLock null
+        runCatching {
+            PrivateFileStorage.readFile(FileAccessPermission.Allowed, path).getOrThrow().decodeToString()
+                .lineSequence().filter { it.isNotBlank() }.take(SYNC_FAILED_ITEM_LIMIT)
+                .map { decodeProtoLine<SyncFailureItem>(it) }.toList()
+        }.onFailure { error -> LogKit.e(AppStrings.ui_synchronize_running_records, error) }.getOrNull()
     }
 
     private fun loadTaskFile(path: String): SyncTask? {
@@ -150,6 +179,10 @@ class TempSyncTaskStore(
 
     private fun deleteRunsLocked(taskId: Long) {
         deleteFileIfExists(buildRunFilePath(taskId), AppStrings.ui_synchronize_running_records)
+        val directory = buildFailedItemsDir(taskId)
+        if (PrivateFileStorage.exists(FileAccessPermission.Allowed, directory)) {
+            PrivateFileStorage.deleteDirectory(FileAccessPermission.Allowed, directory)
+        }
     }
 
     private fun loadRunRecordsLocked(taskId: Long): List<SyncRunRecord> {
@@ -167,6 +200,7 @@ class TempSyncTaskStore(
 
     private fun trimRunsLocked(taskId: Long) {
         val latestRecords = loadRunRecordsLocked(taskId)
+            .asReversed().distinctBy { it.runId }
             .sortedByDescending { record -> record.startedAt }
             .take(SYNC_TASK_STORE_RUN_HISTORY_LIMIT)
             .asReversed()
@@ -180,27 +214,22 @@ class TempSyncTaskStore(
             content = content,
             label = AppStrings.ui_synchronize_running_records,
         )
+        val retained = latestRecords.mapTo(mutableSetOf()) { "${it.runId}.failed.pb64l" }
+        val directory = buildFailedItemsDir(taskId)
+        if (PrivateFileStorage.exists(FileAccessPermission.Allowed, directory)) {
+            PrivateFileStorage.getFileAndFolder(FileAccessPermission.Allowed, directory).getOrThrow()
+                .filter { !it.isDirectory && it.name.endsWith(".failed.pb64l") && it.name !in retained }
+                .forEach { deleteFileIfExists(it.path, AppStrings.ui_synchronize_running_records) }
+        }
     }
 
     private fun replaceTextFile(path: String, content: String, label: String) {
         ensureParentDirectory(path)
-        val tempPath = "$path.tmp"
         runCatching {
-            if (PrivateFileStorage.exists(FileAccessPermission.Allowed, tempPath)) {
-                PrivateFileStorage.deleteFile(FileAccessPermission.Allowed, tempPath)
-                    .getOrElse { failure -> throw failure }
-            }
-            PrivateFileStorage.createFile(FileAccessPermission.Allowed, tempPath)
-                .getOrElse { failure -> throw failure }
-            PrivateFileStorage.appendToFile(FileAccessPermission.Allowed, tempPath, content)
-            if (PrivateFileStorage.exists(FileAccessPermission.Allowed, path)) {
-                PrivateFileStorage.deleteFile(FileAccessPermission.Allowed, path)
-                    .getOrElse { failure -> throw failure }
-            }
-            renameSiblingFile(tempPath, path).getOrElse { failure -> throw failure }
+            replaceTaskCleanupFile(path, content)
         }.onFailure { error ->
             LogKit.e(AppStrings.ui_replacement_arg0_failed_path_arg1.format(arg0 = label, arg1 = path), error)
-        }
+        }.getOrThrow()
     }
 
     private fun deleteFileIfExists(path: String, label: String) {
@@ -208,16 +237,6 @@ class TempSyncTaskStore(
         PrivateFileStorage.deleteFile(FileAccessPermission.Allowed, path).onFailure { error ->
             LogKit.e(AppStrings.ui_failed_delete_arg0_path_arg1.format(arg0 = label, arg1 = path), error)
         }
-    }
-
-    private fun renameSiblingFile(fromPath: String, toPath: String): Result<Boolean> {
-        val separator = PrivateFileStorage.getPathSeparator()
-        return PrivateFileStorage.rename(
-            permission = FileAccessPermission.Allowed,
-            path = buildParentPath(fromPath),
-            oldName = fromPath.substringAfterLast(separator),
-            newName = toPath.substringAfterLast(separator),
-        )
     }
 
     private fun ensureParentDirectory(path: String) {
@@ -243,6 +262,11 @@ class TempSyncTaskStore(
     private fun buildRunFilePath(taskId: Long): String {
         return joinPath(buildRunDirPath(), "$taskId$SYNC_TASK_STORE_RUN_FILE_SUFFIX")
     }
+
+    private fun buildFailedItemsDir(taskId: Long): String = joinPath(buildRunDirPath(), taskId.toString())
+
+    private fun buildFailedItemsPath(taskId: Long, runId: Long): String =
+        joinPath(buildFailedItemsDir(taskId), "$runId.failed.pb64l")
 
     private fun buildParentPath(path: String): String {
         val separator = PrivateFileStorage.getPathSeparator()

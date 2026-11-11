@@ -1,6 +1,7 @@
 package com.folderspan.service.operation
 
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.extensions.fileOperationKey
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.DEVICE_DIRECT_MAX_LENGTH
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -208,7 +209,7 @@ internal suspend fun collectDirectoryEntriesAdaptive(
     } ?: normalizedConfig
     val normalizedSeparator = pathSeparator.ifBlank { "/" }
     val normalizedRootPath = if (retainDiscoveredEntries || deduplicateDirectories) {
-        normalizeTraversalPath(root.path, normalizedSeparator)
+        if (root.storageReference?.id?.isNotEmpty() == true) root.fileOperationKey() else normalizeTraversalPath(root.path, normalizedSeparator)
     } else {
         ""
     }
@@ -295,13 +296,13 @@ internal suspend fun collectDirectoryEntriesAdaptive(
                 val directoriesQueuedDuringFiltering = emittedEntries == null && visitedDirectories != null
                 val uniqueEntries = when {
                     emittedEntries != null -> listedEntries.filter { entry ->
-                        emittedEntries.add(normalizeTraversalPath(entry.path, normalizedSeparator))
+                        emittedEntries.add(if (entry.storageReference?.id?.isNotEmpty() == true) entry.fileOperationKey() else normalizeTraversalPath(entry.path, normalizedSeparator))
                     }
 
                     visitedDirectories != null -> {
                         val batchPaths = mutableSetOf<String>()
                         listedEntries.filter { entry ->
-                            val key = normalizeTraversalPath(entry.path, normalizedSeparator)
+                            val key = if (entry.storageReference?.id?.isNotEmpty() == true) entry.fileOperationKey() else normalizeTraversalPath(entry.path, normalizedSeparator)
                             val traversableDirectory =
                                 entry.isDirectory &&
                                     !entry.isSymbolicLink &&
@@ -349,7 +350,7 @@ internal suspend fun collectDirectoryEntriesAdaptive(
                                 directoriesQueuedDuringFiltering -> true
                                 visitedDirectories == null -> true
                                 else -> {
-                                    val key = normalizeTraversalPath(entry.path, normalizedSeparator)
+                                    val key = if (entry.storageReference?.id?.isNotEmpty() == true) entry.fileOperationKey() else normalizeTraversalPath(entry.path, normalizedSeparator)
                                     visitedDirectories.add(key)
                                 }
                             }

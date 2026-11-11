@@ -1,5 +1,10 @@
 package com.folderspan.service.mcp.file
 
+import com.folderspan.PlatformType
+import com.folderspan.data.file.forRemoteAccess
+import com.folderspan.data.file.shouldHideRemoteDiskSpace
+import com.folderspan.data.main.device.DeviceType
+
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.Local
@@ -17,12 +22,16 @@ import kotlinx.coroutines.ensureActive
 import strings.AppStrings
 import kotlinx.coroutines.withContext
 
-class LocalFileEndpointGateway : FileEndpointGateway {
+class LocalFileEndpointGateway internal constructor(
+    private val hostPlatform: DeviceType,
+) : FileEndpointGateway {
+    constructor() : this(PlatformType)
     override val endpoint = FileEndpointRef(FileProtocol.Local)
     override val pathSeparator: String = PathUtils.getPathSeparator()
     override val permissions = FileEndpointPermissions.from(Local().menuPermission)
 
     override suspend fun roots() = PathUtils.getRootPaths(FileAccessPermission.Allowed)
+        .map { roots -> roots.map { it.forRemoteAccess(hostPlatform) } }
 
     override suspend fun details(path: String) = withContext(Dispatchers.Default) {
         runCatching {
@@ -161,6 +170,7 @@ class LocalFileEndpointGateway : FileEndpointGateway {
     }
 
     override suspend fun availableBytes(path: String): Long? {
+        if (shouldHideRemoteDiskSpace(hostPlatform)) return null
         val resolved = runCatching { requireOrdinaryPath(path, allowNonExistentLeaf = true) }.getOrNull() ?: return null
         return FileUtils.freeSpace(FileAccessPermission.Allowed, resolved).takeIf { it >= 0L }
     }

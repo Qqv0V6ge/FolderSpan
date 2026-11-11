@@ -4,6 +4,9 @@ import com.folderspan.service.http.client.HttpRouteClientManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.protobuf.ProtoNumber
 import kotlin.math.max
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -153,16 +156,18 @@ internal class HttpTransferStatusCache(
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
 data class HttpTransferStatus(
-    val version: Int = STATUS_VERSION,
-    val recommendedChunkBytes: Int = HttpRouteClientManager.MAX_LENGTH,
-    val recommendedParallelRequests: Int = HttpRouteClientManager.MAX_CONCURRENT_FILE_CHUNKS,
-    val maxChunkBytes: Int = HttpRouteClientManager.MAX_LENGTH,
-    val maxParallelRequests: Int = HttpRouteClientManager.MAX_CONCURRENT_FILE_CHUNKS,
-    val activeRequests: Int = 0,
-    val busy: Boolean = false,
-    val retryAfterMillis: Long = 0L,
-    val sampledAtMillis: Long = 0L,
+    @ProtoNumber(1) val version: Int = STATUS_VERSION,
+    @ProtoNumber(2) val recommendedChunkBytes: Int = HttpRouteClientManager.MAX_LENGTH,
+    @ProtoNumber(3) val recommendedParallelRequests: Int = HttpRouteClientManager.MAX_CONCURRENT_FILE_CHUNKS,
+    @ProtoNumber(4) val maxChunkBytes: Int = HttpRouteClientManager.MAX_LENGTH,
+    @ProtoNumber(5) val maxParallelRequests: Int = HttpRouteClientManager.MAX_CONCURRENT_FILE_CHUNKS,
+    @ProtoNumber(6) val activeRequests: Int = 0,
+    @ProtoNumber(7) val busy: Boolean = false,
+    @ProtoNumber(8) val retryAfterMillis: Long = 0L,
+    @ProtoNumber(9) val sampledAtMillis: Long = 0L,
 ) {
     fun clamped(): HttpTransferStatus {
         val safeMaxChunkBytes = maxChunkBytes.coerceIn(
@@ -319,6 +324,7 @@ object HttpTransferStatusProvider {
 
 suspend fun delayForHttpTransferBackoff(status: HttpTransferStatus) {
     if (status.busy && status.retryAfterMillis > 0L) {
-        delay(status.retryAfterMillis.milliseconds)
+        val closeWaiting = observeOperationTransferWait(TransferWaitReason.Backoff)
+        try { delay(status.retryAfterMillis.milliseconds) } finally { closeWaiting() }
     }
 }

@@ -3,6 +3,16 @@ package com.folderspan.utils
 import strings.AppStrings
 
 actual fun getPlatformDirectories(): List<PlatformDirectoryItem> {
+    if (MacAppStoreAccess.isEnabled) {
+        return listOf(PlatformDirectoryItem(
+            title = AppStrings.ui_authorize_folder,
+            description = AppStrings.ui_authorize_folder_description,
+            directory = "macos:select-directory",
+            requestAccess = MacAppStoreAccess::selectDirectory,
+        )) + (listOf(PathUtils.getHomePath()) + MacAppStoreAccess.accessibleDirectories()).distinct().map { path ->
+            PlatformDirectoryItem(AppStrings.ui_directory, AppStrings.ui_directory, path)
+        }
+    }
     val items = mutableListOf<PlatformDirectoryItem>()
     val seen = mutableSetOf<String>()
 

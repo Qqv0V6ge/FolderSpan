@@ -105,6 +105,7 @@ internal class FilePasteTaskExecutor(
         },
         awaitCompletion: Boolean = false,
     ): List<Long> {
+        requireWritableCopyDestination(destFileInfo.protocol)
         if (srcFiles.isEmpty()) return emptyList()
         val fileAndFolders = listDestinationChildren().getOrDefault(emptyList())
         val fileOperationState = FileOperationState()
@@ -211,16 +212,15 @@ internal class FilePasteTaskExecutor(
         )
     }
 
-    private suspend fun resolvePasteOperations(
+    internal suspend fun resolvePasteOperations(
         destFileInfo: FileSimpleInfo,
         srcFiles: List<FileSimpleInfo>,
         fileOperationState: FileOperationState,
-        listDestinationChildren: suspend () -> Result<List<FileSimpleInfo>> = {
-            getFileAndFolder(destFileInfo.path)
-        },
+        listDestinationChildren: (suspend () -> Result<List<FileSimpleInfo>>)? = null,
         destinationUnavailableIsFailure: Boolean = false,
     ): List<PendingFileOperation>? {
-        val destinationChildren = listDestinationChildren()
+        requireWritableCopyDestination(destFileInfo.protocol)
+        val destinationChildren = listDestinationChildren?.invoke() ?: getFileAndFolder(destFileInfo.path)
         val fileAndFolders = if (destinationUnavailableIsFailure) {
             destinationChildren.getOrElse { throw ExternalFileTargetUnavailableException() }
         } else {
@@ -245,7 +245,7 @@ internal class FilePasteTaskExecutor(
         )
     }
 
-    private suspend fun enqueuePasteOperations(
+    internal suspend fun enqueuePasteOperations(
         fileOperations: List<PendingFileOperation>,
         taskType: TaskType,
         fallbackMessage: String,
@@ -253,9 +253,13 @@ internal class FilePasteTaskExecutor(
         lease: ExternalFileResourceLease? = null,
         awaitCompletion: Boolean = false,
         onTasksSubmitted: suspend () -> Unit = {},
+        extraTaskValues: Map<String, String> = emptyMap(),
+        beforeOperation: suspend (Task, FileSimpleInfo, FileSimpleInfo) -> Unit = { _, _, _ -> },
+        prepareTask: (Task, FileSimpleInfo, FileSimpleInfo) -> Unit = { _, _, _ -> },
     ): List<Long> {
         val tasks = fileOperations.map { operation ->
             val taskValues = buildMap {
+                putAll(extraTaskValues)
                 put("path", operation.src.path)
                 if (lease != null) {
                     put(EXTERNAL_FILE_LEASE_ID_TASK_VALUE, lease.id)
@@ -277,6 +281,7 @@ internal class FilePasteTaskExecutor(
 
         try {
             tasks.forEach { (task, _, _) -> taskState.addOrUpdate(task) }
+            tasks.forEach { (task, operation, _) -> prepareTask(task, operation.src, operation.dest) }
             if (lease != null) {
                 ExternalFileResourceLeaseRegistry.bindTasks(lease, tasks.map { (task, _, _) -> task.key })
             }
@@ -290,6 +295,7 @@ internal class FilePasteTaskExecutor(
                 taskState.registerTaskHandler(task) {
                     var completedResult: Result<Boolean>? = null
                     try {
+                        beforeOperation(task, operation.src, operation.dest)
                         val replaceResult = deleteReplaceTargetIfNeeded(task, operation.replaceTarget)
                         if (replaceResult.isFailure || !replaceResult.getOrDefault(true)) {
                             val message = taskState.resolveTaskFailureMessage(
@@ -414,7 +420,7 @@ internal class FilePasteTaskExecutor(
                     ?: return Result.failure(
                         TaskEndpointUnavailableException(AppStrings.message_task_target_network_disconnected)
                     )
-                networkAccess.delete(target.path, target.isDirectory)
+                networkAccess.delete(target)
             }
 
             FileProtocol.Share -> Result.failure(Exception(AppStrings.ui_shared_target_does_not_support_replacement))

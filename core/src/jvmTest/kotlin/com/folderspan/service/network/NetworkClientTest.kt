@@ -11,7 +11,7 @@ import strings.AppStrings
 class NetworkClientTest {
     @Test
     fun copyFileDefaultsToExplicitUnsupportedFailure() = runBlocking {
-        val client: NetworkClient = UnsupportedNetworkClient(AppStrings.ui_test_network_client_testing_protocol_unavailable)
+        val client: StorageProvider = UnsupportedNetworkClient(AppStrings.ui_test_network_client_testing_protocol_unavailable)
 
         val result = client.copyFile("/source.txt", "/target.txt")
 

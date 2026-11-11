@@ -3,6 +3,7 @@ package com.folderspan.ui.components.dialog
 import strings.AppStrings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
@@ -15,6 +16,8 @@ import com.folderspan.data.file.FileFilterType
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.DiskBase
 import com.folderspan.ui.components.menu.EditableExposedDropdownMenu
+import com.folderspan.ui.components.file.FileSelectorConstraints
+import com.folderspan.ui.components.file.FileSelectorEntryKind
 import com.folderspan.ui.components.file.FileSelectorEntryRegion
 import com.folderspan.ui.components.model.FileFilterTypeListUiState
 import com.folderspan.ui.components.model.FileSelectionUiState
@@ -149,9 +152,13 @@ fun PathSelectorDialog(
     deskType: DiskBase,
     openPath: String,
     onDismiss: () -> Unit,
-    onConfirm: (FileSimpleInfo?) -> Unit
+    initialDirectory: FileSimpleInfo? = null,
+    extraActions: @Composable RowScope.() -> Unit = {},
+    onConfirmFiles: ((List<FileSimpleInfo>) -> Unit)? = null,
+    onConfirm: (FileSimpleInfo?) -> Unit = {},
 ) {
-    var selected by remember { mutableStateOf<FileSimpleInfo?>(null) }
+    val folders = remember { FileSelectorConstraints(allowedKinds = setOf(FileSelectorEntryKind.Directory)) }
+    var selected by remember { mutableStateOf(emptyList<FileSimpleInfo>()) }
 
     FullSizeFileSelectorDialog(
         onDismissRequest = onDismiss,
@@ -162,12 +169,15 @@ fun PathSelectorDialog(
             )
         },
         dismissButton = {
+            extraActions()
             TextButton(onClick = onDismiss) {
                 Text(AppStrings.ui_cancel)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }, enabled = selected != null) {
+            TextButton(onClick = {
+                if (onConfirmFiles != null) onConfirmFiles(selected.toList()) else onConfirm(selected.lastOrNull())
+            }, enabled = selected.isNotEmpty()) {
                 Text(AppStrings.ui_ok)
             }
         },
@@ -175,12 +185,16 @@ fun PathSelectorDialog(
         FileSelectorEntryRegion(
             deskType = deskType,
             openPath = openPath,
+            initialDirectory = initialDirectory,
+            isSingleSelection = onConfirmFiles == null,
+            displayConstraints = folders,
+            selectionConstraints = folders,
             initialSelectionUiState = FileSelectionUiState(
-                selected?.let { item -> listOf(item) } ?: emptyList(),
+                selected,
             ),
             fileFilterTypesUiState = FileFilterTypeListUiState(listOf(FileFilterType.Folder)),
             onFilesSelected = { choices ->
-                selected = choices.lastOrNull()
+                selected = choices.toList()
             },
         )
     }

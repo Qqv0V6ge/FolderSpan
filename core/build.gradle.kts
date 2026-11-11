@@ -60,6 +60,7 @@ buildConfig {
     buildConfigField("GATEWAY_BASE_URL", gatewayBaseUrl)
     buildConfigField("HTTP_PROXY_URL", httpProxyUrl)
     buildConfigField("API_HOST_HEADER", apiHostHeader)
+    buildConfigField("STORAGE_OAUTH_BROKER_URL", providers.gradleProperty("storageOAuthBrokerUrl").orElse("https://api.folderspan.com/api/v1/storage/oauth"))
 }
 
 val kotlinVersion = libs.versions.kotlin.get()
@@ -539,6 +540,11 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
+        testRuns["test"].executionTask.configure {
+            listOf("FOLDERSPAN_NFS_TEST_PORT", "FOLDERSPAN_NFS_TEST_MOUNT_PORT", "FOLDERSPAN_HTTP_TEST_URL", "FOLDERSPAN_CLOUD_TEST_URL").forEach { key ->
+                environment(key, providers.environmentVariable(key).orElse("").get())
+            }
+        }
     }
 
     js {
@@ -567,7 +573,19 @@ kotlin {
 
     sourceSets {
         getByName("jvmTest").kotlin.srcDirs("src/udpSocketTest/kotlin", "src/jvmAndroidTest/kotlin")
+        getByName("jsTest").kotlin.srcDir("src/browserTest/kotlin")
+        getByName("wasmJsTest").kotlin.srcDir("src/browserTest/kotlin")
         getByName("androidDeviceTest").kotlin.srcDir("src/udpSocketTest/kotlin")
+        if (providers.gradleProperty("storageContentBrowserTest").orNull == "true") {
+            listOf("jsTest", "wasmJsTest").forEach {
+                getByName(it).kotlin.srcDir("src/storageContentBrowserTest/kotlin")
+            }
+            getByName("jsTest").kotlin.srcDir("src/storageContentJsTest/kotlin")
+            getByName("wasmJsTest").kotlin.srcDir("src/storageContentWasmJsTest/kotlin")
+        }
+        if (providers.gradleProperty("storageContentIosAppTest").orNull == "true") {
+            getByName("iosSimulatorArm64Test").kotlin.srcDir("src/storageContentIosAppTest/kotlin")
+        }
         // The two interop endpoints must run together; keep them out of standalone suites.
         if (providers.gradleProperty("webrtcInterop").isPresent) {
             getByName("jvmTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropJvmTest/kotlin", "src/webrtcInteropHostTest/kotlin")
@@ -587,10 +605,20 @@ kotlin {
         jsMain.dependsOn(browserMain)
         wasmJsMain.dependsOn(browserMain)
 
+        val jvmAndroidMain = maybeCreate("jvmAndroidMain").apply { dependsOn(commonMain) }
+        androidMain.dependsOn(jvmAndroidMain)
+        jvmMain.dependsOn(jvmAndroidMain)
+
         val hostFileMain = maybeCreate("hostFileMain").apply { dependsOn(commonMain) }
-        androidMain.dependsOn(hostFileMain)
-        jvmMain.dependsOn(hostFileMain)
+        hostFileMain.dependencies { implementation(libs.ktor.network) }
+        jvmAndroidMain.dependsOn(hostFileMain)
         iosMain.dependsOn(hostFileMain)
+
+
+        val hostFileTest = maybeCreate("hostFileTest").apply { dependsOn(getByName("commonTest")) }
+        getByName("jvmTest").dependsOn(hostFileTest)
+        getByName("androidHostTest").dependsOn(hostFileTest)
+        getByName("iosTest").dependsOn(hostFileTest)
 
         val serverRouteMain = maybeCreate("serverRouteMain").apply {
             dependsOn(commonMain)
@@ -636,6 +664,7 @@ kotlin {
         wasmJsMain.dependsOn(kmpWebRtcMain)
 
         commonMain.dependencies {
+            implementation(libs.ksoup)
             // put your Multiplatform dependencies here
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -703,9 +732,12 @@ kotlin {
             dependencies {
                 implementation(libs.androidx.test.ext.junit)
                 implementation(libs.androidx.test.runner)
+                implementation(libs.androidx.work.testing)
+                implementation(libs.androidx.lifecycle.service)
             }
         }
         androidMain.dependencies {
+            implementation(libs.androidx.work.runtime)
             implementation("${libs.jna.get()}@aar")
             implementation(libs.commons.net)
             implementation(libs.apache.sshd.core)
@@ -738,6 +770,8 @@ kotlin {
             implementation(libs.sqldelight.driver.native)
         }
         jsMain.dependencies {
+            implementation(npm("@js-joda/core", libs.versions.js.joda.core.get()))
+            implementation(npm("@js-joda/timezone", libs.versions.js.joda.timezone.get()))
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.js)
@@ -748,6 +782,8 @@ kotlin {
             implementation(npm("crypto-js", "4.2.0"))
         }
         wasmJsMain.dependencies {
+            implementation(npm("@js-joda/core", libs.versions.js.joda.core.get()))
+            implementation(npm("@js-joda/timezone", libs.versions.js.joda.timezone.get()))
             implementation(libs.ktor.client.js)
             implementation(npm("@cashapp/sqldelight-sqljs-worker", sqlDelightVersion))
             implementation(npm("crypto-js", "4.2.0"))
@@ -816,7 +852,7 @@ libres {
 
 val validateAppStringCatalogs = tasks.register("validateAppStringCatalogs") {
     group = "verification"
-    description = "Validates that English and Simplified Chinese string catalogs have matching keys and arguments."
+    description = "Validates that English and Simplified Chinese string catalogs have unique, matching keys and arguments."
 
     val englishCatalog = layout.projectDirectory.file("src/commonMain/libres/strings/app_en.xml")
     val simplifiedChineseCatalog = layout.projectDirectory.file("src/commonMain/libres/strings/app_zhHans.xml")
@@ -828,15 +864,17 @@ val validateAppStringCatalogs = tasks.register("validateAppStringCatalogs") {
         val simplifiedChineseCharacterPattern = Regex("""[\u3400-\u9fff]""")
         val englishCatalogText = englishCatalog.asFile.readText()
 
-        fun readCatalog(file: File): Map<String, Set<String>> =
+        fun readCatalog(file: File): Map<String, Set<String>> = buildMap {
             stringPattern.findAll(file.readText())
-                .associate { match ->
+                .forEach { match ->
                     val key = match.groupValues[1]
+                    check(key !in this) { "Duplicate localization key '$key' in ${file.name}" }
                     val arguments = argumentPattern.findAll(match.groupValues[2])
                         .map { item -> item.groupValues[1] }
                         .toSet()
-                    key to arguments
+                    put(key, arguments)
                 }
+        }
 
         val english = readCatalog(englishCatalog.asFile)
         val simplifiedChinese = readCatalog(simplifiedChineseCatalog.asFile)

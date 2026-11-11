@@ -1,6 +1,15 @@
 package com.folderspan.service.session
 
 import com.folderspan.test.runSuspendTest
+import com.folderspan.service.operation.withOperationTransferControl
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -14,6 +23,79 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DeviceSessionCreditWakeTest {
+    @Test fun cancellationWhileOneFileHasZeroCreditDoesNotCloseAnotherStream() = runSuspendTest {
+        coroutineScope {
+            val credit = DeviceSessionCredit(DeviceSessionWindowPlan(8, 8, 2))
+            val outgoing = Channel<DeviceSessionFrame>(Channel.UNLIMITED)
+            val incoming = Channel<DeviceSessionFrame>(Channel.UNLIMITED)
+            val connection = DeviceSessionConnection(outgoing, incoming, credit, isClient = true)
+            val first = connection.openStream()
+            val second = connection.openStream()
+            connection.sendData(first, ByteArray(8))
+            val cancelled = MutableStateFlow(false)
+            val entered = CompletableDeferred<Unit>()
+            val waiting = async {
+                withOperationTransferControl({
+                    if (cancelled.value) throw CancellationException("user")
+                }) {
+                    entered.complete(Unit)
+                    connection.sendData(second, byteArrayOf(1))
+                }
+            }
+            try {
+                entered.await()
+                assertFalse(waiting.isCompleted)
+                cancelled.value = true
+                withTimeout(500) { waiting.join() }
+                assertTrue(waiting.isCancelled)
+                assertEquals(0, credit.streamInFlightBytes(second))
+                credit.grant(first, 1)
+                connection.sendData(first, byteArrayOf(2))
+                assertEquals(8, credit.inFlightBytes())
+            } finally {
+                waiting.cancelAndJoin()
+                connection.close(); outgoing.cancel(); incoming.cancel()
+            }
+        }
+    }
+
+    @Test fun pauseDoesNotConsumeTheCreditTimeoutAndGrantCannotBypassPause() = runSuspendTest {
+        coroutineScope {
+            val credit = DeviceSessionCredit(DeviceSessionWindowPlan(8, 8, 2))
+            credit.awaitAndConsume(1, 8)
+            val paused = MutableStateFlow(true)
+            val entered = CompletableDeferred<Unit>()
+            val waiting = async {
+                credit.awaitAndConsume(2, 1, timeoutMillis = 100) {
+                    entered.complete(Unit)
+                    paused.first { !it }
+                }
+            }
+            try {
+                entered.await()
+                delay(200)
+                credit.grant(1, 1)
+                assertFalse(waiting.isCompleted)
+                paused.value = false
+                withTimeout(500) { waiting.await() }
+                assertEquals(8, credit.inFlightBytes())
+            } finally { waiting.cancelAndJoin() }
+        }
+    }
+
+    @Test fun repeatedUnrelatedWakeupsDoNotResetTheCreditDeadline() = runSuspendTest {
+        coroutineScope {
+            val credit = DeviceSessionCredit(DeviceSessionWindowPlan(8, 8, 2))
+            credit.awaitAndConsume(1, 8)
+            val noise = launch { while (true) { credit.wakeWaiters(); delay(1) } }
+            try {
+                val result = withTimeout(500) { runCatching { credit.awaitAndConsume(2, 1, timeoutMillis = 50) } }
+                assertIs<DeviceSessionIoException>(result.exceptionOrNull())
+                assertEquals(8, credit.inFlightBytes())
+            } finally { noise.cancelAndJoin() }
+        }
+    }
+
     @Test
     fun closingAStreamOrSessionFailsAWriterWaitingOnAnotherStreamsCredit() = runSuspendTest {
         for (closeSession in listOf(false, true)) {

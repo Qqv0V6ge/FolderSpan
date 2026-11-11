@@ -122,7 +122,7 @@ class WebUiRequestHandler(
         }
         val headers = securityHeaders() + if (management && request.header("Origin") != null) listOf(
             LinkShareHttpHeader("Access-Control-Allow-Origin", request.header("Origin")!!.trim()),
-            LinkShareHttpHeader("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length, X-FolderSpan-End, X-FolderSpan-Size"),
+            LinkShareHttpHeader("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length, X-FolderSpan-End, X-FolderSpan-Size, $WEB_UI_DEVICE_FEEDBACK_TIMING_HEADER, $WEB_UI_DEVICE_HOST_TIME_HEADER"),
             LinkShareHttpHeader("Vary", "Origin"),
         ) else emptyList()
         return response.copy(headers = response.headers.filterNot { header ->

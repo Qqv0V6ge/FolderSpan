@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.combine
 import strings.AppStrings
 
 internal class DeviceSessionRpcException(
@@ -46,6 +47,7 @@ internal class DeviceSessionPeer(
     private val receivePlan: DeviceSessionWindowPlan,
     private val role: DeviceSessionEndpointRole = DeviceSessionEndpointRole.Client,
 ) {
+    val transferBudget = DeviceSessionTransferBudget(receivePlan.maxFileStreams)
     private val mutex = Mutex()
     private val streamData = HashMap<Int, Channel<ByteArray>>()
     private val streamTrailers = HashMap<Int, CompletableDeferred<ByteArray>>()
@@ -60,6 +62,9 @@ internal class DeviceSessionPeer(
 
     val connection: DeviceSessionFrameConnection
         get() = transport.connection
+
+    internal fun transferActivity() = combine(connection.activeStreamCount,
+        checkNotNull(controlEndpoint).activeTransferRequests) { streams, requests -> streams + requests }
 
     fun start(scope: CoroutineScope): Job {
         LogKit.i(AppStrings.ui_device_session_scheduling_starts)
@@ -471,12 +476,12 @@ internal class DeviceSessionPeer(
                 DeviceSessionFrameType.Data -> {
                     if (frame.streamId == DEVICE_SESSION_CONTROL_STREAM_ID) {
                         val messages = try {
-                            controlAssembler.push(frame.payload)
+                            controlAssembler.push(frame.payload, frame.receivedAtMillis)
                         } catch (error: DeviceSessionIoException) {
                             LogKit.w(AppStrings.ui_device_session_control_message_assembly_failed_arg0.format(arg0 = (error.message).toString()))
                             emptyList()
                         }
-                        messages.forEach { message -> handleControl(message) }
+                        messages.forEach { message -> handleControl(message, controlAssembler.messageReceivedAtMillis) }
                     } else {
                         val channel = mutex.withLock { streamData[frame.streamId] }
                         if (channel != null) {
@@ -540,6 +545,7 @@ internal class DeviceSessionPeer(
     }
 
     private suspend fun notifyClosed() {
+        transferBudget.close()
         val handler = mutex.withLock {
             if (closeNotified) return
             closeNotified = true
@@ -548,8 +554,8 @@ internal class DeviceSessionPeer(
         handler?.invoke()
     }
 
-    private suspend fun handleControl(payload: ByteArray) {
-        controlEndpoint?.handle(payload)
+    private suspend fun handleControl(payload: ByteArray, receivedAtMillis: Long?) {
+        controlEndpoint?.handle(payload, receivedAtMillis)
     }
 
     private suspend fun handleOpen(frame: DeviceSessionFrame) {

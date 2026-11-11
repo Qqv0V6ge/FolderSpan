@@ -3,6 +3,7 @@ package com.folderspan.service.mcp.file
 import com.folderspan.cleanup.resolveDesktopApplicationDataDirectory
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.network.Network
 import com.folderspan.data.main.network.NetworkProtocol
 import com.folderspan.exception.AuthorityException
@@ -25,6 +26,25 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FileEndpointGatewayTest {
+    @Test
+    fun iosRemoteGatewayDoesNotExposeDiskCapacityAndStillReadsFiles() = runBlocking(Dispatchers.IO) {
+        val directory = Files.createTempDirectory("ios-remote-capacity-").toRealPath()
+        try {
+            val source = Files.writeString(directory.resolve("document.txt"), "content")
+            val gateway = LocalFileEndpointGateway(hostPlatform = DeviceType.IOS)
+
+            val roots = gateway.roots().getOrThrow()
+
+            assertTrue(roots.isNotEmpty())
+            assertTrue(roots.all { it.totalSpace == 0L && it.freeSpace == 0L })
+            assertNull(gateway.availableBytes(directory.toString()))
+            assertEquals(7L, gateway.info(source.toString()).getOrThrow().size)
+            assertEquals("content", gateway.readRange(source.toString(), 0, 7).getOrThrow().bytes.decodeToString())
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun localDirectoryReadsMetadataLazilyAndDoesNotCountDescendants() = runBlocking(Dispatchers.IO) {
         val root = Files.createTempDirectory("mcp-lazy-directory-")
@@ -160,7 +180,11 @@ class FileEndpointGatewayTest {
             assertEquals(source.absolutePath, info.path)
             assertEquals("world", range.bytes.decodeToString())
             assertEquals(11L, range.totalSize)
-            assertNotNull(gateway.availableBytes(directory.absolutePath))
+            if (System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) {
+                assertNull(gateway.availableBytes(directory.absolutePath))
+            } else {
+                assertNotNull(gateway.availableBytes(directory.absolutePath))
+            }
             assertTrue(renamed.exists())
             assertTrue(nested.isDirectory)
             assertTrue(empty.isFile)

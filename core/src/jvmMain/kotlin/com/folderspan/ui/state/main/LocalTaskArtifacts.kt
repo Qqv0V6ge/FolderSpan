@@ -44,11 +44,12 @@ internal actual object LocalTaskArtifacts {
     }
 
     actual fun describe(path: String, cacheArtifact: Boolean): LocalTaskArtifactDescription? {
+        val target = guarded(path, cacheArtifact)
         val attributes = try {
-            Files.readAttributes(guarded(path, cacheArtifact), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            Files.readAttributes(target, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
         } catch (_: java.nio.file.NoSuchFileException) { return null }
         check(attributes.isRegularFile || attributes.isDirectory) { "ownership_changed" }
-        return LocalTaskArtifactDescription(if (attributes.isRegularFile) attributes.size() else null)
+        return LocalTaskArtifactDescription(if (attributes.isRegularFile) attributes.size() else null, fileIdentity(target, attributes))
     }
 
     actual fun inspect(path: String, cacheArtifact: Boolean): LocalTaskArtifactIdentity? {

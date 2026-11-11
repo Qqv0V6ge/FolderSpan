@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
@@ -15,7 +16,16 @@ import strings.AppStrings
 internal class FileStateBasicOperations(
     private val currentDesk: () -> DiskBase,
     private val updateFileAndFolder: suspend () -> Unit,
+    private val directoryReference: (String) -> FileSimpleInfo? = { null },
 ) {
+    suspend fun rename(file: FileSimpleInfo, newName: String): Result<Boolean> {
+        val desk = currentDesk()
+        if (desk !is NetworkAccess) return rename(file.path.substringBeforeLast(desk.pathSeparator, desk.pathSeparator), file.name, newName)
+        val result = withContext(Dispatchers.Default) { desk.rename(file, newName) }
+        if (result.getOrNull() == true) updateFileAndFolder()
+        return result
+    }
+
     suspend fun rename(path: String, oldName: String, newName: String): Result<Boolean> {
         return withContext(Dispatchers.Default) {
             val desk = currentDesk()
@@ -60,7 +70,7 @@ internal class FileStateBasicOperations(
                     )
                 }
 
-                is NetworkAccess -> desk.createFolder(path, name)
+                is NetworkAccess -> desk.createFolder(directoryReference(path) ?: desk.getFile(path).getOrThrow(), name)
 
                 else -> Result.failure(Exception(AppStrings.ui_create_folder_failed))
             }
@@ -85,7 +95,7 @@ internal class FileStateBasicOperations(
                     )
                 }
 
-                is NetworkAccess -> desk.createFile(path, name)
+                is NetworkAccess -> desk.createFile(directoryReference(path) ?: desk.getFile(path).getOrThrow(), name)
 
                 else -> Result.failure(Exception(AppStrings.ui_create_file_failure))
             }

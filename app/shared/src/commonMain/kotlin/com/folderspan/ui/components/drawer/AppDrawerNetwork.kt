@@ -169,14 +169,14 @@ private fun AppDrawerNetworkActions(uiState: AppDrawerNetworkUiState) {
     Row {
         Icon(
             Icons.Default.Add,
-            null,
+            AppStrings.ui_new,
             Modifier.clip(RoundedCornerShape(25.dp))
                 .clickable(onClick = uiState.onAddNetwork)
         )
         Spacer(Modifier.width(8.dp))
         Icon(
             Icons.Default.Settings,
-            null,
+            AppStrings.ui_network_management,
             Modifier.clip(RoundedCornerShape(25.dp))
                 .clickable(onClick = uiState.onManageNetworks)
         )

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -23,10 +24,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.toIcon
 import com.folderspan.data.main.device.Device
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.extensions.DeviceIcon
 import com.folderspan.extensions.formatFileSize
 import com.folderspan.extensions.timestampToSyncDate
@@ -50,6 +56,9 @@ import com.folderspan.ui.components.grid.GridListFabPadding
 import com.folderspan.ui.components.model.FileSelectionUiState
 import com.folderspan.ui.components.model.StringListUiState
 import com.folderspan.ui.components.scaffold.AppScaffold
+import com.folderspan.ui.screen.device.hasAllVisibleDevicesSelected
+import com.folderspan.ui.screen.device.retainVisibleDeviceSelection
+import com.folderspan.ui.screen.device.toggleAllVisibleDeviceIds
 import com.folderspan.ui.state.file.FileShareLikeCategory
 import com.folderspan.ui.state.file.FileShareLikeCategory.*
 import com.folderspan.ui.state.file.ShareListDropReceiver
@@ -219,13 +228,44 @@ object FileShareScreen : AppScreenRoute {
 
         /* 分享到其他设备 */
         var curDevice by remember { mutableStateOf<SocketDevice?>(null) }
-
+        var showDeviceSelectionSheet by remember { mutableStateOf(false) }
+        var selectedDeviceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+        var pendingBatchDeviceIds by remember { mutableStateOf<Set<String>?>(null) }
+        val selectableDeviceIds = socketDevices
+            .filter { canSelectDeviceShare(fileShareState.sendFile[it.id]) }
+            .map { it.id }.toSet()
+        LaunchedEffect(selectableDeviceIds) {
+            selectedDeviceIds = retainVisibleDeviceSelection(selectedDeviceIds, selectableDeviceIds)
+        }
 
         val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
         var showBottomSheet by remember { mutableStateOf(false) }
         var fileShareType by remember { mutableStateOf(FileShareType.NONE) }
         var showFileSelector by remember { mutableStateOf(false) }
         val fileSelectorSelection = remember { mutableStateListOf<FileSimpleInfo>() }
+
+        fun sendDeviceBatch(targetIds: Set<String>, selectedFiles: List<FileSimpleInfo>, allowHidden: Boolean) {
+            if (selectedFiles.isEmpty()) return
+            val result = submitDeviceShareBatch(
+                selectedDeviceIds = targetIds,
+                devices = deviceState.socketDevices.sortedBy { it.httpClient != null },
+                files = selectedFiles,
+                allowHidden = allowHidden,
+                shareState = fileShareState,
+                onShare = deviceState::share,
+            )
+            selectedDeviceIds = emptySet()
+            showDeviceSelectionSheet = false
+            scope.launch {
+                snackbarHostState.showLatestSnackbar(
+                    AppStrings.ui_device_share_batch_result.format(
+                        requested = result.requested.toString(),
+                        updated = result.updated.toString(),
+                        skipped = result.skipped.toString(),
+                    )
+                )
+            }
+        }
 
         fun refreshSelectionState() {
             selectFileType = when {
@@ -272,9 +312,11 @@ object FileShareScreen : AppScreenRoute {
         }
 
         fun launchFileSelector() {
-            curLinkDevice = null
-            curDevice = null
-            fileShareType = FileShareType.NONE
+            if (pendingBatchDeviceIds == null) {
+                curLinkDevice = null
+                curDevice = null
+                fileShareType = FileShareType.NONE
+            }
             fileSelectorSelection.clear()
             showFileSelector = true
         }
@@ -351,6 +393,7 @@ object FileShareScreen : AppScreenRoute {
                                 showBottomSheet = !showBottomSheet
                                 curLinkDevice = null
                                 curDevice = null
+                                pendingBatchDeviceIds = null
                                 fileShareType = FileShareType.NONE
                                 checkedFiles.clear()
                                 refreshSelectionState()
@@ -482,6 +525,7 @@ object FileShareScreen : AppScreenRoute {
                             onClick = {
                                 if (category == RUNNING) {
                                     curLinkDevice = device
+                                    pendingBatchDeviceIds = null
                                     fileShareType = FileShareType.LINK
 
                                     val deviceFileShareInfo =
@@ -520,7 +564,13 @@ object FileShareScreen : AppScreenRoute {
                                     bottom = 12.dp,
                                 ),
                             ) {
-                                Row {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { showDeviceSelectionSheet = true },
+                                        enabled = selectableDeviceIds.isNotEmpty(),
+                                    ) {
+                                        Icon(Icons.Default.Checklist, AppStrings.ui_batch_operation)
+                                    }
                                     Icon(
                                         Icons.Default.Add,
                                         null,
@@ -574,13 +624,10 @@ object FileShareScreen : AppScreenRoute {
                                         }
                                         return@ShareToDeviceListItem
                                     }
-                                    fileShareState.shareToDevices[device.id] =
-                                        Pair(hideFilePreference, selectedFiles)
-                                    if (
-                                        fileShareState.sendFile[device.id] != FileShareStatus.COMPLETED &&
-                                        fileShareState.sendFile[device.id] != FileShareStatus.WAITING
+                                    if (submitDeviceShare(
+                                            device, selectedFiles, hideFilePreference, fileShareState, deviceState::share,
+                                        )
                                     ) {
-                                        deviceState.share(device)
                                         scope.launch {
                                             snackbarHostState.showLatestSnackbar(
                                                 AppStrings.ui_sent_arg0_items.format(arg0 = (selectedFiles.size).toString())
@@ -591,6 +638,7 @@ object FileShareScreen : AppScreenRoute {
                                 }
 
                                 curDevice = device
+                                pendingBatchDeviceIds = null
                                 fileShareType = FileShareType.DEVICE
 
                                 val deviceFileShareInfo =
@@ -645,10 +693,49 @@ object FileShareScreen : AppScreenRoute {
             }
 
             val isFileShareReady =
-                curLinkDevice != null || curDevice != null || fileShareType == FileShareType.SYSTEM
+                curLinkDevice != null || curDevice != null || pendingBatchDeviceIds != null || fileShareType == FileShareType.SYSTEM
+
+            if (showDeviceSelectionSheet && !showBottomSheet) {
+                DeviceShareSelectionSheet(
+                    devices = socketDevices.distinctBy { it.id },
+                    sendStatuses = fileShareState.sendFile.toMap(),
+                    sendMessages = fileShareState.sendFileMessage.toMap(),
+                    selectedDeviceIds = selectedDeviceIds,
+                    canSend = selectedDeviceIds.isNotEmpty() && files.isNotEmpty(),
+                    onToggleDevice = { deviceId ->
+                        selectedDeviceIds = if (deviceId in selectedDeviceIds) {
+                            selectedDeviceIds - deviceId
+                        } else {
+                            selectedDeviceIds + deviceId
+                        }
+                    },
+                    onToggleAll = {
+                        selectedDeviceIds = toggleAllVisibleDeviceIds(selectableDeviceIds, selectedDeviceIds)
+                    },
+                    onCancelShare = deviceState::cancelShare,
+                    onDismiss = {
+                        showDeviceSelectionSheet = false
+                        selectedDeviceIds = emptySet()
+                    },
+                    onSend = {
+                        if (SettingsUtils.easyFileShare.getTapToSendOnDevice()) {
+                            sendDeviceBatch(selectedDeviceIds, files.toList(), SettingsUtils.easyFileShare.getDeviceHideFile())
+                        } else {
+                            pendingBatchDeviceIds = selectedDeviceIds.toSet()
+                            curDevice = null
+                            curLinkDevice = null
+                            fileShareType = FileShareType.DEVICE
+                            checkedFiles.clear()
+                            checkedFiles.addAll(files)
+                            showDeviceSelectionSheet = false
+                            showBottomSheet = true
+                        }
+                    },
+                )
+            }
 
             if (showBottomSheet) {
-                LaunchedEffect(showBottomSheet, curLinkDevice, curDevice, fileShareType) {
+                LaunchedEffect(showBottomSheet, curLinkDevice, curDevice, fileShareType, pendingBatchDeviceIds) {
                     if (!showBottomSheet || !isFileShareReady) return@LaunchedEffect
 
                     val linkAccess = curLinkDevice?.let { device ->
@@ -659,7 +746,7 @@ object FileShareScreen : AppScreenRoute {
                         FileShareType.LINK -> linkAccess?.allowHidden
                             ?: SettingsUtils.easyFileShare.getHideFile()
 
-                        FileShareType.DEVICE -> fileShareState.shareToDevices[curDevice!!.id]?.first
+                        FileShareType.DEVICE -> curDevice?.let { fileShareState.shareToDevices[it.id]?.first }
                             ?: SettingsUtils.easyFileShare.getDeviceHideFile()
 
                         FileShareType.SYSTEM -> false
@@ -683,7 +770,8 @@ object FileShareScreen : AppScreenRoute {
                         }
 
                         FileShareType.DEVICE -> {
-                            val temp = fileShareState.shareToDevices[curDevice!!.id]?.second ?: listOf()
+                            val temp = if (pendingBatchDeviceIds != null) checkedFiles else
+                                curDevice?.let { fileShareState.shareToDevices[it.id]?.second }.orEmpty()
                             if (temp.size == fileShareState.files.size) 0 else -1
                         }
 
@@ -695,9 +783,11 @@ object FileShareScreen : AppScreenRoute {
 
                 ModalBottomSheet(
                     onDismissRequest = {
+                        if (pendingBatchDeviceIds != null) showDeviceSelectionSheet = true
                         showBottomSheet = false
                         curLinkDevice = null
                         curDevice = null
+                        pendingBatchDeviceIds = null
                         fileShareType = FileShareType.NONE
                         showFileSelector = false
                         isAllowUpload = false
@@ -760,14 +850,15 @@ object FileShareScreen : AppScreenRoute {
                                             }
 
                                             FileShareType.DEVICE -> {
-                                                if (fileShareState.sendFile[curDevice!!.id] != FileShareStatus.COMPLETED && fileShareState.sendFile[curDevice!!.id] != FileShareStatus.WAITING) {
-                                                    deviceState.share(curDevice!!)
-                                                }
-                                                fileShareState.shareToDevices[curDevice!!.id] =
-                                                    Pair(
-                                                        isHideFile,
-                                                        fileShareState.checkedFiles.toList()
+                                                val batchIds = pendingBatchDeviceIds
+                                                if (batchIds != null) {
+                                                    sendDeviceBatch(batchIds, checkedFiles.toList(), isHideFile)
+                                                } else {
+                                                    val device = curDevice ?: return@Button
+                                                    submitDeviceShare(
+                                                        device, checkedFiles.toList(), isHideFile, fileShareState, deviceState::share,
                                                     )
+                                                }
                                             }
 
                                             FileShareType.SYSTEM -> {
@@ -791,13 +882,16 @@ object FileShareScreen : AppScreenRoute {
                                         showBottomSheet = false
                                         curLinkDevice = null
                                         curDevice = null
+                                        pendingBatchDeviceIds = null
                                         fileShareType = FileShareType.NONE
                                         isAllowUpload = false
                                     },
-                                    enabled = canShareSystem
+                                    enabled = canShareSystem && (pendingBatchDeviceIds == null || checkedFiles.isNotEmpty())
                                 ) {
                                     Text(
-                                        if (fileShareType == FileShareType.SYSTEM) {
+                                        if (pendingBatchDeviceIds != null) {
+                                            AppStrings.ui_send
+                                        } else if (fileShareType == FileShareType.SYSTEM) {
                                             AppStrings.ui_share
                                         } else {
                                             AppStrings.ui_complete
@@ -1072,6 +1166,80 @@ internal fun shouldShowFileShareMergeDialog(
     return !(existingFiles.isEmpty() || incomingFiles.isEmpty()) && existingFiles.toSet() != incomingFiles.toSet()
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DeviceShareSelectionSheet(
+    devices: List<SocketDevice>,
+    sendStatuses: Map<String, FileShareStatus>,
+    sendMessages: Map<String, String>,
+    selectedDeviceIds: Set<String>,
+    canSend: Boolean,
+    onToggleDevice: (String) -> Unit,
+    onToggleAll: () -> Unit,
+    onCancelShare: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSend: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
+    val selectableIds = devices.filter { canSelectDeviceShare(sendStatuses[it.id]) }.map { it.id }.toSet()
+    val allSelected = hasAllVisibleDevicesSelected(selectableIds, selectedDeviceIds)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        AppStrings.ui_select_device_send,
+                        style = typography.titleLarge,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        AppStrings.ui_arg0_devices_selected.format(arg0 = selectedDeviceIds.size.toString()),
+                        style = typography.bodyMedium,
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, AppStrings.ui_exit_device_selection)
+                }
+            }
+            HorizontalDivider()
+            LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                items(devices, key = { it.id }) { device ->
+                    ShareToDeviceListItem(
+                        device = device,
+                        sendStatus = sendStatuses[device.id],
+                        sendMessage = sendMessages[device.id],
+                        onCancel = { onCancelShare(device.id) },
+                        onClick = { onToggleDevice(device.id) },
+                        selectionMode = true,
+                        selected = device.id in selectedDeviceIds,
+                        selectionEnabled = device.id in selectableIds,
+                    )
+                }
+            }
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onToggleAll) {
+                    Text(if (allSelected) AppStrings.ui_deselect_all else AppStrings.ui_select_all)
+                }
+                Button(onClick = onSend, enabled = canSend, modifier = Modifier.weight(1f)) {
+                    Text(AppStrings.ui_send)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun ShareToDeviceListItem(
     device: SocketDevice,
@@ -1080,9 +1248,21 @@ internal fun ShareToDeviceListItem(
     onCancel: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    selectionEnabled: Boolean = true,
 ) {
     ListItem(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = if (selectionMode) {
+            modifier.toggleable(
+                value = selected,
+                enabled = selectionEnabled,
+                role = Role.Checkbox,
+                onValueChange = { onClick() },
+            )
+        } else {
+            modifier.clickable(onClick = onClick)
+        },
         overlineContent = {
             val statusLabel = shareToDeviceListItemStatusLabel(
                 sendStatus = sendStatus,
@@ -1135,14 +1315,33 @@ internal fun ShareToDeviceListItem(
             Text(shareToDeviceListItemSupportingText(sendStatus, sendMessage))
         },
         trailingContent = {
-            if (shareToDeviceListItemCanCancel(sendStatus)) {
-                IconButton(onClick = onCancel) {
-                    Icon(Icons.Default.Close, null)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (shareToDeviceListItemCanCancel(sendStatus)) {
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.Default.Close, AppStrings.ui_cancel)
+                    }
+                }
+                if (selectionMode) {
+                    Checkbox(checked = selected, onCheckedChange = null, enabled = selectionEnabled)
                 }
             }
         },
         leadingContent = { device.type.DeviceIcon() },
     )
+}
+
+@Preview(widthDp = 360, heightDp = 240)
+@Preview(widthDp = 1024, heightDp = 240)
+@Preview(widthDp = 640, heightDp = 300)
+@Composable
+private fun DeviceShareSelectionPreview() {
+    MaterialTheme {
+        DeviceShareSelectionSheet(
+            devices = listOf(SocketDevice("preview", "FolderSpan", "/", type = DeviceType.JVM)),
+            sendStatuses = emptyMap(), sendMessages = emptyMap(), selectedDeviceIds = setOf("preview"),
+            canSend = true, onToggleDevice = {}, onToggleAll = {}, onCancelShare = {}, onDismiss = {}, onSend = {},
+        )
+    }
 }
 
 internal fun shareToDeviceListItemCanCancel(sendStatus: FileShareStatus?): Boolean =

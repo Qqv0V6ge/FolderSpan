@@ -1,5 +1,7 @@
 package com.folderspan.ui.components.file
 
+import com.folderspan.extensions.fileOperationKey
+
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -132,7 +134,7 @@ internal fun FileSelectorEntriesRegion(
             ) {
                 items(
                     items = entries,
-                    key = { entry -> entry.file.path },
+                    key = { entry -> entry.file.fileOperationKey() },
                     contentType = { "file-selector-grid-entry" },
                 ) { entry ->
                     FileSelectorGridTile(
@@ -151,7 +153,7 @@ internal fun FileSelectorEntriesRegion(
             ) {
                 items(
                     items = entries,
-                    key = { entry -> entry.file.path },
+                    key = { entry -> entry.file.fileOperationKey() },
                     contentType = { "file-selector-list-entry" },
                 ) { entry ->
                     FileSelectorListItem(

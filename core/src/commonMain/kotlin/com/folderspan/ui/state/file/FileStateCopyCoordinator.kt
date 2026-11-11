@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.service.operation.withOperationTransferControl
 import strings.AppStrings
 import com.folderspan.ui.state.main.TaskArtifact
 import com.folderspan.ui.state.main.TaskArtifactPurpose
@@ -11,6 +12,7 @@ import kotlin.uuid.Uuid
 
 import com.folderspan.data.StatusEnum
 import com.folderspan.data.file.FileProtocol
+import com.folderspan.service.network.StorageReference
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.DiskBase
 import com.folderspan.data.main.device.Device
@@ -29,6 +31,7 @@ import com.folderspan.service.file.DeviceTransportChunk
 import com.folderspan.service.file.runDeviceTransportPipeline
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.DEVICE_DIRECT_MAX_LENGTH
 import com.folderspan.service.operation.TraversalEndpointKind
+import com.folderspan.service.operation.OperationRequestFeedback
 import com.folderspan.service.operation.delayForHttpTransferBackoff
 import com.folderspan.ui.state.main.*
 import com.folderspan.utils.FileAccessPermission
@@ -40,6 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
@@ -59,6 +63,24 @@ internal class FileStateCopyCoordinator(
     private val fileRecentState: FileRecentState,
 ) {
     suspend fun copyTo(
+        task: Task,
+        srcFileSimpleInfo: FileSimpleInfo,
+        destFileSimpleInfo: FileSimpleInfo,
+    ): Result<Boolean> {
+        return try {
+            taskState.withTransferWaitObservation(task) {
+                withOperationTransferControl({
+                    if (!taskState.awaitIfPaused(task.key) || taskState.isTaskCancelled(task.key)) {
+                        throw CancellationException(AppStrings.message_task_cancelled)
+                    }
+                }) { copyToWithControl(task, srcFileSimpleInfo, destFileSimpleInfo) }
+            }
+        } catch (cancelled: CancellationException) {
+            cancelledCopyResult(task, destFileSimpleInfo.path, cancelled)
+        }
+    }
+
+    private suspend fun copyToWithControl(
         task: Task,
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
@@ -263,16 +285,7 @@ internal class FileStateCopyCoordinator(
             )
             result
         } catch (cancel: CancellationException) {
-            val message = taskState.resolveTaskFailureMessage(
-                task = task,
-                preferredPath = destFileSimpleInfo.path,
-                error = cancel,
-                fallback = AppStrings.message_task_cancelled,
-            )
-            taskState.putResult(task, destFileSimpleInfo.path, message)
-            taskState.updateStatus(task, StatusEnum.FAILURE)
-            taskState.clearSignals(task.key)
-            Result.failure(cancel)
+            cancelledCopyResult(task, destFileSimpleInfo.path, cancel)
         } catch (error: Exception) {
             LogKit.e(
                 AppStrings.ui_copy_execution_exception_task_arg0.format(arg0 = (task.key).toString()) +
@@ -291,9 +304,45 @@ internal class FileStateCopyCoordinator(
         sourceDesk: DiskBase,
         targetDesk: DiskBase,
     ): Result<Boolean> {
+        return try {
+            taskState.withTransferWaitObservation(task) {
+                withOperationTransferControl({
+                    if (!taskState.awaitIfPaused(task.key) || taskState.isTaskCancelled(task.key)) {
+                        throw CancellationException(AppStrings.message_task_cancelled)
+                    }
+                }) { runCopyAcrossEndpointsWithControl(task, src, dest, sourceDesk, targetDesk) }
+            }
+        } catch (cancelled: CancellationException) {
+            cancelledCopyResult(task, dest.path, cancelled)
+        }
+    }
+
+    private suspend fun runCopyAcrossEndpointsWithControl(
+        task: Task,
+        src: FileSimpleInfo,
+        dest: FileSimpleInfo,
+        sourceDesk: DiskBase,
+        targetDesk: DiskBase,
+    ): Result<Boolean> {
+        val feedback = currentCoroutineContext()[OperationRequestFeedback]
+        val unsubscribe = feedback?.let { taskState.observeRuntimeByteProgress(task.key, dest.path, it::bytes) }
+        return try {
+            val result = runCopyWithArtifact(task, src, dest, sourceDesk, targetDesk)
+            if (!result.getOrDefault(false)) feedback?.failure()
+            result
+        } finally { unsubscribe?.invoke() }
+    }
+
+    private suspend fun runCopyWithArtifact(
+        task: Task,
+        src: FileSimpleInfo,
+        dest: FileSimpleInfo,
+        sourceDesk: DiskBase,
+        targetDesk: DiskBase,
+    ): Result<Boolean> {
         if (!src.isDirectory && !taskState.isTrackedArtifactPath(task.key, dest.path)) {
             return taskState.withTaskArtifact(task, "direct:${dest.protocol}:${dest.protocolId}:${dest.path}",
-                TaskRuntimeEndpointRef(dest.protocol, dest.protocolId, dest.path)) { path ->
+                TaskRuntimeEndpointRef(dest.protocol, dest.protocolId, dest.path, dest.storageReference)) { path ->
                 runTrackedCopyAcrossEndpoints(task, src, dest.withCopy(path = path), sourceDesk, targetDesk)
             }
         }
@@ -455,16 +504,7 @@ internal class FileStateCopyCoordinator(
             )
             result
         } catch (cancel: CancellationException) {
-            val message = taskState.resolveTaskFailureMessage(
-                task = task,
-                preferredPath = dest.path,
-                error = cancel,
-                fallback = AppStrings.message_task_cancelled,
-            )
-            taskState.putResult(task, dest.path, message)
-            taskState.updateStatus(task, StatusEnum.FAILURE)
-            taskState.clearSignals(task.key)
-            Result.failure(cancel)
+            cancelledCopyResult(task, dest.path, cancel)
         } catch (error: Exception) {
             LogKit.e(
                 AppStrings.ui_cross_end_copy_execution_exception_task_arg0.format(arg0 = (task.key).toString()) +
@@ -474,6 +514,15 @@ internal class FileStateCopyCoordinator(
             )
             Result.failure(error)
         }
+    }
+
+    private fun cancelledCopyResult(task: Task, path: String, cancelled: CancellationException): Result<Boolean> {
+        if (!taskState.isTaskCancelled(task.key)) throw cancelled
+        val message = taskState.resolveTaskFailureMessage(task, path, cancelled, AppStrings.message_task_cancelled)
+        taskState.putResult(task, path, message)
+        taskState.updateStatus(task, StatusEnum.FAILURE)
+        taskState.clearSignals(task.key)
+        return Result.failure(cancelled)
     }
 
     private suspend fun copyShareToDevice(
@@ -491,6 +540,7 @@ internal class FileStateCopyCoordinator(
             copyViaLocalTemp(
                 task = task,
                 source = source,
+                destination = destination,
                 copyToTemp = { temporary -> share.copyTo(task, source, temporary) },
                 copyFromTemp = { temporary -> device.files.copyTo(task, temporary, destination) },
             )
@@ -511,7 +561,8 @@ internal class FileStateCopyCoordinator(
             label = AppStrings.ui_target_device,
             preferredPath = destination.path,
         ) {
-            val directResult = copyNetworkFileToDeviceDirect(
+            val directResult = if ((networkAccess as? Network)?.contentTransformAvailable() == true) null
+                else copyNetworkFileToDeviceDirect(
                 task = task,
                 source = source,
                 destination = destination,
@@ -525,6 +576,7 @@ internal class FileStateCopyCoordinator(
             copyViaLocalTemp(
                 task = task,
                 source = source,
+                destination = destination,
                 copyToTemp = { tempInfo -> networkAccess.copyTo(task, source, tempInfo) },
                 copyFromTemp = { tempInfo -> device.files.copyTo(task, tempInfo, destination) }
             )
@@ -560,6 +612,7 @@ internal class FileStateCopyCoordinator(
                 copyViaLocalTemp(
                 task = task,
                     source = source,
+                destination = destination,
                     copyToTemp = { tempInfo -> device.files.copyTo(task, source, tempInfo) },
                     copyFromTemp = { tempInfo -> device.files.copyTo(task, tempInfo, destination) },
                 )
@@ -604,6 +657,7 @@ internal class FileStateCopyCoordinator(
                     copyViaLocalTemp(
                 task = task,
                         source = source,
+                destination = destination,
                         copyToTemp = { tempInfo -> sourceNetworkAccess.copyTo(task, source, tempInfo) },
                         copyFromTemp = { tempInfo -> targetNetworkAccess.copyTo(task, tempInfo, destination) }
                     )
@@ -614,6 +668,7 @@ internal class FileStateCopyCoordinator(
         return copyViaLocalTemp(
                 task = task,
             source = source,
+                destination = destination,
             copyToTemp = { tempInfo -> sourceNetworkAccess.copyTo(task, source, tempInfo) },
             copyFromTemp = { tempInfo -> targetNetworkAccess.copyTo(task, tempInfo, destination) }
         )
@@ -751,7 +806,7 @@ internal class FileStateCopyCoordinator(
                 if (isUsableLocalUploadPath(file.path) && file.size < 0L) {
                     networkAccess.uploadFileFromLocal(
                         localPath = file.path,
-                        remotePath = remotePath,
+                        remotePath = destination.withCopy(path = remotePath).storagePath,
                         size = file.size,
                     )
                 } else {
@@ -791,6 +846,7 @@ internal class FileStateCopyCoordinator(
                         task = task,
                         source = sourceFile,
                         destPath = destPath,
+                        destinationReference = destination.withCopy(path = destPath).storageReference,
                         networkAccess = networkAccess,
                         destSeparator = destSeparator,
                         chunkSize = chunkSize,
@@ -822,6 +878,7 @@ internal class FileStateCopyCoordinator(
             task = task,
             source = source,
             destPath = destination.path,
+            destinationReference = destination.storageReference,
             networkAccess = networkAccess,
             destSeparator = destSeparator,
             chunkSize = chunkSize,
@@ -838,6 +895,7 @@ internal class FileStateCopyCoordinator(
         task: Task,
         source: FileSimpleInfo,
         destPath: String,
+        destinationReference: StorageReference? = null,
         networkAccess: NetworkAccess,
         destSeparator: String,
         chunkSize: Int,
@@ -849,9 +907,6 @@ internal class FileStateCopyCoordinator(
         ensureRunning()
         taskState.putValue(task, "path", destPath)
         val declaredSize = source.size
-        if (declaredSize == 0L) {
-            return createRemoteEmptyFile(networkAccess, destPath, destSeparator)
-        }
         localPathFallback(source, destPath)?.let { fallback ->
             return fallback
         }
@@ -867,6 +922,7 @@ internal class FileStateCopyCoordinator(
         taskState.putResult(task, destPath, AppStrings.ui_start_transfer)
 
         fun updateProgress(doneBytes: Long, total: Long, force: Boolean = false) {
+            taskState.recordRuntimeByteProgress(task, destPath, doneBytes)
             val resolvedTotal = if (total > 0L) total else totalBytes
             val now = Clock.System.now().toEpochMilliseconds()
             if (!force && now - lastLogMs < 1000L && (resolvedTotal <= 0L || doneBytes < resolvedTotal)) {
@@ -898,9 +954,31 @@ internal class FileStateCopyCoordinator(
             lastLogMs = now
         }
 
+        val resumable = (networkAccess as? Network)?.uploadTaskFile(
+            task = task,
+            source = source,
+            target = source.copy(
+                path = destPath, protocol = FileProtocol.Network, protocolId = networkAccess.protocolId,
+                storageReference = destinationReference, isDirectory = false,
+            ),
+            ensureRunning = ensureRunning,
+            readRange = readRange,
+            onProgress = { done, total -> updateProgress(done, total) },
+        )
+        if (resumable != null) {
+            if (resumable.getOrDefault(false)) {
+                updateProgress(totalBytes, totalBytes, force = true)
+                taskState.removeResult(task, destPath)
+            }
+            return resumable
+        }
+        if (declaredSize == 0L) {
+            return createRemoteEmptyFile(networkAccess, destPath, destSeparator, destinationReference)
+        }
         val result = streamUploadFileToNetwork(
             networkAccess = networkAccess,
             remotePath = destPath,
+            reference = destinationReference,
             size = declaredSize,
             onProgress = { doneBytes, total ->
                 updateProgress(doneBytes, total)
@@ -969,6 +1047,7 @@ internal class FileStateCopyCoordinator(
         taskState.putResult(task, destination.path, AppStrings.ui_start_transfer)
 
         fun updateRelayProgress(force: Boolean = false) {
+            taskState.recordRuntimeByteProgress(task, destination.path, writtenBytes)
             val now = Clock.System.now().toEpochMilliseconds()
             if (!force && now - lastLogMs < 1000L && writtenBytes < resolvedSize) {
                 return
@@ -1132,6 +1211,7 @@ internal class FileStateCopyCoordinator(
         taskState.putResult(task, displayPath, AppStrings.ui_start_transfer)
 
         fun updateStageProgress(transferredBytes: Long, completedChunks: Int, force: Boolean = false) {
+            taskState.recordRuntimeByteProgress(task, displayPath, transferredBytes)
             val now = Clock.System.now().toEpochMilliseconds()
             if (!force && now - lastLogMs < 1000L && transferredBytes < declaredSize) {
                 return
@@ -1188,13 +1268,14 @@ internal class FileStateCopyCoordinator(
     private suspend fun copyViaLocalTemp(
         task: Task,
         source: FileSimpleInfo,
+        destination: FileSimpleInfo,
         copyToTemp: suspend (FileSimpleInfo) -> Result<Boolean>,
         copyFromTemp: suspend (FileSimpleInfo) -> Result<Boolean>,
     ): Result<Boolean> {
         val tempPath = buildSyncTempPath()
         val tempInfo = buildSyncTempInfo(source, tempPath)
         var artifact = TaskArtifact("stage:$tempPath", TaskRuntimeEndpointRef(path = tempPath),
-            purpose = TaskArtifactPurpose.TEMPORARY_FILE, cacheArtifact = true)
+            purpose = TaskArtifactPurpose.TEMPORARY_FILE, cacheArtifact = true, finalPath = destination.path)
         taskState.saveTaskArtifact(task.key, artifact)
         if (LocalTaskArtifacts.supported) {
             val owner = LocalTaskArtifacts.create(tempPath, cacheArtifact = true)
@@ -1203,9 +1284,13 @@ internal class FileStateCopyCoordinator(
         }
         var succeeded = false
         try {
-            val stageResult = copyToTemp(tempInfo)
+            val stageAccess = TaskUploadSourceIdentity(source, privateStagePath = tempPath, privateStageIdentity = artifact.identity)
+            val stageResult = withContext(stageAccess) { copyToTemp(tempInfo) }
             if (!stageResult.getOrDefault(false)) return stageResult
-            val result = copyFromTemp(tempInfo)
+            val actualSize = FileUtils.getFile(FileAccessPermission.Allowed, tempPath).getOrThrow().size
+            val result = withContext(stageAccess) {
+                copyFromTemp(tempInfo.copy(size = actualSize))
+            }
             succeeded = result.getOrDefault(false)
             return result
         } finally {
@@ -1247,7 +1332,7 @@ internal class FileStateCopyCoordinator(
                 if (!isConnected) {
                     taskState.putResult(task, preferredPath, disconnectMessage)
                     taskState.updateStatus(task, StatusEnum.FAILURE)
-                    taskState.requestCancel(task, disconnectMessage)
+                    taskState.requestCancel(task, disconnectMessage, userInitiated = false)
                     break
                 }
                 delay(300.milliseconds)

@@ -14,8 +14,24 @@ import com.folderspan.extensions.formatBytes
 import com.folderspan.extensions.formatDuration
 import com.folderspan.extensions.formatPercent
 import com.folderspan.extensions.formatSpeed
+import com.folderspan.extensions.fileOperationKey
 import com.folderspan.service.network.ChunkReadableNetworkClient
-import com.folderspan.service.network.NetworkClient
+import com.folderspan.service.network.StorageUploadStatus
+import com.folderspan.service.network.StorageProvider
+import com.folderspan.service.network.StorageCapabilities
+import com.folderspan.service.network.StorageContentPlatform
+import com.folderspan.service.network.storageContentContains
+import com.folderspan.service.network.storageContentIdentityError
+import com.folderspan.service.network.storageContentAncestor
+import com.folderspan.service.network.uploadManagedStorageContent
+import com.folderspan.service.network.downloadVerifiedStorageChunks
+import com.folderspan.service.network.finishStorageContentStageWrite
+import com.folderspan.service.network.StorageAdvancedCapabilities
+import com.folderspan.service.network.StoragePage
+import com.folderspan.service.network.StorageVersion
+import com.folderspan.service.network.StorageShare
+import com.folderspan.service.network.StorageShareRequest
+import com.folderspan.service.network.StoragePath
 import com.folderspan.service.network.NetworkConnectionConfig
 import com.folderspan.service.network.NetworkClientFactory
 import com.folderspan.service.network.NetworkFileEntry
@@ -43,6 +59,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import strings.AppStrings
 import kotlin.math.ceil
+import korlibs.crypto.SHA256
+import kotlinx.serialization.json.Json
 
 private const val NETWORK_PROGRESS_BLOCK_SIZE = 1024 * 1024L
 private const val NETWORK_PROGRESS_INTERVAL_MS = 1000L
@@ -52,6 +70,12 @@ enum class NetworkProtocol {
     SMB,
     WebDav,
     S3,
+    HttpDirectory,
+    NFS,
+    GoogleDrive,
+    Dropbox,
+    Nextcloud,
+    Seafile,
 }
 
 open class Network(
@@ -65,32 +89,96 @@ open class Network(
     open val extras: NetworkDriveExtras = NetworkDriveExtras(),
 ) : DiskBase(), NetworkAccess, ChunkReadableNetworkAccess, KoinComponent {
     override val menuPermission: DiskMenuPermission
-        get() = when (protocol) {
-            NetworkProtocol.FTP.name,
-            NetworkProtocol.SFTP.name,
-            NetworkProtocol.SMB.name,
-            NetworkProtocol.WebDav.name,
-            NetworkProtocol.S3.name -> DiskMenuPermission(
-                read = true,
-                write = true,
-                paste = true,
-                copy = true,
-                move = true,
-                delete = true,
-                rename = true,
+        get() = client.capabilities.let { capabilities ->
+            DiskMenuPermission(
+                read = capabilities.read,
+                write = capabilities.write,
+                paste = capabilities.write,
+                copy = capabilities.read,
+                move = capabilities.read && capabilities.delete,
+                delete = capabilities.delete,
+                rename = capabilities.rename,
                 setting = false,
-                favorite = true,
+                favorite = capabilities.read,
                 share = false,
-                info = true,
+                info = capabilities.read,
             )
-            else -> DiskMenuPermission()
         }
 
     open suspend fun close() = client.close()
 
+    private fun contentMetadataPathError(path: String): Throwable? =
+        if (path.replace('\\', '/').split('/').any { it.equals(".folderspan-vault", ignoreCase = true) })
+            AuthorityException("Private content metadata is unavailable through ordinary file operations") else null
+
+    private fun publicNetworkWritePathError(path: String): Throwable? =
+        contentMetadataPathError(path) ?: unsafeNetworkWritePathError(path) ?:
+            if (storageContentAncestor(connectionConfig(), StoragePath(path)))
+                AuthorityException("A password location parent cannot be changed through ordinary file operations") else null
+
+    private fun publicStoragePathError(path: StoragePath, write: Boolean = false): Throwable? =
+        storageContentIdentityError(connectionConfig(), path) ?:
+            if (write) publicNetworkWritePathError(path.path) else contentMetadataPathError(path.path)
+
+    private fun contentRelated(path: StoragePath): Boolean =
+        storageContentContains(connectionConfig(), path) || extras.contentEncryption?.let {
+            isRemotePathWithinRoot(path.path, it.root.path, pathSeparator)
+        } == true
+
+    private fun nativeContentOperationError(path: StoragePath): Throwable? =
+        contentMetadataPathError(path.path) ?: if (contentRelated(path))
+            NetworkUnsupportedException("This operation is unavailable for password location content") else null
+
+    suspend fun storageAdvancedCapabilities(path: StoragePath): Result<StorageAdvancedCapabilities> {
+        nativeContentOperationError(path)?.let { return Result.success(StorageAdvancedCapabilities()) }
+        return client.advancedCapabilities(path)
+    }
+    suspend fun storageVersions(path: StoragePath, cursor: String? = null): Result<StoragePage<StorageVersion>> {
+        nativeContentOperationError(path)?.let { return Result.failure(it) }
+        return client.listVersions(path, cursor)
+    }
+    suspend fun storageShares(path: StoragePath, cursor: String? = null): Result<StoragePage<StorageShare>> {
+        nativeContentOperationError(path)?.let { return Result.failure(it) }
+        return client.listShares(path, cursor)
+    }
+    suspend fun restoreStorageVersion(version: StorageVersion, confirmed: Boolean): Result<NetworkFileEntry> {
+        nativeContentOperationError(version.file)?.let { return Result.failure(it) }
+        if (!confirmed) return client.restoreVersion(version, false)
+        StorageContentPlatform.beforeMutation(connectionConfig(), version.file).getOrElse { return Result.failure(it) }
+        return client.restoreVersion(version, true)
+    }
+    suspend fun createStorageShare(path: StoragePath, request: StorageShareRequest, confirmed: Boolean): Result<StorageShare> {
+        nativeContentOperationError(path)?.let { return Result.failure(it) }
+        return client.createShare(path, request, confirmed)
+    }
+    suspend fun revokeStorageShare(share: StorageShare): Result<Unit> = client.revokeShare(share)
+
+    internal suspend fun verifyStorageUpload(
+        taskKey: Long, checkpoint: TaskRuntimeTransferCheckpoint,
+    ): Result<Unit> = runCatching {
+        checkpoint.requireSupportedFormat()
+        val reference = checkNotNull(checkpoint.uploadSession) { AppStrings.ui_storage_uncertain }
+        check(reference.connectionId == protocolId && reference.ownerRuntimeId == client.uploadSessionOwnerId().getOrThrow()) {
+            AppStrings.ui_storage_uncertain
+        }
+        val session = client.loadUploadSession(taskKey, reference).getOrThrow()
+            ?: error(AppStrings.ui_storage_uncertain)
+        val verified = client.queryUpload(session).getOrThrow()
+        check(verified.status == StorageUploadStatus.COMPLETED ||
+            verified.status == StorageUploadStatus.UPLOADING) { AppStrings.ui_storage_uncertain }
+    }
+
+    val supportsSync: Boolean get() = client.capabilities.let { it.sync && (it.read || it.write) }
+
+    suspend fun syncReadWrite(): Result<Pair<Boolean, Boolean>> = client.effectiveCapabilities().map {
+        (it.sync && it.read) to (it.sync && it.write)
+    }
+
+    suspend fun syncCapabilities(): Result<StorageCapabilities> = client.effectiveCapabilities()
+
     fun connectionConfig() = NetworkConnectionConfig(protocol, host, username, password, pathSeparator, extras)
 
-    protected open val client: NetworkClient by lazy { NetworkClientFactory.create(connectionConfig()) }
+    protected open val client: StorageProvider by lazy { NetworkClientFactory.create(connectionConfig()) }
     protected open val taskState: TaskState by inject()
     override val protocolId: String
         get() = buildProtocolId()
@@ -111,6 +199,7 @@ open class Network(
             protocolId = protocolId,
             isSymbolicLink = entry.isSymbolicLink,
             isSymbolicLinkKnown = entry.isSymbolicLinkKnown,
+            storageReference = entry.reference,
         )
     }
 
@@ -211,8 +300,17 @@ open class Network(
         requestId: String?,
         batchId: String?,
     ): Result<List<FileSimpleInfo>> {
-        return client.list(path, requestId, batchId)
-            .map { list -> list.map(::buildFileEntry) }
+        return getList(getFile(path).getOrElse { return Result.failure(it) }, requestId, batchId)
+    }
+
+    override suspend fun getList(directory: FileSimpleInfo, requestId: String?, batchId: String?): Result<List<FileSimpleInfo>> {
+        publicStoragePathError(directory.storagePath)?.let { return Result.failure(it) }
+        val logical = StorageContentPlatform.logicalList(connectionConfig(), directory.storagePath)
+            .getOrElse { return Result.failure(it) }
+        if (logical == null && storageContentContains(connectionConfig(), directory.storagePath))
+            return Result.failure(com.folderspan.service.network.StorageEntryNotFoundException())
+        val entries = logical?.let { Result.success(it) } ?: client.list(directory.storagePath, requestId, batchId)
+        return entries.map { values -> values.filter { contentMetadataPathError(it.path) == null }.map(::buildFileEntry) }
     }
 
     override fun traverse(
@@ -220,13 +318,13 @@ open class Network(
         requestId: String?,
         batchId: String?,
     ): Flow<Result<List<FileSimpleInfo>>> = flow {
-        val pendingDirectories = ArrayDeque<String>()
+        val pendingDirectories = ArrayDeque<FileSimpleInfo>()
         val visitedDirectories = mutableSetOf<String>()
-        pendingDirectories.add(path)
+        pendingDirectories.add(getFile(path).getOrThrow())
         while (pendingDirectories.isNotEmpty()) {
-            val currentPath = pendingDirectories.removeFirst()
-            if (!visitedDirectories.add(currentPath)) continue
-            val listResult = getList(currentPath, requestId, batchId)
+            val directory = pendingDirectories.removeFirst()
+            if (!visitedDirectories.add(directory.fileOperationKey())) continue
+            val listResult = getList(directory, requestId, batchId)
             emit(listResult)
             val entries = listResult.getOrNull() ?: continue
             if (entries.any { item -> item.isDirectory && !item.isSymbolicLinkKnown }) {
@@ -236,7 +334,7 @@ open class Network(
             entries
                 .asSequence()
                 .filter { item -> item.isDirectory && !item.isSymbolicLink }
-                .forEach { item -> pendingDirectories.add(item.path) }
+                .forEach { item -> pendingDirectories.add(item) }
         }
     }
 
@@ -244,10 +342,21 @@ open class Network(
         return listOf(PathInfo(pathSeparator, 0L, 0L))
     }
 
+    override suspend fun getFile(file: FileSimpleInfo): Result<FileSimpleInfo> {
+        publicStoragePathError(file.storagePath)?.let { return Result.failure(it) }
+        val logical = StorageContentPlatform.logicalFile(connectionConfig(), file).getOrElse { return Result.failure(it) }
+        if (logical == null && storageContentContains(connectionConfig(), file.storagePath))
+            return Result.failure(com.folderspan.service.network.StorageEntryNotFoundException())
+        return logical?.let { Result.success(it.copy(protocol = FileProtocol.Network, protocolId = protocolId)) }
+            ?: client.stat(file.storagePath).map(::buildFileEntry)
+    }
+
     override fun getFile(path: String): Result<FileSimpleInfo> {
+        contentMetadataPathError(path)?.let { return Result.failure(it) }
         val info = FileSimpleInfo.pathFileSimpleInfo(path).withCopy(
             protocol = FileProtocol.Network,
             protocolId = protocolId,
+            storageReference = if (path == pathSeparator) client.rootLocation.reference else null,
         )
         return Result.success(info)
     }
@@ -257,6 +366,9 @@ open class Network(
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
     ): Result<Boolean> {
+        publicStoragePathError(srcFileSimpleInfo.storagePath)?.let { return Result.failure(it) }
+        publicStoragePathError(destFileSimpleInfo.storagePath, true)?.let { return Result.failure(it) }
+        if (!client.capabilities.write) return writeUnsupported()
         if (srcFileSimpleInfo.isDirectory || destFileSimpleInfo.isDirectory) {
             return Result.failure(
                 NetworkUnsupportedException(AppStrings.network_same_endpoint_directory_copy_requires_file_tasks)
@@ -271,7 +383,10 @@ open class Network(
         ) {
             return Result.failure(IllegalArgumentException(AppStrings.network_source_target_endpoint_mismatch))
         }
-        if (srcFileSimpleInfo.path == destFileSimpleInfo.path) {
+        val sourceId = srcFileSimpleInfo.storageReference?.id.orEmpty()
+        val targetId = destFileSimpleInfo.storageReference?.id.orEmpty()
+        if ((sourceId.isNotEmpty() && sourceId == targetId) ||
+            (srcFileSimpleInfo.storageReference == null && destFileSimpleInfo.storageReference == null && srcFileSimpleInfo.path == destFileSimpleInfo.path)) {
             return Result.failure(IllegalArgumentException(AppStrings.ui_source_target_cannot_same))
         }
         if (!taskState.awaitIfPaused(task.key) || taskState.isTaskCancelled(task.key)) {
@@ -283,9 +398,14 @@ open class Network(
         updateTaskProgress(task, 0, 1)
         taskState.putResult(task, destFileSimpleInfo.path, AppStrings.ui_copying)
 
+        nativeContentOperationError(srcFileSimpleInfo.storagePath)?.let { return Result.failure(it) }
+        nativeContentOperationError(destFileSimpleInfo.storagePath)?.let { return Result.failure(it) }
+        if (extras.contentEncryption == null && contentTransformAvailable()) {
+            return Result.failure(NetworkUnsupportedException("Managed content copy requires verified transfer"))
+        }
         val result = client.copyFile(
-            sourcePath = srcFileSimpleInfo.path,
-            targetPath = destFileSimpleInfo.path,
+            sourcePath = srcFileSimpleInfo.storagePath,
+            targetPath = destFileSimpleInfo.storagePath,
         )
         if (result.isSuccess && result.getOrDefault(false)) {
             updateTaskProgress(task, 1, 1)
@@ -304,6 +424,21 @@ open class Network(
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
     ): Result<Boolean> {
+        if (srcFileSimpleInfo.protocol == FileProtocol.Network) {
+            publicStoragePathError(srcFileSimpleInfo.storagePath)?.let { return Result.failure(it) }
+        }
+        if (destFileSimpleInfo.protocol == FileProtocol.Network) {
+            publicNetworkWritePathError(destFileSimpleInfo.path)?.let { return Result.failure(it) }
+        }
+        if (srcFileSimpleInfo.protocol == FileProtocol.Local &&
+            destFileSimpleInfo.protocol == FileProtocol.Network && !menuPermission.write) {
+            return Result.failure(NetworkUnsupportedException(AppStrings.network_protocol_write_not_supported))
+        }
+        if (srcFileSimpleInfo.protocol == FileProtocol.Network &&
+            destFileSimpleInfo.protocol == FileProtocol.Network &&
+            (srcFileSimpleInfo.protocolId.isBlank() || srcFileSimpleInfo.protocolId != destFileSimpleInfo.protocolId)) {
+            return Result.failure(NetworkUnsupportedException("Cross-endpoint copies require the common verified transfer coordinator"))
+        }
         val cancellation = CancellationException(AppStrings.message_task_cancelled)
 
         fun markCopySuccess(src: FileSimpleInfo, dest: FileSimpleInfo) {
@@ -371,10 +506,11 @@ open class Network(
                             totalBlocks = totalBlocks,
                             taskState = taskState
                         )
-                        val result = client.upload(
-                            localPath = srcFileSimpleInfo.path,
-                            remotePath = destFileSimpleInfo.path,
-                            size = srcFileSimpleInfo.size,
+                        val result = uploadLocalTaskFile(
+                            task = task,
+                            source = srcFileSimpleInfo,
+                            target = destFileSimpleInfo,
+                            ensureRunning = { ensureRunning() },
                             onProgress = { doneBytes, total ->
                                 if (taskState.isTaskCancelled(task.key)) {
                                     throw cancellation
@@ -462,7 +598,7 @@ open class Network(
                         }
                         val plannedEntries = traversalEntries.size + rejectedEntries.size
                         taskState.putCreatingFolderProgress(task, destFileSimpleInfo.path)
-                        val rootCreateResult = client.createFolder(destFileSimpleInfo.path)
+                        val rootCreateResult = createFolder(destFileSimpleInfo.storagePath)
                         if (rootCreateResult.isFailure || !rootCreateResult.getOrDefault(false)) {
                             taskState.removeResult(task, "")
                             val message = rootCreateResult.exceptionOrNull()?.message
@@ -501,6 +637,7 @@ open class Network(
                                     protocol = destFileSimpleInfo.protocol,
                                     protocolId = destFileSimpleInfo.protocolId,
                                     isDirectory = isDirectory,
+                                    storageReference = destFileSimpleInfo.withCopy(path = path).storageReference,
                                 ),
                                 message = errorText,
                                 fallback = AppStrings.network_upload_failed,
@@ -548,7 +685,7 @@ open class Network(
                                 return
                             }
                             taskState.putCreatingFolderProgress(task, remotePath)
-                            val result = client.createFolder(remotePath)
+                            val result = createFolder(destFileSimpleInfo.withCopy(path = remotePath).storagePath)
                             val success = result.isSuccess && result.getOrDefault(false)
                             if (success) {
                                 markCopySuccess(
@@ -596,10 +733,11 @@ open class Network(
                                 totalBlocks = totalBlocks,
                                 taskState = taskState
                             )
-                            val result = client.upload(
-                                localPath = entry.path,
-                                remotePath = remotePath,
-                                size = entry.size,
+                            val result = uploadLocalTaskFile(
+                                task = task,
+                                source = entry,
+                                target = destFileSimpleInfo.withCopy(path = remotePath),
+                                ensureRunning = { ensureRunning() },
                                 onProgress = { doneBytes, _ ->
                                     if (taskState.isTaskCancelled(task.key)) {
                                         throw cancellation
@@ -714,10 +852,10 @@ open class Network(
                             totalBlocks = totalBlocks,
                             taskState = taskState
                         )
-                        val result = client.download(
-                            remotePath = srcFileSimpleInfo.path,
+                        val result = downloadManagedFile(
+                            taskKey = task.key,
+                            file = srcFileSimpleInfo,
                             localPath = destFileSimpleInfo.path,
-                            size = srcFileSimpleInfo.size,
                             onProgress = { doneBytes, total ->
                                 if (taskState.isTaskCancelled(task.key)) {
                                     throw cancellation
@@ -786,9 +924,15 @@ open class Network(
                                     taskState.putCopyScanProgress(task, plannedEntries)
                                 },
                             ) { directory ->
-                                client.list(directory.path).map { entries ->
-                                    entries.map(::buildFileEntry)
-                                }
+                                getList(directory, null, null)
+                            }
+                            val targetPaths = mutableSetOf<String>()
+                            for (entry in traversalEntries) {
+                                val relative = entry.path.removePrefix(srcRoot)
+                                    .replace('\\', '/')
+                                    .replace(pathSeparator, "/")
+                                val target = FolderSpanArchiveCodec.normalizeRelativePath(relative)
+                                check(targetPaths.add(target)) { AppStrings.storage_ambiguous_copy_names }
                             }
                         } catch (cancel: CancellationException) {
                             throw cancel
@@ -834,12 +978,14 @@ open class Network(
                                     protocol = srcFileSimpleInfo.protocol,
                                     protocolId = srcFileSimpleInfo.protocolId,
                                     isDirectory = isDirectory,
+                                    storageReference = traversalEntries.firstOrNull { it.path == remotePath }?.storageReference,
                                 ),
                                 dest = buildRetryFileSimpleInfo(
                                     path = path,
                                     protocol = destFileSimpleInfo.protocol,
                                     protocolId = destFileSimpleInfo.protocolId,
                                     isDirectory = isDirectory,
+                                    storageReference = destFileSimpleInfo.withCopy(path = path).storageReference,
                                 ),
                                 message = errorText,
                                 fallback = AppStrings.ui_file_download_failed,
@@ -909,6 +1055,7 @@ open class Network(
                                         protocol = srcFileSimpleInfo.protocol,
                                         protocolId = srcFileSimpleInfo.protocolId,
                                         isDirectory = true,
+                                        storageReference = entry.storageReference,
                                     ),
                                     dest = buildRetryFileSimpleInfo(
                                         path = localPath,
@@ -949,10 +1096,10 @@ open class Network(
                                 totalBlocks = totalBlocks,
                                 taskState = taskState
                             )
-                            val result = client.download(
-                                remotePath = entry.path,
+                            val result = downloadManagedFile(
+                                taskKey = task.key,
+                                file = entry,
                                 localPath = localPath,
-                                size = entry.size,
                                 onProgress = { doneBytes, _ ->
                                     if (taskState.isTaskCancelled(task.key)) {
                                         throw cancellation
@@ -968,6 +1115,7 @@ open class Network(
                                         protocol = srcFileSimpleInfo.protocol,
                                         protocolId = srcFileSimpleInfo.protocolId,
                                         isDirectory = false,
+                                        storageReference = entry.storageReference,
                                     ),
                                     dest = buildRetryFileSimpleInfo(
                                         path = localPath,
@@ -1054,13 +1202,221 @@ open class Network(
         }
     }
 
+    override suspend fun rename(file: FileSimpleInfo, newName: String): Result<Boolean> {
+        if (!client.capabilities.rename) return writeUnsupported()
+        if (isUnsafeNetworkPathSegment(newName)) return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
+        publicStoragePathError(file.storagePath, true)?.let { return Result.failure(it) }
+        val parent = file.path.removeSuffix(pathSeparator).substringBeforeLast(pathSeparator, pathSeparator)
+        val newPath = joinPath(parent, newName)
+        StorageContentPlatform.renameLogical(connectionConfig(), file.storagePath, StoragePath(newPath))
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), file.storagePath).getOrElse { return Result.failure(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), StoragePath(newPath)).getOrElse { return Result.failure(it) }
+        return client.rename(file.storagePath, newPath)
+    }
+
+    override suspend fun move(file: FileSimpleInfo, to: StoragePath): Result<Boolean> {
+        publicStoragePathError(file.storagePath, true)?.let { return Result.failure(it) }
+        publicStoragePathError(to, true)?.let { return Result.failure(it) }
+        StorageContentPlatform.renameLogical(connectionConfig(), file.storagePath, to)
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), file.storagePath).getOrElse { return Result.failure(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), to).getOrElse { return Result.failure(it) }
+        return client.move(file.storagePath, to)
+    }
+
+    override suspend fun delete(file: FileSimpleInfo): Result<Boolean> {
+        if (!client.capabilities.delete) return writeUnsupported()
+        publicStoragePathError(file.storagePath, true)?.let { return Result.failure(it) }
+        StorageContentPlatform.deleteLogical(connectionConfig(), file.storagePath, file.isDirectory)
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), file.storagePath).getOrElse { return Result.failure(it) }
+        return client.delete(file.storagePath, file.isDirectory)
+    }
+
+    override suspend fun deleteEmptyDirectory(file: FileSimpleInfo): Result<Boolean> {
+        if (!file.isDirectory || file.isSymbolicLink) return Result.failure(IllegalArgumentException("Not a directory"))
+        if (!client.effectiveCapabilities().getOrElse { return Result.failure(it) }.delete) return writeUnsupported()
+        publicStoragePathError(file.storagePath, true)?.let { return Result.failure(it) }
+        val logical = StorageContentPlatform.logicalList(connectionConfig(), file.storagePath)
+            .getOrElse { return Result.failure(it) }
+        if (logical != null) {
+            if (logical.isNotEmpty()) return Result.failure(IllegalStateException("Directory is not empty"))
+            StorageContentPlatform.deleteLogical(connectionConfig(), file.storagePath, true)
+                .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+            return Result.failure(IllegalStateException("Logical directory deletion was not handled"))
+        }
+        StorageContentPlatform.beforeMutation(connectionConfig(), file.storagePath).getOrElse { return Result.failure(it) }
+        return client.deleteEmptyDirectory(file.storagePath)
+    }
+
+    override suspend fun createFolder(path: StoragePath): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicStoragePathError(path, true)?.let { return Result.failure(it) }
+        StorageContentPlatform.createLogicalDirectory(connectionConfig(), path)
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        return client.createFolder(path)
+    }
+    override suspend fun createFile(path: StoragePath): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicStoragePathError(path, true)?.let { return Result.failure(it) }
+        return uploadManagedStorageContent(client, connectionConfig(), path, 0, onProgress = { _, _ -> }, readChunk = { null })
+            ?: client.createFile(path)
+    }
+
+    override suspend fun createFolder(directory: FileSimpleInfo, name: String): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        if (isUnsafeNetworkPathSegment(name)) return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
+        publicStoragePathError(directory.storagePath)?.let { return Result.failure(it) }
+        return createFolder(directory.withCopy(path = joinPath(directory.path, name)).storagePath)
+    }
+
+    override suspend fun createFile(directory: FileSimpleInfo, name: String): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        if (isUnsafeNetworkPathSegment(name)) return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
+        publicStoragePathError(directory.storagePath)?.let { return Result.failure(it) }
+        return createFile(directory.withCopy(path = joinPath(directory.path, name), isDirectory = false).storagePath)
+    }
+
+    private suspend fun uploadForegroundLocal(
+        localPath: String, target: StoragePath, size: Long, onProgress: (Long, Long) -> Unit,
+    ): Result<Boolean> {
+        return try {
+            val source = FileUtils.getFile(FileAccessPermission.Allowed, localPath).getOrThrow()
+            var offset = 0L
+            uploadManagedStorageContent(
+                provider = client, config = connectionConfig(), target = target, size = source.size,
+                source = source, onProgress = onProgress,
+                readChunk = {
+                    if (offset >= source.size) null else {
+                        val end = minOf(offset + 1024 * 1024, source.size)
+                        FileUtils.readFileRange(FileAccessPermission.Allowed, localPath, offset, end).getOrThrow().also { offset = end }
+                    }
+                },
+            ) ?: client.upload(localPath, target, source.size, onProgress)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Throwable) { Result.failure(error) }
+    }
+
+    internal suspend fun contentTransformAvailable(): Boolean =
+        StorageContentPlatform.status(connectionConfig()).getOrThrow().available
+
+    private suspend fun downloadManagedFile(
+        taskKey: Long,
+        file: FileSimpleInfo,
+        localPath: String,
+        onProgress: (Long, Long) -> Unit,
+    ): Result<Boolean> {
+        publicStoragePathError(file.storagePath)?.let { return Result.failure(it) }
+        var stage: String? = null
+        return try {
+            val resolved = StorageContentPlatform.resolveDownload(connectionConfig(), file).getOrThrow()
+            if (resolved == null && storageContentContains(connectionConfig(), file.storagePath))
+                throw com.folderspan.service.network.StorageEntryNotFoundException()
+            val frozen = resolved?.file ?: file
+            val legacy = extras.contentEncryption == null && contentTransformAvailable()
+            if (resolved == null && !legacy) {
+                if (file.size == 0L && file.storageReference == null) return FileUtils.createFile(FileAccessPermission.Allowed, localPath)
+                return client.download(file.storagePath, localPath, file.size, onProgress)
+            }
+            stage = StorageContentPlatform.createStage(taskKey, "download:$localPath").getOrThrow()
+            val expectedIdentity = StorageContentPlatform.stageIdentity(taskKey, stage).getOrThrow()
+            var downloadFailure: Throwable? = null
+            val result = try {
+                val grant = TaskUploadSourceIdentity(frozen, stage, expectedIdentity, taskKey, StorageContentPlatform, true)
+                withContext(grant) {
+                    client.download(resolved?.target ?: file.storagePath, stage, resolved?.size ?: file.size, onProgress)
+                }.also { downloadFailure = it.exceptionOrNull() }
+            } catch (error: Throwable) {
+                downloadFailure = error
+                throw error
+            } finally {
+                finishStorageContentStageWrite(StorageContentPlatform, taskKey, stage, expectedIdentity, downloadFailure)
+            }
+            if (!result.getOrThrow()) return result
+            StorageContentPlatform.publishDownload(connectionConfig(), taskKey, frozen, stage, localPath)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Throwable) { Result.failure(error) }
+        finally {
+            stage?.let { path -> withContext(NonCancellable) { FileUtils.deleteFile(FileAccessPermission.Allowed, path) } }
+        }
+    }
+
+    internal suspend fun uploadTaskFile(
+        task: Task,
+        source: FileSimpleInfo,
+        target: FileSimpleInfo,
+        ensureRunning: suspend () -> Unit,
+        readRange: suspend (Long, Long) -> Result<ByteArray>,
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+    ): Result<Boolean>? {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicStoragePathError(target.storagePath, true)?.let { return Result.failure(it) }
+        return uploadTaskFileWithCheckpoint(
+            task = task, taskState = taskState, provider = client, config = connectionConfig(), source = source, target = target,
+            connectionId = protocolId, ensureRunning = ensureRunning, readRange = readRange,
+            onProgress = onProgress,
+        )
+    }
+
+    private suspend fun uploadLocalTaskFile(
+        task: Task,
+        source: FileSimpleInfo,
+        target: FileSimpleInfo,
+        ensureRunning: suspend () -> Unit,
+        onProgress: (Long, Long) -> Unit,
+    ): Result<Boolean> {
+        val current = FileUtils.getFile(FileAccessPermission.Allowed, source.path).getOrElse {
+            return Result.failure(it)
+        }.copy(protocol = source.protocol, protocolId = source.protocolId, storageReference = source.storageReference)
+        return uploadTaskFile(
+            task = task, source = current, target = target, ensureRunning = ensureRunning,
+            readRange = { start, end ->
+                ensureRunning()
+                FileUtils.readFileRange(FileAccessPermission.Allowed, source.path, start, end)
+            },
+            onProgress = onProgress,
+        ) ?: client.upload(source.path,
+            StorageContentPlatform.resolveUploadTarget(connectionConfig(), target.storagePath).getOrElse { return Result.failure(it) },
+            current.size, onProgress)
+    }
+
+    override suspend fun uploadFileFromLocal(localPath: String, remotePath: StoragePath, size: Long, onProgress: (Long, Long) -> Unit): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicStoragePathError(remotePath, true)?.let { return Result.failure(it) }
+        rejectUnsafeLocalUploadSource(FileSimpleInfo.nullFileSimpleInfo().withCopy(path = localPath))?.let { return Result.failure(it) }
+        return uploadForegroundLocal(localPath, remotePath, size, onProgress)
+    }
+
+    override suspend fun uploadFromSource(remotePath: StoragePath, size: Long, onProgress: (Long, Long) -> Unit, readChunk: suspend () -> ByteArray?): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicStoragePathError(remotePath, true)?.let { return Result.failure(it) }
+        return uploadManagedStorageContent(client, connectionConfig(), remotePath, size, onProgress = onProgress, readChunk = readChunk)
+            ?: client.uploadFromSource(remotePath, size, onProgress, readChunk)
+    }
+
+    override suspend fun setModifiedTime(path: String, millis: Long): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
+        publicNetworkWritePathError(path)?.let { return Result.failure(it) }
+        nativeContentOperationError(StoragePath(path))?.let { return Result.failure(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), StoragePath(path)).getOrElse { return Result.failure(it) }
+        return client.setModifiedTime(path, millis)
+    }
+
     override suspend fun rename(path: String, oldName: String, newName: String): Result<Boolean> {
+        if (!client.capabilities.rename) return writeUnsupported()
         if (isUnsafeNetworkPathSegment(oldName) || isUnsafeNetworkPathSegment(newName)) {
             return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
         }
-        unsafeNetworkWritePathError(path)?.let { error -> return Result.failure(error) }
+        (contentMetadataPathError(path) ?: unsafeNetworkWritePathError(path))?.let { return Result.failure(it) }
         val oldPath = joinPath(path, oldName)
         val newPath = joinPath(path, newName)
+        publicNetworkWritePathError(oldPath)?.let { return Result.failure(it) }
+        publicNetworkWritePathError(newPath)?.let { return Result.failure(it) }
+        StorageContentPlatform.renameLogical(connectionConfig(), StoragePath(oldPath), StoragePath(newPath))
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), StoragePath(oldPath)).getOrElse { return Result.failure(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), StoragePath(newPath)).getOrElse { return Result.failure(it) }
         return client.rename(oldPath, newPath)
     }
 
@@ -1072,15 +1428,7 @@ open class Network(
         if (file.isDirectory) {
             return Result.failure(NetworkUnsupportedException(AppStrings.network_directory_editor_source_not_supported))
         }
-        if (file.size == 0L) {
-            return FileUtils.createFile(FileAccessPermission.Allowed, localPath)
-        }
-        return client.download(
-            remotePath = file.path,
-            localPath = localPath,
-            size = file.size,
-            onProgress = onProgress,
-        )
+        return downloadManagedFile(0L, file, localPath, onProgress)
     }
 
     override suspend fun uploadFileFromLocal(
@@ -1101,13 +1449,8 @@ open class Network(
         )?.let { error ->
             return Result.failure(error)
         }
-        unsafeNetworkWritePathError(remotePath)?.let { error -> return Result.failure(error) }
-        return client.upload(
-            localPath = localPath,
-            remotePath = remotePath,
-            size = size,
-            onProgress = onProgress,
-        )
+        publicNetworkWritePathError(remotePath)?.let { error -> return Result.failure(error) }
+        return uploadForegroundLocal(localPath, StoragePath(remotePath), size, onProgress)
     }
 
     override suspend fun uploadFromSource(
@@ -1119,17 +1462,18 @@ open class Network(
         if (menuPermission.write.not()) {
             return Result.failure(NetworkUnsupportedException(AppStrings.network_protocol_write_not_supported))
         }
-        unsafeNetworkWritePathError(remotePath)?.let { error -> return Result.failure(error) }
-        return client.uploadFromSource(
-            remotePath = remotePath,
-            size = size,
-            onProgress = onProgress,
-            readChunk = readChunk,
-        )
+        publicNetworkWritePathError(remotePath)?.let { error -> return Result.failure(error) }
+        return uploadManagedStorageContent(
+            client, connectionConfig(), StoragePath(remotePath), size, onProgress = onProgress, readChunk = readChunk,
+        ) ?: client.uploadFromSource(remotePath, size, onProgress, readChunk)
     }
 
     private suspend fun rejectUnsafeLocalUploadSource(entry: FileSimpleInfo): Throwable? {
-        SensitiveFileAccessPolicy.deniedException(entry.path)?.let { error -> return error }
+        // This unexported coroutine capability names only this copy's private staging file.
+        val privateStage = currentCoroutineContext()[TaskUploadSourceIdentity]?.privateStagePath
+        if (privateStage != entry.path) {
+            SensitiveFileAccessPolicy.deniedException(entry.path)?.let { error -> return error }
+        }
         if (entry.isSymbolicLink || PathUtils.isSymbolicLink(FileAccessPermission.Allowed, entry.path)) {
             return IllegalStateException(
                 AppStrings.file_symbolic_link_copy_not_supported
@@ -1139,23 +1483,30 @@ open class Network(
     }
 
     override suspend fun delete(path: String, isDirectory: Boolean): Result<Boolean> {
+        if (!client.capabilities.delete) return writeUnsupported()
+        publicNetworkWritePathError(path)?.let { return Result.failure(it) }
+        StorageContentPlatform.deleteLogical(connectionConfig(), StoragePath(path), isDirectory)
+            .getOrElse { return Result.failure(it) }?.let { return Result.success(it) }
+        StorageContentPlatform.beforeMutation(connectionConfig(), StoragePath(path)).getOrElse { return Result.failure(it) }
         return client.delete(path, isDirectory)
     }
 
     override suspend fun createFolder(path: String, name: String): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
         if (isUnsafeNetworkPathSegment(name)) {
             return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
         }
-        unsafeNetworkWritePathError(path)?.let { error -> return Result.failure(error) }
-        return client.createFolder(joinPath(path, name))
+        contentMetadataPathError(path)?.let { error -> return Result.failure(error) }
+        return createFolder(StoragePath(joinPath(path, name)))
     }
 
     override suspend fun createFile(path: String, name: String): Result<Boolean> {
+        if (!client.capabilities.write) return writeUnsupported()
         if (isUnsafeNetworkPathSegment(name)) {
             return Result.failure(AuthorityException(AppStrings.ui_remote_path_invalid))
         }
-        unsafeNetworkWritePathError(path)?.let { error -> return Result.failure(error) }
-        return client.createFile(joinPath(path, name))
+        contentMetadataPathError(path)?.let { error -> return Result.failure(error) }
+        return createFile(StoragePath(joinPath(path, name)))
     }
 
     override suspend fun downloadFileByChunks(
@@ -1166,14 +1517,30 @@ open class Network(
         if (srcFileSimpleInfo.isDirectory) {
             return Result.failure(NetworkUnsupportedException(AppStrings.network_directory_stream_relay_not_supported))
         }
+        publicStoragePathError(srcFileSimpleInfo.storagePath)?.let { return Result.failure(it) }
+        if (storageContentContains(connectionConfig(), srcFileSimpleInfo.storagePath) ||
+            extras.contentEncryption == null && contentTransformAvailable()) {
+            return downloadVerifiedStorageChunks(
+                provider = client, config = connectionConfig(), taskKey = task.key, file = srcFileSimpleInfo,
+                ensureRunning = {
+                    if (!taskState.awaitIfPaused(task.key) || taskState.isTaskCancelled(task.key)) {
+                        throw CancellationException(AppStrings.message_task_cancelled)
+                    }
+                },
+                onChunk = onChunk,
+            )
+        }
         val chunkClient = client as? ChunkReadableNetworkClient
             ?: return Result.failure(NetworkUnsupportedException(AppStrings.network_protocol_stream_relay_not_supported))
         return chunkClient.downloadByChunks(
-            remotePath = srcFileSimpleInfo.path,
+            remotePath = srcFileSimpleInfo.storagePath,
             size = srcFileSimpleInfo.size,
             onChunk = onChunk,
         )
     }
+
+    private fun writeUnsupported(): Result<Boolean> =
+        Result.failure(NetworkUnsupportedException(AppStrings.network_protocol_write_not_supported))
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -1201,7 +1568,7 @@ open class Network(
     }
 
     override fun toString(): String {
-        return "Network(name=$name, pathSeparator=$pathSeparator, protocol=$protocol, host=$host, username=$username, password=$password, pinned=$pinned, extras=$extras)"
+        return "Network(name=$name, protocol=$protocol, pinned=$pinned)"
     }
 }
 
@@ -1218,6 +1585,7 @@ private class NetworkProgressTracker(
     private val rateSampler = TaskProgressRateSampler(initialAt = startMs)
 
     fun update(doneBytes: Long, message: String) {
+        taskState.recordRuntimeByteProgress(task, destPath, doneBytes)
         this.doneBytes = doneBytes.coerceAtLeast(0L)
         val now = getTimeMillis()
         if (now - lastLogMs < NETWORK_PROGRESS_INTERVAL_MS && doneBytes < totalBytes) {
@@ -1254,9 +1622,22 @@ private class NetworkProgressTracker(
 }
 
 fun Network.buildProtocolId(): String {
+    val base = buildBaseProtocolId()
+    val ref = extras.contentEncryption ?: return base
+    val cloud = extras.cloud
+    val identity = Json.encodeToString(listOf(base, cloud.connectionId, cloud.accountId, cloud.rootId, cloud.libraryId,
+        ref.formatVersion.toString(), ref.vaultId, Json.encodeToString(StoragePath.serializer(), ref.root)))
+    val hash = SHA256()
+    hash.update(identity.encodeToByteArray())
+    return "$base:content:" + hash.digest().hexLower
+}
+
+private fun Network.buildBaseProtocolId(): String {
+    if (protocol in setOf("GoogleDrive", "Dropbox", "Nextcloud", "Seafile") && extras.cloud.connectionId.isNotBlank()) return "network:$protocol:${extras.cloud.connectionId}"
     val protocolSegment = when (protocol) {
         NetworkProtocol.SMB.name -> extras.smb.share.takeIf { item -> item.isNotBlank() }
         NetworkProtocol.S3.name -> extras.s3.bucket.takeIf { item -> item.isNotBlank() }
+        NetworkProtocol.NFS.name -> "${extras.nfs.version}:${extras.nfs.exportPath}:${extras.nfs.uid}:${extras.nfs.gid}:${extras.nfs.groups.joinToString(",")}"
         else -> null
     }
     val suffix = protocolSegment?.let { item -> ":$item" }.orEmpty()

@@ -9,13 +9,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.v2.Window
 import androidx.compose.ui.window.v2.WindowBoundsProvider
 import androidx.compose.ui.window.v2.WindowPositionProvider
 import androidx.compose.ui.window.v2.WindowSizeProvider
-import androidx.compose.ui.window.v2.WindowState
 import androidx.compose.ui.window.v2.rememberWindowState
 import com.folderspan.cleanup.ApplicationDataCleanup
 import com.folderspan.data.file.FileSimpleInfo
@@ -73,6 +71,7 @@ import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import java.beans.PropertyChangeListener
 import java.io.File
+import com.folderspan.utils.MacAppStoreAccess
 import java.nio.file.Files
 import strings.AppStrings
 import java.awt.Window as AwtWindow
@@ -81,6 +80,7 @@ private var desktopNotificationsInitialized = false
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    MacAppStoreAccess.initializeContainer()
     // The app and tray share the platform theme observer instead of polling per window.
     ComposeUiFlags.pollSystemTheme = false
 
@@ -88,12 +88,12 @@ fun main(args: Array<String>) {
     val instanceLock = acquireRuntimeLockOrNull()
     exitIfRuntimeLocked(instanceLock)
     val startupSystemScale = DesktopDpiSupport.readSystemScale()
-    DesktopDpiSupport.applyDesktopUiScaleProperty(systemScale = startupSystemScale)
     val runtimeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     var runtimeJob: Job? = null
     var shutdownHook: Thread? = null
     try {
         ApplicationDataCleanup.completePendingCleanup().getOrThrow()
+        MacAppStoreAccess.restoreDirectories()
         initKoin()
         val ready = CompletableDeferred<Unit>()
         val job = runtimeScope.launch(start = CoroutineStart.LAZY) {
@@ -115,7 +115,8 @@ fun main(args: Array<String>) {
         var platformRuntimeReady by remember { mutableStateOf(false) }
         var isWindowVisible by remember { mutableStateOf(true) }
         var appWindow: AwtWindow? by remember { mutableStateOf(null) }
-        var activeWindowScale by remember { mutableStateOf(startupSystemScale) }
+        val initialWindowScale = remember { DesktopDpiSupport.resolveWindowSizeScale(startupSystemScale) }
+        var activeWindowScale by remember { mutableFloatStateOf(initialWindowScale) }
         var trayConnectDevice by remember { mutableStateOf<SocketDevice?>(null) }
         val isTraySupported = remember { SystemTray.isSupported() }
         val openApp = {
@@ -129,7 +130,6 @@ fun main(args: Array<String>) {
             }
         }
 
-        val initialWindowScale = startupSystemScale ?: 1f
         val windowState = rememberWindowState(
             initialBoundsProvider = WindowBoundsProvider(
                 positionProvider = WindowPositionProvider.Default,
@@ -141,7 +141,7 @@ fun main(args: Array<String>) {
                 ),
             ),
         )
-        val minimumWindowScale = activeWindowScale ?: initialWindowScale
+        val minimumWindowScale = activeWindowScale
 
         Window(
             title = AppStrings.app_name,
@@ -164,15 +164,13 @@ fun main(args: Array<String>) {
                 window = window,
                 startupSystemScale = startupSystemScale
             )
-            SideEffect {
-                activeWindowScale = windowScale
-            }
-            SynchronizeDesktopWindowScale(
-                windowState = windowState,
+            val windowSizeScale = DesktopDpiSupport.resolveWindowSizeScale(
                 systemScale = windowScale,
-                initialWindowScale = initialWindowScale
+                nativeScale = LocalDensity.current.density
             )
-
+            SideEffect {
+                activeWindowScale = windowSizeScale
+            }
             ProvideDesktopDensity(systemScale = windowScale) {
                 LaunchedEffect(window) {
                     appWindow = window
@@ -306,40 +304,6 @@ private fun initializeDesktopNotifications() {
     LocalNotifier.initialize(askPermissionOnStart = false)
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun SynchronizeDesktopWindowScale(
-    windowState: WindowState,
-    systemScale: Float?,
-    initialWindowScale: Float
-) {
-    val targetScale = systemScale ?: initialWindowScale
-    var appliedScale by remember(windowState) { mutableFloatStateOf(initialWindowScale) }
-    val isWindowStateInitialized = windowState.isInitialized
-    val windowPlacement = if (isWindowStateInitialized) windowState.placement else null
-
-    LaunchedEffect(windowState, isWindowStateInitialized, windowPlacement, targetScale) {
-        if (!isWindowStateInitialized || windowPlacement != WindowPlacement.Floating) {
-            return@LaunchedEffect
-        }
-        DesktopDpiSupport.resolveWindowResizeRatio(
-            currentScale = appliedScale,
-            targetScale = targetScale
-        )?.let { resizeRatio ->
-            val currentSize = windowState.size
-            if (currentSize.width.value.isFinite() && currentSize.height.value.isFinite()) {
-                windowState.requestSize(
-                    DpSize(
-                        width = currentSize.width * resizeRatio,
-                        height = currentSize.height * resizeRatio,
-                    )
-                )
-            }
-        }
-        appliedScale = targetScale
-    }
-}
-
 @Composable
 private fun rememberWindowSystemScale(
     window: AwtWindow,
@@ -378,6 +342,9 @@ private fun rememberWindowSystemScale(
             updateFromWindow(systemScale)
             requestSystemScaleRefresh()
         }
+        val desktopScaleListener = PropertyChangeListener {
+            requestSystemScaleRefresh()
+        }
         val componentListener = object : ComponentAdapter() {
             override fun componentMoved(event: ComponentEvent) {
                 updateFromWindow(systemScale)
@@ -400,12 +367,14 @@ private fun rememberWindowSystemScale(
         window.addPropertyChangeListener("graphicsConfiguration", graphicsConfigurationListener)
         window.addComponentListener(componentListener)
         window.addWindowFocusListener(focusListener)
+        window.toolkit.addPropertyChangeListener("gnome.Gdk/WindowScalingFactor", desktopScaleListener)
 
         onDispose {
             refreshJob?.cancel()
             window.removePropertyChangeListener("graphicsConfiguration", graphicsConfigurationListener)
             window.removeComponentListener(componentListener)
             window.removeWindowFocusListener(focusListener)
+            window.toolkit.removePropertyChangeListener("gnome.Gdk/WindowScalingFactor", desktopScaleListener)
         }
     }
 

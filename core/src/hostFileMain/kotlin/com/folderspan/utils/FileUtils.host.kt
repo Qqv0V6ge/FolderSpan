@@ -6,6 +6,8 @@ import com.folderspan.data.file.PathInfo
 import kotlinx.coroutines.flow.Flow
 
 actual object FileUtils {
+    actual suspend fun move(permission: FileAccessPermission, from: String, to: String): Result<Boolean> =
+        NativeFileUtils.move(permission, from, to)
     actual suspend fun getFile(permission: FileAccessPermission, path: String): Result<FileSimpleInfo> = NativeFileUtils.getFile(permission, path)
 
     actual suspend fun getFile(permission: FileAccessPermission, path: String, fileName: String): Result<FileSimpleInfo> = NativeFileUtils.getFile(permission, path, fileName)
@@ -16,11 +18,16 @@ actual object FileUtils {
 
     actual suspend fun deleteFile(permission: FileAccessPermission, path: String): Result<Boolean> = NativeFileUtils.deleteFile(permission, path)
 
+    actual suspend fun deleteEmptyDirectory(permission: FileAccessPermission, path: String): Result<Boolean> =
+        NativeFileUtils.deleteEmptyDirectory(permission, path)
+
     actual suspend fun totalSpace(permission: FileAccessPermission, path: String): Long = NativeFileUtils.totalSpace(permission, path)
 
     actual suspend fun freeSpace(permission: FileAccessPermission, path: String): Long = NativeFileUtils.freeSpace(permission, path)
 
     actual suspend fun createFolder(permission: FileAccessPermission, path: String): Result<Boolean> = NativeFileUtils.createFolder(permission, path)
+
+    actual suspend fun setLastModified(permission: FileAccessPermission, path: String, millis: Long): Result<Boolean> = NativeFileUtils.setLastModified(permission, path, millis)
 
     actual suspend fun rename(permission: FileAccessPermission, path: String, oldName: String, newName: String): Result<Boolean> = NativeFileUtils.rename(permission, path, oldName, newName)
 

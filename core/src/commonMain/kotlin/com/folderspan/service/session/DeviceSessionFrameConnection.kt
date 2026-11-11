@@ -6,11 +6,17 @@ import com.folderspan.service.http.archive.FolderSpanArchiveWriteRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
+
+private val noActiveSessionStreams = MutableStateFlow(0)
 
 /** Framing and credit belong to the carrier; business authorization stays with the peer. */
 internal interface DeviceSessionFrameConnection {
     val incomingEvents: ReceiveChannel<DeviceSessionFrame>
+    val activeStreamCount: StateFlow<Int> get() = noActiveSessionStreams
+    val supportsFeedbackTiming: Boolean get() = true
     val supportsHostTransfers: Boolean get() = false
     val hostTransportHandle: String? get() = null
     suspend fun openStream(payload: ByteArray = ByteArray(0), onStreamAllocated: suspend (Int) -> Unit = {}): Int
