@@ -166,6 +166,7 @@ build_curl_for_slice() {
     -DOPENSSL_SSL_LIBRARY="$openssl_prefix/lib/libssl.a" \
     -DOPENSSL_CRYPTO_LIBRARY="$openssl_prefix/lib/libcrypto.a" \
     -DCURL_ZLIB=OFF \
+    -DCURL_USE_LIBPSL=OFF \
     -DCURL_DISABLE_LDAP=ON \
     -DCURL_DISABLE_LDAPS=ON
 
