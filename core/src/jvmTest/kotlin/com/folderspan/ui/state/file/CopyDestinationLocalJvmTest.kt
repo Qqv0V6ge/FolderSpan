@@ -90,8 +90,8 @@ class CopyDestinationLocalJvmTest {
             val earlyRelease = AtomicBoolean()
             ShareListDropResourceRegistry.register(listOf(source.toString())) {
                 earlyRelease.set(destinations.any { !Files.exists(it.resolve("temporary.txt")) })
-                releases.incrementAndGet()
                 Files.deleteIfExists(source)
+                releases.incrementAndGet()
             }
             val request = state.createCopyDestinationRequest(listOf(FileUtils.getFile(FileAccessPermission.Allowed, source.toString()).getOrThrow()))
             destinations.forEach { select(request, it) }

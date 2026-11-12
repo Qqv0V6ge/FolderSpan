@@ -29,9 +29,10 @@ internal actual object StorageContentFileProtection {
     actual fun fileIdentity(path: Path): String? {
         val value = Paths.get(path.toString())
         if (!Files.isRegularFile(value, LinkOption.NOFOLLOW_LINKS)) return null
-        return checkNotNull(Files.readAttributes(value, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS).fileKey()) {
+        val key = Files.readAttributes(value, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS).fileKey()
+        return checkNotNull(key?.toString() ?: platformStorageContentFileIdentity(value)) {
             "Content cache file identity is unavailable"
-        }.toString()
+        }
     }
 
     actual fun createPrivateTempFile(parent: Path, prefix: String): Path {
@@ -59,3 +60,5 @@ internal actual object StorageContentFileProtection {
 
     actual fun normalizedAbsolutePath(path: String): Path = Paths.get(path).toAbsolutePath().normalize().toString().toPath()
 }
+
+internal expect fun platformStorageContentFileIdentity(path: java.nio.file.Path): String?

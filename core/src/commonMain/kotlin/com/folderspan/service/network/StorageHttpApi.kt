@@ -15,8 +15,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.*
 import kotlinx.serialization.SerializationException
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 internal class StorageApiException(val status: Int) : Exception("Storage service request failed (HTTP $status)")
 
@@ -116,6 +119,7 @@ internal class StorageHttpApi(
         if (text.isBlank()) JsonNull else parseStorageJson(text)
     }
 
+    @OptIn(ExperimentalAtomicApi::class)
     suspend fun <T> uploadResponse(
         method: HttpMethod,
         url: String,
@@ -131,14 +135,16 @@ internal class StorageHttpApi(
     ): T {
         require(size >= 0 && size <= Long.MAX_VALUE - bodyPrefix.size - bodySuffix.size) { "Storage upload requires a valid size" }
         val authorization = if (authenticated) bearerHeaders() else emptyMap()
-        return client.prepareRequest(url) {
+        // The JVM HTTP engine can report a short request body instead of the writer's cancellation.
+        val uploadCancellation = AtomicReference<CancellationException?>(null)
+        val request = client.prepareRequest(url) {
             this.method = method
             authorization.forEach { (name, value) -> header(name, value) }
             headers.forEach { (name, value) -> header(name, value) }
             contentType(bodyContentType)
             setBody(object : OutgoingContent.WriteChannelContent() {
                 override val contentLength = size + bodyPrefix.size + bodySuffix.size
-                override suspend fun writeTo(channel: ByteWriteChannel) {
+                override suspend fun writeTo(channel: ByteWriteChannel) = try {
                     channel.writeFully(bodyPrefix)
                     var sent = 0L
                     while (true) {
@@ -152,10 +158,18 @@ internal class StorageHttpApi(
                     check(sent == size) { "Storage upload ended early" }
                     channel.writeFully(bodySuffix)
                     progress(sent, size)
+                } catch (cancel: CancellationException) {
+                    // A transport failure may itself cancel the writer. Keep the transport error in that case.
+                    if (currentCoroutineContext().isActive) uploadCancellation.store(cancel)
+                    throw cancel
                 }
             })
-        }.execute { response ->
-            consume(response)
+        }
+        return try {
+            request.execute(consume)
+        } catch (error: Exception) {
+            currentCoroutineContext().ensureActive()
+            throw uploadCancellation.load() ?: error
         }
     }
 }

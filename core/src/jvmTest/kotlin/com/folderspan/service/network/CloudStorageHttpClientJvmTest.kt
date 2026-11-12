@@ -16,7 +16,9 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -118,6 +120,7 @@ class CloudStorageHttpClientJvmTest {
         server.executor = executor
         val retryCalls = AtomicInteger()
         val partialCalls = AtomicInteger()
+        val firstPartialChunk = CountDownLatch(1)
         server.createContext("/download") { exchange ->
             exchange.use {
                 if (retryCalls.incrementAndGet() == 1) {
@@ -134,6 +137,9 @@ class CloudStorageHttpClientJvmTest {
                 partialCalls.incrementAndGet()
                 it.sendResponseHeaders(200, 6)
                 it.responseBody.write("abc".toByteArray())
+                it.responseBody.flush()
+                // Wait until the client has actually seen bytes before truncating the response.
+                firstPartialChunk.await(5, TimeUnit.SECONDS)
             }
         }
         server.start()
@@ -153,6 +159,7 @@ class CloudStorageHttpClientJvmTest {
                     api.client.readStorageFile(Url("http://127.0.0.1:${server.address.port}/partial"), 6,
                         method = HttpMethod.Get) { bytes, _ ->
                         delivered = delivered || bytes.isNotEmpty()
+                        if (delivered) firstPartialChunk.countDown()
                         Result.success(Unit)
                     }.getOrThrow()
                 }
@@ -189,7 +196,8 @@ class CloudStorageHttpClientJvmTest {
                 }
                 assertTrue(progressed, "The streaming body must report progress before cancellation")
                 val failure = result.exceptionOrNull()
-                assertTrue(failure != null && generateSequence<Throwable>(failure) { it.cause }.any { it is CancellationException })
+                assertEquals("test upload cancellation", failure?.message, failure?.stackTraceToString())
+                assertTrue(failure is CancellationException)
                 assertEquals(1, chunks.get(), "Cancellation must stop reading the source")
                 withTimeout(5_000L) {
                     api.json(HttpMethod.Post, "$url/metadata", buildJsonObject { put("afterCancellation", true) })
