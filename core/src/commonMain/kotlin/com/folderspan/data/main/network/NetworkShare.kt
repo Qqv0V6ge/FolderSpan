@@ -67,6 +67,12 @@ class NetworkShare(
             .map { entries -> tagEntries(entries) }
     }
 
+    override suspend fun getList(
+        directory: FileSimpleInfo,
+        requestId: String?,
+        batchId: String?,
+    ): Result<List<FileSimpleInfo>> = getList(directory.path, requestId, batchId)
+
     override fun traverse(
         path: String,
         requestId: String?,
@@ -77,7 +83,17 @@ class NetworkShare(
     }
 
     override fun getFile(path: String): Result<FileSimpleInfo> {
-        return Result.success(FileSimpleInfo.pathFileSimpleInfo(path))
+        return Result.success(tagEntries(listOf(FileSimpleInfo.pathFileSimpleInfo(path))).single())
+    }
+
+    override suspend fun getFile(file: FileSimpleInfo): Result<FileSimpleInfo> {
+        val path = file.path.trimEnd('/').ifEmpty { "/" }
+        if (path == "/") return getFile(path)
+        val parent = path.substringBeforeLast('/', "/").ifEmpty { "/" }
+        return getList(parent).mapCatching { entries ->
+            entries.firstOrNull { it.path.trimEnd('/') == path }
+                ?: throw NoSuchElementException(AppStrings.ui_arg0_does_not_exist.format(arg0 = file.name))
+        }
     }
 
     override suspend fun copyTo(
