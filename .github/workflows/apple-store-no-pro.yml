@@ -1,0 +1,161 @@
+name: Upload no-Pro Apple builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App Store Connect marketing version
+        required: true
+        type: string
+      build_number:
+        description: Unused App Store Connect build number
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-store-no-pro-${{ inputs.version }}-${{ inputs.build_number }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: ${{ matrix.label }} App Store (no-Pro)
+    runs-on: macos-26
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ios
+            label: iOS
+            java: "17"
+          - platform: macos
+            label: macOS
+            java: "21"
+    env:
+      APPLE_PLATFORM: ${{ matrix.platform }}
+      APPLE_VERSION: ${{ inputs.version }}
+      APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
+      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+    steps:
+      - name: Validate Apple version and build number
+        shell: bash
+        run: |
+          if [[ ! "$APPLE_VERSION" =~ ^[1-9][0-9]*\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo '::error::Use an Apple version such as 1.1 or 1.1.0.'
+            exit 1
+          fi
+          if [[ ! "$APPLE_BUILD_NUMBER" =~ ^[1-9][0-9]{0,3}(\.[0-9]{1,2}){0,2}$ ]]; then
+            echo '::error::Use an unused Apple build number such as 5.'
+            exit 1
+          fi
+          gradle_version="$APPLE_VERSION"
+          if [[ "$gradle_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            gradle_version="$gradle_version.0"
+          fi
+          echo "ORG_GRADLE_PROJECT_releaseVersion=$gradle_version" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Inspect Xcode version
+        id: xcode
+        run: |
+          xcodebuild -version
+          echo "cache-key=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Restore Apple distribution certificates
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ matrix.platform == 'ios' && secrets.IOS_CERTIFICATE_P12_BASE64 || secrets.MACOS_STORE_CERTIFICATES_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'ios' && secrets.IOS_CERTIFICATE_PASSWORD || secrets.MACOS_STORE_CERTIFICATES_PASSWORD }}
+        run: bash scripts/ci/apple-keychain.sh setup
+      - name: Prepare iOS app and Share Extension signing
+        if: matrix.platform == 'ios'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
+        run: python3 scripts/ci/prepare-apple-profiles.py ios
+      - name: Prepare macOS app and JVM runtime signing
+        if: matrix.platform == 'macos'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MACOS_APP_PROFILE_BASE64: ${{ secrets.MACOS_APP_PROFILE_BASE64 }}
+          MACOS_RUNTIME_PROFILE_BASE64: ${{ secrets.MACOS_RUNTIME_PROFILE_BASE64 }}
+        run: python3 scripts/ci/prepare-apple-profiles.py macos
+      - name: Install CocoaPods dependencies
+        if: matrix.platform == 'ios'
+        working-directory: app/iosApp
+        run: pod install --deployment
+      - name: Cache iOS native libraries
+        if: matrix.platform == 'ios'
+        id: native-cache
+        uses: actions/cache@v5
+        with:
+          path: build/ios-native-xcframeworks
+          key: ios-native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ios-native-xcframeworks.sh', 'scripts/verify-ios-native-libs.sh') }}-${{ steps.xcode.outputs.cache-key }}-ios17
+      - name: Build iOS native network libraries
+        if: matrix.platform == 'ios' && steps.native-cache.outputs.cache-hit != 'true'
+        env:
+          MIN_IOS_VERSION: "17.0"
+          OUT_DIR: ${{ github.workspace }}/build/ios-native-xcframeworks
+        run: bash scripts/build-ios-native-xcframeworks.sh
+      - name: Archive and export signed iOS IPA
+        if: matrix.platform == 'ios'
+        env:
+          IOS_NATIVE_XCFRAMEWORKS_ROOT: ${{ github.workspace }}/build/ios-native-xcframeworks
+        shell: bash
+        run: |
+          bash scripts/verify-ios-native-libs.sh "$IOS_NATIVE_XCFRAMEWORKS_ROOT"
+          xcodebuild -workspace app/iosApp/iosApp.xcworkspace -scheme iosApp \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FolderSpan.xcarchive" \
+            -xcconfig "$APPLE_SIGNING_DIR/ios-signing.xcconfig" \
+            TEAM_ID= MARKETING_VERSION="$APPLE_VERSION" CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $APPLE_KEYCHAIN" archive
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/FolderSpan.xcarchive" \
+            -exportOptionsPlist "$APPLE_SIGNING_DIR/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/app-store"
+          packages=("$RUNNER_TEMP"/app-store/*.ipa)
+          [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
+          echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
+      - name: Package and verify signed Mac App Store PKG
+        if: matrix.platform == 'macos'
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        shell: bash
+        run: |
+          : "${MACOS_SIGNING_IDENTITY:?Missing MACOS_SIGNING_IDENTITY}"
+          ./gradlew --no-daemon --no-configuration-cache :app:desktopApp:packagePkg \
+            -PmacAppStore=true "-Pcompose.desktop.java.home=$JAVA_HOME" \
+            -Pcompose.desktop.mac.sign=true \
+            "-Pcompose.desktop.mac.signing.identity=$MACOS_SIGNING_IDENTITY" \
+            "-Pcompose.desktop.mac.signing.keychain=$APPLE_KEYCHAIN" \
+            "-PmacAppStoreVersion=$APPLE_VERSION" "-PmacAppStoreBuild=$APPLE_BUILD_NUMBER" \
+            "-PmacAppStoreProvisioningProfile=$APPLE_SIGNING_DIR/embedded.provisionprofile" \
+            "-PmacAppStoreRuntimeProvisioningProfile=$APPLE_SIGNING_DIR/runtime.provisionprofile" \
+            --stacktrace
+          packages=(app/desktopApp/build/compose/appstore/main/pkg/*.pkg)
+          [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
+          pkgutil --check-signature "${packages[0]}"
+          echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
+      - name: Upload build to App Store Connect
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        shell: bash
+        run: |
+          : "${APPLE_ID:?Missing APPLE_ID}"
+          : "${APPLE_APP_SPECIFIC_PASSWORD:?Missing APPLE_APP_SPECIFIC_PASSWORD}"
+          xcrun altool --upload-app --type "$APPLE_PLATFORM" -f "$APPLE_PACKAGE" \
+            --username "$APPLE_ID" --password @env:APPLE_APP_SPECIFIC_PASSWORD
+      - name: Clean up Apple signing credentials
+        if: always()
+        run: bash scripts/ci/apple-keychain.sh cleanup
