@@ -1,5 +1,6 @@
 package com.folderspan.utils
 
+import com.folderspan.settings.restrictOwnerOnly
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -60,9 +61,12 @@ internal class MacDirectoryAccessStore(
 
     private fun persist() {
         Files.createDirectories(file.parent)
-        val temporary = Files.createTempFile(file.parent, ".mac-folder-access-", ".tmp",
-            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+        val temporary = if (Files.getFileStore(file.parent).supportsFileAttributeView("posix")) {
+            Files.createTempFile(file.parent, ".mac-folder-access-", ".tmp",
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+        } else Files.createTempFile(file.parent, ".mac-folder-access-", ".tmp")
         try {
+            restrictOwnerOnly(temporary, directory = false)
             Files.writeString(temporary, Json.encodeToString(serializer, bookmarks))
             Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } finally {

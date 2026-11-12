@@ -195,9 +195,14 @@ class NetworkAddInlineFormTest {
                 onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("storage-content-section"))
                 onNode(hasScrollToIndexAction()).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 10000f) }
                 onNodeWithTag("storage-content-section").assertIsDisplayed()
-                onNodeWithTag("storage-content-toggle").assertIsOff().assertIsNotEnabled()
+                val toggle = onNodeWithTag("storage-content-toggle").assertIsOff().assertIsEnabled()
                 ImageIO.write(onRoot().captureToImage().toAwtImage(), "png",
                     File("build/network-content-ui-evidence/add-" + protocol.lowercase().replace(" ", "-") + "-content.png"))
+                if (protocol == "FTP") {
+                    toggle.performClick().assertIsOn()
+                    onNodeWithTag("storage-content-password-input").assertExists()
+                    toggle.performClick().assertIsOff()
+                }
             }
         }
     }
