@@ -51,11 +51,12 @@ def main():
                     name = Path(entry.filename).name
                     candidate = Path(temp) / name
                     candidate.write_bytes(jar.read(entry))
-                    valid = subprocess.run(
-                        ["/usr/bin/lipo", "-verify_arch", architecture, str(candidate)],
+                    architectures = subprocess.run(
+                        ["/usr/bin/lipo", "-archs", str(candidate)],
                         capture_output=True,
-                    ).returncode == 0
-                    if not valid:
+                        text=True,
+                    )
+                    if architectures.returncode != 0 or architecture not in architectures.stdout.split():
                         continue
                     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
                     if name in copied and copied[name]["sha256"] != digest:

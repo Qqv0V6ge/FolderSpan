@@ -216,6 +216,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.napier)
 
+    if (macAppStoreEnabled) {
+        runtimeOnly("${libs.jna.get()}@jar")
+    }
+
     testImplementation(kotlin("test"))
 }
 
