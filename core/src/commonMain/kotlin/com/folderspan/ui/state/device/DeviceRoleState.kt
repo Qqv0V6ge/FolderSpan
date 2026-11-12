@@ -1,9 +1,11 @@
 package com.folderspan.ui.state.device
 
 import androidx.compose.runtime.mutableStateListOf
+import app.cash.sqldelight.SuspendingTransacterImpl
+import app.cash.sqldelight.db.SqlDriver
 import com.folderspan.data.device.DeviceRole
 import com.folderspan.db.FolderSpanDatabase
-import com.folderspan.utils.awaitDatabaseReady
+import com.folderspan.utils.DatabaseReady
 import com.folderspan.utils.executeAsListAwait
 import com.folderspan.utils.SyncSnapshotChangeNotifier
 import kotlinx.coroutines.Dispatchers
@@ -11,9 +13,10 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class DeviceRoleState(private val database: FolderSpanDatabase) {
+class DeviceRoleState(private val database: FolderSpanDatabase, driver: SqlDriver) {
     val roles = mutableStateListOf<DeviceRole>()
     private val scope = MainScope()
+    private val transactions = object : SuspendingTransacterImpl(driver) {}
 
     init {
         scope.launch {
@@ -41,7 +44,11 @@ class DeviceRoleState(private val database: FolderSpanDatabase) {
 
     suspend fun delete(deviceRole: DeviceRole, index: Int) {
         withContext(Dispatchers.Default) {
-            database.devicePermissionQueries.deleteById(deviceRole.id).awaitDatabaseReady()
+            DatabaseReady.await()
+            transactions.transaction {
+                database.deviceRoleDevicePermissionQueries.deleteByRoleId(deviceRole.id).await()
+                database.deviceRoleQueries.deleteRoleById(deviceRole.id).await()
+            }
         }
         withContext(Dispatchers.Main) {
             if (index in roles.indices) {
