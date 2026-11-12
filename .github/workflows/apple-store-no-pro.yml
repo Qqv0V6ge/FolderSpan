@@ -101,7 +101,7 @@ jobs:
       - name: Cache iOS native libraries
         if: matrix.platform == 'ios'
         id: native-cache
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: build/ios-native-xcframeworks
           key: ios-native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ios-native-xcframeworks.sh', 'scripts/verify-ios-native-libs.sh') }}-${{ steps.xcode.outputs.cache-key }}-ios17
@@ -111,10 +111,17 @@ jobs:
           MIN_IOS_VERSION: "17.0"
           OUT_DIR: ${{ github.workspace }}/build/ios-native-xcframeworks
         run: bash scripts/build-ios-native-xcframeworks.sh
+      - name: Save verified iOS native libraries
+        if: matrix.platform == 'ios' && steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: build/ios-native-xcframeworks
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Archive and export signed iOS IPA
         if: matrix.platform == 'ios'
         env:
           IOS_NATIVE_XCFRAMEWORKS_ROOT: ${{ github.workspace }}/build/ios-native-xcframeworks
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.workers.max=2
         shell: bash
         run: |
           bash scripts/verify-ios-native-libs.sh "$IOS_NATIVE_XCFRAMEWORKS_ROOT"
