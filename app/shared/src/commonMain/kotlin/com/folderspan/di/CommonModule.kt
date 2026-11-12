@@ -141,7 +141,7 @@ val commonScreenModule = module {
     single { SettingsState(get()) }
     proBindings()
     single { ApplicationDataCleanupState() }
-    single { DeviceRoleState(get()) }
+    single { DeviceRoleState(get(), get<SqlDriver>()) }
     single { DevicePermissionState(get()) }
     single { DeviceSettingsState(get()) }
     single { DeviceCertificateState(get()) }

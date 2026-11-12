@@ -38,6 +38,10 @@ WHERE id = :id;
 deleteAll:
 DELETE FROM DeviceRoleDevicePermission;
 
+deleteByRoleId:
+DELETE FROM DeviceRoleDevicePermission
+WHERE deviceRoleId = :deviceRoleId;
+
 -- 按照多个devicePermissionId批量删除记录
 deleteByDevicePermissionIds:
 DELETE FROM DeviceRoleDevicePermission
