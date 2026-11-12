@@ -16,7 +16,9 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -118,6 +120,8 @@ class CloudStorageHttpClientJvmTest {
         server.executor = executor
         val retryCalls = AtomicInteger()
         val partialCalls = AtomicInteger()
+        val partialBody = ByteArray(128 * 1024) { 1 }
+        val partialDelivered = CountDownLatch(1)
         server.createContext("/download") { exchange ->
             exchange.use {
                 if (retryCalls.incrementAndGet() == 1) {
@@ -132,8 +136,11 @@ class CloudStorageHttpClientJvmTest {
         server.createContext("/partial") { exchange ->
             exchange.use {
                 partialCalls.incrementAndGet()
-                it.sendResponseHeaders(200, 6)
-                it.responseBody.write("abc".toByteArray())
+                it.sendResponseHeaders(200, partialBody.size + 1L)
+                it.responseBody.write(partialBody)
+                it.responseBody.flush()
+                // 确认消费端已收到字节后再截断，不能把服务端写出当作已经交付。
+                partialDelivered.await(5, TimeUnit.SECONDS)
             }
         }
         server.start()
@@ -150,9 +157,10 @@ class CloudStorageHttpClientJvmTest {
             var delivered = false
             val partialResult = runCatching {
                 api.retryStorageRead(retryIf = { !delivered }) {
-                    api.client.readStorageFile(Url("http://127.0.0.1:${server.address.port}/partial"), 6,
+                    api.client.readStorageFile(Url("http://127.0.0.1:${server.address.port}/partial"), partialBody.size + 1L,
                         method = HttpMethod.Get) { bytes, _ ->
                         delivered = delivered || bytes.isNotEmpty()
+                        if (delivered) partialDelivered.countDown()
                         Result.success(Unit)
                     }.getOrThrow()
                 }
@@ -172,27 +180,52 @@ class CloudStorageHttpClientJvmTest {
         withServer { url, _ ->
             val api = StorageHttpApi(token = { "test" }, clientFactory = ::createCloudStorageHttpClient)
             try {
-                var progressed = false
-                val chunks = AtomicInteger()
-                val result = runCatching {
-                    withTimeout(10_000L) {
-                        api.upload(HttpMethod.Post, "$url/upload", 4L * 1024 * 1024, { sent, _ ->
-                            if (sent > 0) {
-                                progressed = true
-                                throw CancellationException("test upload cancellation")
-                            }
-                        }, source = {
-                            chunks.incrementAndGet()
-                            ByteArray(64 * 1024)
-                        })
+                repeat(10) {
+                    var progressed = false
+                    val chunks = AtomicInteger()
+                    val result = runCatching {
+                        withTimeout(10_000L) {
+                            api.upload(HttpMethod.Post, "$url/upload", 4L * 1024 * 1024, { sent, _ ->
+                                if (sent > 0) {
+                                    progressed = true
+                                    throw CancellationException("test upload cancellation")
+                                }
+                            }, source = {
+                                chunks.incrementAndGet()
+                                ByteArray(64 * 1024)
+                            })
+                        }
+                    }
+                    assertTrue(progressed, "The streaming body must report progress before cancellation")
+                    val failure = result.exceptionOrNull()
+                    assertTrue(failure != null && generateSequence<Throwable>(failure) { it.cause }.any { it is CancellationException },
+                        "Upload must preserve cancellation: ${failure?.stackTraceToString()}")
+                    assertEquals(1, chunks.get(), "Cancellation must stop reading the source")
+                    withTimeout(5_000L) {
+                        api.json(HttpMethod.Post, "$url/metadata", buildJsonObject { put("afterCancellation", true) })
                     }
                 }
-                assertTrue(progressed, "The streaming body must report progress before cancellation")
-                val failure = result.exceptionOrNull()
-                assertTrue(failure != null && generateSequence<Throwable>(failure) { it.cause }.any { it is CancellationException })
-                assertEquals(1, chunks.get(), "Cancellation must stop reading the source")
+            } finally {
+                api.close()
+            }
+        }
+    }
+
+    @Test
+    fun uploadFailureKeepsHttpStatusAndClientUsable() = runBlocking {
+        withServer { url, _ ->
+            val api = StorageHttpApi(token = { "test" }, clientFactory = ::createCloudStorageHttpClient)
+            try {
+                var pending: ByteArray? = ByteArray(64 * 1024)
+                val failure = assertFailsWith<StorageApiException> {
+                    withTimeout(5_000L) {
+                        api.upload(HttpMethod.Post, "$url/upload-rejected", pending!!.size.toLong(), { _, _ -> },
+                            source = { pending.also { pending = null } })
+                    }
+                }
+                assertEquals(403, failure.status)
                 withTimeout(5_000L) {
-                    api.json(HttpMethod.Post, "$url/metadata", buildJsonObject { put("afterCancellation", true) })
+                    api.json(HttpMethod.Post, "$url/metadata", buildJsonObject { put("afterRejection", true) })
                 }
             } finally {
                 api.close()
@@ -224,6 +257,12 @@ class CloudStorageHttpClientJvmTest {
                 } catch (_: IOException) {
                     // A cancelled streaming request may close before its declared length.
                 }
+            }
+        }
+        server.createContext("/upload-rejected") { exchange ->
+            exchange.use {
+                exchange.requestBody.readBytes()
+                exchange.sendResponseHeaders(403, -1)
             }
         }
         server.start()

@@ -172,7 +172,7 @@ class NetworkAddInlineFormTest {
     }
 
     @Test
-    fun captureAllWritableProtocolFormsWithoutCredentials() = withNetworks { _, _ ->
+    fun captureAllWritableProtocolFormsWithoutCredentials() = withNetworks { networks, queries ->
         val screen = NetworkAddEntryScreen()
         val navigator = BackStackAppNavigator(mutableListOf(AppRoute.Home, screen.toAppRoute()))
         runSkikoComposeUiTest(size = Size(390f, 844f)) {
@@ -195,9 +195,18 @@ class NetworkAddInlineFormTest {
                 onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("storage-content-section"))
                 onNode(hasScrollToIndexAction()).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 10000f) }
                 onNodeWithTag("storage-content-section").assertIsDisplayed()
-                onNodeWithTag("storage-content-toggle").assertIsOff().assertIsNotEnabled()
+                onNodeWithTag("storage-content-toggle").assertIsOff().assertIsEnabled()
                 ImageIO.write(onRoot().captureToImage().toAwtImage(), "png",
                     File("build/network-content-ui-evidence/add-" + protocol.lowercase().replace(" ", "-") + "-content.png"))
+                // 离线可准备内容加密，切换开关本身不能保存连接或绕过凭据验证。
+                onNodeWithTag("storage-content-toggle").performClick().assertIsOn()
+                onNodeWithTag("storage-content-password-input").assertExists()
+                onNodeWithTag("storage-content-toggle").performClick().assertIsOff()
+                onNodeWithTag("storage-content-password-input").assertDoesNotExist()
+                runOnIdle {
+                    assertTrue(networks.entries.isEmpty(), protocol)
+                    assertTrue(queries.selectAll().executeAsList().isEmpty(), protocol)
+                }
             }
         }
     }
