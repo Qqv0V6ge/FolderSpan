@@ -572,7 +572,7 @@ class CopyDestinationMixedJvmTest {
                 writeAttempts.incrementAndGet()
                 if (revokeBeforeWrite) certificate.setDeviceSharePathScope("device-token", DeviceSharePathScope(listOf(DeviceSharePathGrant(root.toString(), true))))
             }))
-            devices.shares.add(Share("share", "Read-only share", "/", session, type = DeviceType.JVM))
+            devices.shares.add(Share("share", "Read-only share", PathUtils.getPathSeparator(), session, type = DeviceType.JVM))
             val network = object : Network("Network", "/", "FTP", "copy-fixture.invalid", "", "fixture") { override val client = provider; override val taskState = tasks }
             application.koin.get<NetworkState>().entries.add(NetworkEntry(1, network, true))
             Fixture(application.koin.get(), tasks, root, provider, certificate, writeAttempts).block()

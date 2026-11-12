@@ -198,8 +198,8 @@ class CloudStorageHttpClientJvmTest {
                     }
                     assertTrue(progressed, "The streaming body must report progress before cancellation")
                     val failure = result.exceptionOrNull()
-                    assertTrue(failure != null && generateSequence<Throwable>(failure) { it.cause }.any { it is CancellationException },
-                        "Upload must preserve cancellation: ${failure?.stackTraceToString()}")
+                    assertEquals("test upload cancellation", failure?.message, failure?.stackTraceToString())
+                    assertTrue(failure is CancellationException)
                     assertEquals(1, chunks.get(), "Cancellation must stop reading the source")
                     withTimeout(5_000L) {
                         api.json(HttpMethod.Post, "$url/metadata", buildJsonObject { put("afterCancellation", true) })

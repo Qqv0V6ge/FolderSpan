@@ -23,6 +23,7 @@ import com.folderspan.service.mcp.file.FileEndpointRef
 import com.folderspan.service.mcp.file.validateEndpointLeafName
 import com.folderspan.ui.state.main.Task
 import com.folderspan.ui.state.main.TaskType
+import com.folderspan.ui.state.main.parentPathOf
 import com.folderspan.ui.state.main.storageUploadSourceDigest
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
@@ -240,7 +241,8 @@ internal class FileCopyDestinationController(private val fileState: FileState) {
             if (desk.id == SYSTEM_SHARE_DESK_ID) file.copy()
             else {
                 val session = checkNotNull(desk.session).also { check(it.isActive) }
-                val parent = file.path.substringBeforeLast('/', "/").ifEmpty { "/" }
+                val parent = if (desk.pathSeparator == "\\") parentPathOf(file.path, desk.pathSeparator)
+                    else file.path.substringBeforeLast('/', "/").ifEmpty { "/" }
                 (session.listRoots().getOrThrow().firstOrNull { it.path == file.path }
                     ?: session.list(parent).getOrThrow().firstOrNull { it.path == file.path })
                     ?.copy(protocol = file.protocol, protocolId = file.protocolId)
