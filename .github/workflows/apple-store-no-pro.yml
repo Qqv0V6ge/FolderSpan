@@ -17,19 +17,22 @@ on:
         required: true
         default: both
         options: [both, ios, macos]
+      macos_local_signing:
+        description: Produce a macOS app image for signing on a separate Mac
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-
-concurrency:
-  group: apple-store-no-pro-${{ inputs.version }}-${{ inputs.build_number }}
-  cancel-in-progress: false
 
 jobs:
   upload:
     name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (no-Pro)
     runs-on: macos-26
     timeout-minutes: 120
+    concurrency:
+      group: apple-store-no-pro-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +75,7 @@ jobs:
           xcodebuild -version
           echo "cache-key=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Restore Apple distribution certificates
+        if: matrix.platform == 'ios' || !inputs.macos_local_signing
         env:
           APPLE_CERTIFICATE_BASE64: ${{ matrix.platform == 'ios' && secrets.IOS_CERTIFICATE_P12_BASE64 || secrets.MACOS_STORE_CERTIFICATES_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'ios' && secrets.IOS_CERTIFICATE_PASSWORD || secrets.MACOS_STORE_CERTIFICATES_PASSWORD }}
@@ -84,7 +88,7 @@ jobs:
           IOS_SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
         run: python3 scripts/ci/prepare-apple-profiles.py ios
       - name: Prepare macOS app and JVM runtime signing
-        if: matrix.platform == 'macos'
+        if: matrix.platform == 'macos' && !inputs.macos_local_signing
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MACOS_APP_PROFILE_BASE64: ${{ secrets.MACOS_APP_PROFILE_BASE64 }}
@@ -127,7 +131,7 @@ jobs:
           [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
           echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
       - name: Package and verify signed Mac App Store PKG
-        if: matrix.platform == 'macos'
+        if: matrix.platform == 'macos' && !inputs.macos_local_signing
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         shell: bash
@@ -146,7 +150,27 @@ jobs:
           [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
           pkgutil --check-signature "${packages[0]}"
           echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
+      - name: Build unsigned Mac App Store app image
+        if: matrix.platform == 'macos' && inputs.macos_local_signing
+        shell: bash
+        run: |
+          ./gradlew --no-daemon --no-configuration-cache :app:desktopApp:createDistributable \
+            -PmacAppStore=true "-Pcompose.desktop.java.home=$JAVA_HOME" \
+            -Pcompose.desktop.mac.sign=false \
+            "-PmacAppStoreVersion=$APPLE_VERSION" "-PmacAppStoreBuild=$APPLE_BUILD_NUMBER"
+          ditto -c -k --sequesterRsrc --keepParent \
+            app/desktopApp/build/compose/appstore/main/app/FolderSpan.app \
+            "$RUNNER_TEMP/FolderSpan-macos-app-image.zip"
+      - name: Save unsigned macOS image for local signing
+        if: matrix.platform == 'macos' && inputs.macos_local_signing
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-macos-no-pro-unsigned-image
+          path: ${{ runner.temp }}/FolderSpan-macos-app-image.zip
+          if-no-files-found: error
+          retention-days: 1
       - name: Upload build to App Store Connect
+        if: matrix.platform == 'ios' || !inputs.macos_local_signing
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
