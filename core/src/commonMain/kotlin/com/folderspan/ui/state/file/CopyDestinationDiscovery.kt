@@ -30,6 +30,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -166,7 +167,7 @@ class CopyDestinationDiscovery(val runtimeId: String, parentScope: CoroutineScop
     }
 
     private fun update(endpoint: CopyEndpointIdentity, change: (CopyDestinationLoad) -> CopyDestinationLoad) {
-        mutableLoads.value = loads.value.map { if (it.endpoint == endpoint) change(it) else it }
+        mutableLoads.update { current -> current.map { if (it.endpoint == endpoint) change(it) else it } }
     }
 
     private fun binding(owner: Any): String = bindings.firstOrNull { it.first === owner }?.second

@@ -17,6 +17,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.*
 import kotlinx.serialization.SerializationException
 
@@ -156,7 +157,12 @@ internal class StorageHttpApi(
                         var sent = 0L
                         while (true) {
                             currentCoroutineContext().ensureActive()
-                            val bytes = source() ?: break
+                            val bytes = try {
+                                source()
+                            } catch (cancel: CancellationException) {
+                                if (currentCoroutineContext().isActive) uploadContext.cancel(cancel)
+                                throw cancel
+                            } ?: break
                             check(bytes.size <= size - sent) { "Storage upload length exceeded" }
                             channel.writeFully(bytes)
                             sent += bytes.size
