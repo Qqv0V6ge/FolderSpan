@@ -11,6 +11,12 @@ on:
         description: Unused App Store Connect build number
         required: true
         type: string
+      platform:
+        description: Platforms to build and upload
+        type: choice
+        required: true
+        default: both
+        options: [both, ios, macos]
 
 permissions:
   contents: read
@@ -21,19 +27,13 @@ concurrency:
 
 jobs:
   upload:
-    name: ${{ matrix.label }} App Store (no-Pro)
+    name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (no-Pro)
     runs-on: macos-26
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: ios
-            label: iOS
-            java: "17"
-          - platform: macos
-            label: macOS
-            java: "21"
+        platform: ${{ inputs.platform == 'both' && fromJSON('["ios", "macos"]') || fromJSON(format('["{0}"]', inputs.platform)) }}
     env:
       APPLE_PLATFORM: ${{ matrix.platform }}
       APPLE_VERSION: ${{ inputs.version }}
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: ${{ matrix.java }}
+          java-version: ${{ matrix.platform == 'ios' && '17' || '21' }}
       - uses: gradle/actions/setup-gradle@v6
       - name: Inspect Xcode version
         id: xcode
