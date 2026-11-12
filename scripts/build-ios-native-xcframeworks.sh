@@ -77,7 +77,8 @@ cmake_common_args() {
 ARGS
 }
 
-build_openssl_for_slice() {
+# Keep per-slice compiler flags out of the later CMake builds.
+build_openssl_for_slice() (
   local slice="$1"
   local sdk="$2"
   local arch="$3"
@@ -108,7 +109,7 @@ build_openssl_for_slice() {
   make -j"$JOBS"
   make install_sw
   popd >/dev/null
-}
+)
 
 build_libssh2_for_slice() {
   local slice="$1"
