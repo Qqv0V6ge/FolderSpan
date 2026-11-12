@@ -34,14 +34,12 @@ class WelcomeAgreementScreenTest : ChineseLocalizationTest() {
 
         assertEquals(AppStrings.ui_user_agreement, userAgreement.title)
         assertEquals(AppStrings.ui_privacy_policy, privacyPolicy.title)
-        assertEquals(16, userAgreement.paragraphs.size)
-        assertEquals(23, privacyPolicy.paragraphs.size)
+        assertEquals(15, userAgreement.paragraphs.size)
+        assertEquals(22, privacyPolicy.paragraphs.size)
         assertTrue(userAgreement.paragraphs.contains(AppStrings.agreement_user_instructions_and_automation))
         assertTrue(userAgreement.paragraphs.contains(AppStrings.agreement_user_remote_services))
-        assertTrue(userAgreement.paragraphs.contains(AppStrings.agreement_user_plugins))
         assertTrue(privacyPolicy.paragraphs.contains(AppStrings.agreement_privacy_sync_and_backup))
         assertTrue(privacyPolicy.paragraphs.contains(AppStrings.agreement_privacy_content_encryption))
-        assertTrue(privacyPolicy.paragraphs.contains(AppStrings.agreement_privacy_plugins))
         assertTrue(privacyPolicy.paragraphs.contains(AppStrings.agreement_privacy_mcp))
         assertTrue(privacyPolicy.paragraphs.contains(AppStrings.agreement_privacy_logs))
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_local_file))
@@ -51,6 +49,8 @@ class WelcomeAgreementScreenTest : ChineseLocalizationTest() {
         assertTrue(combinedText.contains("MCP"))
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_active))
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_do_not_automatically_upload))
+        assertFalse(combinedText.contains("插件"))
+        assertFalse(combinedText.contains("plugin", ignoreCase = true))
         assertFalse(combinedText.contains("proMain"))
     }
 
