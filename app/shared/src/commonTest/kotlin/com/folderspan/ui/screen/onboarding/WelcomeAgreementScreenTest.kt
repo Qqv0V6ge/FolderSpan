@@ -45,6 +45,8 @@ class WelcomeAgreementScreenTest : ChineseLocalizationTest() {
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_local_file))
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_local_network))
         assertTrue(combinedText.contains("FTP"))
+        assertTrue(AppStrings.agreement_privacy_network_drives.contains("九十天"))
+        assertTrue(AppStrings.agreement_user_minors.contains("十八周岁"))
         assertTrue(combinedText.contains("WebRTC"))
         assertTrue(combinedText.contains("MCP"))
         assertTrue(combinedText.contains(AppStrings.ui_test_welcome_agreement_screen_active))

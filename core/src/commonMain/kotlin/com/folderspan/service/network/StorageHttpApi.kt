@@ -12,6 +12,8 @@ import io.ktor.http.content.OutgoingContent
 import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -128,34 +130,49 @@ internal class StorageHttpApi(
         bodySuffix: ByteArray = byteArrayOf(),
         bodyContentType: ContentType = ContentType.Application.OctetStream,
         consume: suspend (HttpResponse) -> T,
-    ): T {
+    ): T = coroutineScope {
         require(size >= 0 && size <= Long.MAX_VALUE - bodyPrefix.size - bodySuffix.size) { "Storage upload requires a valid size" }
         val authorization = if (authenticated) bearerHeaders() else emptyMap()
-        return client.prepareRequest(url) {
-            this.method = method
-            authorization.forEach { (name, value) -> header(name, value) }
-            headers.forEach { (name, value) -> header(name, value) }
-            contentType(bodyContentType)
-            setBody(object : OutgoingContent.WriteChannelContent() {
-                override val contentLength = size + bodyPrefix.size + bodySuffix.size
-                override suspend fun writeTo(channel: ByteWriteChannel) {
-                    channel.writeFully(bodyPrefix)
-                    var sent = 0L
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val bytes = source() ?: break
-                        check(bytes.size <= size - sent) { "Storage upload length exceeded" }
-                        channel.writeFully(bytes)
-                        sent += bytes.size
-                        progress(sent, size)
+        val uploadContext = coroutineContext
+        fun reportProgress(sent: Long) {
+            try {
+                progress(sent, size)
+            } catch (cancel: CancellationException) {
+                // 引擎可能丢失请求体的关闭原因；仅将用户进度回调的取消传给本次上传。
+                uploadContext.cancel(cancel)
+                throw cancel
+            }
+        }
+        try {
+            client.prepareRequest(url) {
+                this.method = method
+                authorization.forEach { (name, value) -> header(name, value) }
+                headers.forEach { (name, value) -> header(name, value) }
+                contentType(bodyContentType)
+                setBody(object : OutgoingContent.WriteChannelContent() {
+                    override val contentLength = size + bodyPrefix.size + bodySuffix.size
+                    override suspend fun writeTo(channel: ByteWriteChannel) {
+                        channel.writeFully(bodyPrefix)
+                        var sent = 0L
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val bytes = source() ?: break
+                            check(bytes.size <= size - sent) { "Storage upload length exceeded" }
+                            channel.writeFully(bytes)
+                            sent += bytes.size
+                            reportProgress(sent)
+                        }
+                        check(sent == size) { "Storage upload ended early" }
+                        channel.writeFully(bodySuffix)
+                        reportProgress(sent)
                     }
-                    check(sent == size) { "Storage upload ended early" }
-                    channel.writeFully(bodySuffix)
-                    progress(sent, size)
-                }
-            })
-        }.execute { response ->
-            consume(response)
+                })
+            }.execute { response ->
+                consume(response)
+            }
+        } catch (failure: Exception) {
+            uploadContext.ensureActive()
+            throw failure
         }
     }
 }
