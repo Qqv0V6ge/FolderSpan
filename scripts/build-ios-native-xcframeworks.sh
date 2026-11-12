@@ -128,6 +128,7 @@ build_libssh2_for_slice() {
     -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_TESTING=OFF \
+    -DBUILD_EXAMPLES=OFF \
     -DENABLE_ZLIB_COMPRESSION=OFF \
     -DCRYPTO_BACKEND=OpenSSL \
     -DOPENSSL_ROOT_DIR="$openssl_prefix" \
