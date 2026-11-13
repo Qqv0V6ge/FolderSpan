@@ -15,6 +15,9 @@
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 	<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
+	<!-- WebRTC is used for data channels only; exclude its unused media permissions. -->
+	<uses-permission android:name="android.permission.CAMERA" tools:node="remove"/>
+	<uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
 	<uses-permission
 			android:name="android.permission.READ_EXTERNAL_STORAGE"
 			android:maxSdkVersion="32"/>
