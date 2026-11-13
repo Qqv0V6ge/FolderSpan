@@ -182,7 +182,8 @@ kotlin {
             export(libs.kmpnotifier.local)
             freeCompilerArgs += listOf(
                 "-Xbinary=bundleId=com.folderspan",
-                "-Xdisable-phases=DevirtualizationAnalysis",
+                // Kotlin/Native 2.4.21 exhausts the heap in these whole-program analyses.
+                "-Xdisable-phases=DevirtualizationAnalysis,RemoveRedundantCallsToStaticInitializersPhase",
             )
         }
     }
