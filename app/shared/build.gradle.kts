@@ -182,7 +182,7 @@ kotlin {
             export(libs.kmpnotifier.local)
             freeCompilerArgs += listOf(
                 "-Xbinary=bundleId=com.folderspan",
-                "-Xdisable-phases=DevirtualizationAnalysisPhase",
+                "-Xdisable-phases=DevirtualizationAnalysis",
             )
         }
     }
