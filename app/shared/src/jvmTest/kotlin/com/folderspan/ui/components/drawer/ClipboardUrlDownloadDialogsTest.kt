@@ -30,8 +30,10 @@ import com.folderspan.ui.state.main.TaskState
 import com.folderspan.ui.state.main.TempTaskRuntimePersistenceStore
 import kotlinx.coroutines.Dispatchers
 import strings.AppStrings
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class ClipboardUrlDownloadDialogsTest {
@@ -56,7 +58,7 @@ class ClipboardUrlDownloadDialogsTest {
             }
         }
 
-        assertEquals(0, downloader.requests)
+        assertTrue(downloader.requests.isEmpty())
         onNodeWithTag(CLIPBOARD_URL_RETRIES_TAG).performTextClearance()
         onNodeWithTag(CLIPBOARD_URL_RETRIES_TAG).performTextInput("4")
         onNodeWithTag(CLIPBOARD_URL_COOKIE_TAG).performTextInput("session=test")
@@ -66,19 +68,21 @@ class ClipboardUrlDownloadDialogsTest {
         onNodeWithTag(CLIPBOARD_URL_THREADS_TAG).performTextClearance()
         onNodeWithTag(CLIPBOARD_URL_THREADS_TAG).performTextInput("3")
 
-        assertEquals(0, downloader.requests)
+        assertTrue(downloader.requests.isEmpty())
         onNodeWithTag(CLIPBOARD_URL_CONFIRM_TAG).performClick()
-        waitUntil { downloader.requests == 1 }
+        waitUntil { downloader.requests.isNotEmpty() }
 
         assertEquals(
-            ConfigSnapshot(
-                retries = 4,
-                cookie = "session=test",
-                userAgent = "TestAgent/1",
-                automaticHeaders = false,
-                threads = 3,
+            listOf(
+                ConfigSnapshot(
+                    retries = 4,
+                    cookie = "session=test",
+                    userAgent = "TestAgent/1",
+                    automaticHeaders = false,
+                    threads = 3,
+                ),
             ),
-            downloader.lastConfig,
+            downloader.requests,
         )
         coordinator.teardown()
     }
@@ -153,24 +157,22 @@ class ClipboardUrlDownloadDialogsTest {
 }
 
 private class RecordingDownloader : ClipboardUrlDownloader {
-    var requests: Int = 0
-        private set
-    var lastConfig: ConfigSnapshot? = null
-        private set
+    private val recordedRequests = AtomicReference<List<ConfigSnapshot>>(emptyList())
+    val requests: List<ConfigSnapshot> get() = recordedRequests.get()
 
     override suspend fun download(
         config: ClipboardUrlDownloadTaskConfig,
         onProgress: suspend (ClipboardUrlDownloadProgress) -> Unit,
         onRetry: suspend (attempt: Int, delayMillis: Long) -> Unit,
     ): ClipboardUrlDownloadResult {
-        requests++
-        lastConfig = ConfigSnapshot(
+        val snapshot = ConfigSnapshot(
             retries = config.retries,
             cookie = config.cookie,
             userAgent = config.userAgent,
             automaticHeaders = config.automaticHeaders,
             threads = config.threads,
         )
+        recordedRequests.updateAndGet { it + snapshot }
         return ClipboardUrlDownloadResult.Failure(
             error = ClipboardUrlDownloadError.HttpFailure,
             rawText = config.rawText,
