@@ -387,19 +387,19 @@
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(HOME)/ios-native-xcframeworks/libcrypto.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libcurl.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libsmb2.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libssh2.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libssl.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcrypto.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcurl.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libsmb2.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssh2.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssl.xcframework/ios-arm64",
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(HOME)/ios-native-xcframeworks/libcrypto.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libcurl.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libsmb2.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libssh2.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libssl.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcrypto.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcurl.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libsmb2.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssh2.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssl.xcframework/ios-arm64-simulator",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -560,19 +560,19 @@
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(HOME)/ios-native-xcframeworks/libcrypto.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libcurl.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libsmb2.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libssh2.xcframework/ios-arm64",
-					"$(HOME)/ios-native-xcframeworks/libssl.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcrypto.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcurl.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libsmb2.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssh2.xcframework/ios-arm64",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssl.xcframework/ios-arm64",
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(HOME)/ios-native-xcframeworks/libcrypto.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libcurl.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libsmb2.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libssh2.xcframework/ios-arm64-simulator",
-					"$(HOME)/ios-native-xcframeworks/libssl.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcrypto.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libcurl.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libsmb2.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssh2.xcframework/ios-arm64-simulator",
+					"$(IOS_NATIVE_XCFRAMEWORKS_ROOT)/libssl.xcframework/ios-arm64-simulator",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
