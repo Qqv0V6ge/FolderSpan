@@ -32,7 +32,8 @@ permissions:
 jobs:
   upload:
     name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (no-Pro)
-    runs-on: macos-26
+    # The iOS Kotlin/Native release linker needs more heap than the 7 GB arm64 runner can spare.
+    runs-on: ${{ matrix.platform == 'ios' && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 120
     concurrency:
       group: apple-store-no-pro-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
@@ -125,7 +126,7 @@ jobs:
         if: matrix.platform == 'ios'
         env:
           IOS_NATIVE_XCFRAMEWORKS_ROOT: ${{ github.workspace }}/build/ios-native-xcframeworks
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.workers.max=2
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx8g -Dorg.gradle.workers.max=2
         shell: bash
         run: |
           bash scripts/verify-ios-native-libs.sh "$IOS_NATIVE_XCFRAMEWORKS_ROOT"
