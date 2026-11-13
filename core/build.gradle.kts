@@ -60,7 +60,6 @@ buildConfig {
     buildConfigField("GATEWAY_BASE_URL", gatewayBaseUrl)
     buildConfigField("HTTP_PROXY_URL", httpProxyUrl)
     buildConfigField("API_HOST_HEADER", apiHostHeader)
-    buildConfigField("STORAGE_OAUTH_BROKER_URL", providers.gradleProperty("storageOAuthBrokerUrl").orElse("https://api.folderspan.com/api/v1/storage/oauth"))
 }
 
 val kotlinVersion = libs.versions.kotlin.get()

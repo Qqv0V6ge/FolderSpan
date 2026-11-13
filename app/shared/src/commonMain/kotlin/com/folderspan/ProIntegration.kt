@@ -15,6 +15,8 @@ import com.folderspan.pro.core.datastore.SessionManager
 import com.folderspan.pro.core.datastore.SettingsAuthSessionStore
 import com.folderspan.pro.core.network.installProWebRtcOfficialGatewayProvider
 import com.folderspan.pro.core.network.installProWebRtcOfficialRoomsClient
+import com.folderspan.pro.core.network.installProOfficialStorageAuthorization
+import com.folderspan.pro.core.network.proOfficialStorageProtocols
 import com.folderspan.pro.di.*
 import com.folderspan.pro.domain.model.AccountNotificationPayloadKeys
 import com.folderspan.pro.domain.model.AppUpdateChannel
@@ -44,6 +46,8 @@ import org.koin.core.module.Module
 import strings.AppStrings
 
 internal const val PRO_AVAILABLE = true
+internal val officialStorageProtocols = proOfficialStorageProtocols
+internal fun initializeOfficialStorageAuthorization() = installProOfficialStorageAuthorization()
 
 internal data class ProRuntimeDependencies(
     val accountDeviceTrustRuntime: AccountDeviceTrustRuntime,
