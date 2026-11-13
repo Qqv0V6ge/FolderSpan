@@ -19,7 +19,7 @@ case "${1:-}" in
     security set-keychain-settings -lut 21600 "$keychain"
     security unlock-keychain -p "$password" "$keychain"
     security import "$signing_dir/certificates.p12" -P "$APPLE_CERTIFICATE_PASSWORD" \
-      -k "$keychain" -T /usr/bin/codesign -T /usr/bin/productsign
+      -k "$keychain" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/productbuild
     security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$password" "$keychain" >/dev/null
     python3 - "$signing_dir/original-keychains.txt" "$keychain" <<'PY'
 import pathlib, shlex, subprocess, sys
