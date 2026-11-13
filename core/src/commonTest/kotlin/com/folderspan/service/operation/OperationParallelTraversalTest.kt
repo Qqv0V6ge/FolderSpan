@@ -6,11 +6,16 @@ import com.folderspan.ui.state.file.buildCopyQueueEntriesForOperation
 import com.folderspan.ui.state.file.buildDeleteQueueEntriesFromCopyPlan
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -256,6 +261,21 @@ class OperationParallelTraversalTest {
         }
 
         assertEquals(listOf("/root"), listedPaths)
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun traversalKeepsWorkerResultAtPollDeadline() = runTest {
+        val results = Channel<String>()
+        val received = async(start = CoroutineStart.UNDISPATCHED) {
+            receiveWorkerResult(results) {}
+        }
+
+        // Queue the timeout and the resumed receiver for the same virtual instant.
+        advanceTimeBy(250)
+        assertTrue(results.trySend("/root").isSuccess)
+
+        assertEquals("/root", withTimeout(1_000) { received.await() })
     }
 
     @Test

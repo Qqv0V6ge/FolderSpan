@@ -5,16 +5,18 @@ import com.folderspan.extensions.fileOperationKey
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.DEVICE_DIRECT_MAX_LENGTH
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.milliseconds
 import strings.AppStrings
 
 private const val LOCAL_TRAVERSAL_INITIAL_PARALLELISM = 8
@@ -393,15 +395,18 @@ internal suspend fun collectDirectoryEntriesAdaptive(
 /**
  * 等待一个 worker 返回结果，同时周期性调用 ensureRunning，避免暂停/取消时被长时间挂在 receive 上。
  */
-private suspend fun receiveWorkerResult(
-    resultQueue: Channel<TraversalWorkerResult>,
+@OptIn(ExperimentalCoroutinesApi::class)
+internal suspend fun <T : Any> receiveWorkerResult(
+    resultQueue: ReceiveChannel<T>,
     ensureRunning: suspend () -> Unit,
-): TraversalWorkerResult {
+): T {
     while (true) {
         currentCoroutineContext().ensureActive()
         ensureRunning()
-        withTimeoutOrNull(TRAVERSAL_CANCEL_POLL_INTERVAL_MS.milliseconds) {
-            resultQueue.receive()
+        // Let receipt and the polling deadline compete atomically so neither can discard a result.
+        select<T?> {
+            resultQueue.onReceive { it }
+            onTimeout(TRAVERSAL_CANCEL_POLL_INTERVAL_MS) { null }
         }?.let { result -> return result }
     }
 }
