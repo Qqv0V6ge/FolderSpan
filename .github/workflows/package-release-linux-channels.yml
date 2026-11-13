@@ -1,0 +1,162 @@
+name: Package Linux release channels
+
+on:
+  push:
+    branches: [codex/v1.1.0-linux-channel-packages]
+    paths: [.github/workflows/package-release-linux-channels.yml]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  RELEASE_VERSION: '1.1.0'
+  RELEASE_RUN: '43376194286'
+  RELEASE_COMMIT: b99ad43ff3322720fc271d1dc37a1f4a3150392f
+  DESKTOP_ARTIFACT: release-desktop-linux-x64-no-pro
+
+jobs:
+  package:
+    name: Build and test Linux channel package (${{ matrix.format }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [appimage, snap]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          persist-credentials: false
+
+      - name: Wait for the release desktop artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          actual_commit=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN" --jq .head_sha)
+          test "$actual_commit" = "$RELEASE_COMMIT"
+          for ((attempt = 1; attempt <= 55; attempt++)); do
+            if count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN/artifacts?name=$DESKTOP_ARTIFACT" --jq .total_count) &&
+               [[ "$count" == 1 ]]; then
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "::error::The Linux x64 no-pro desktop archive did not become available"
+          exit 1
+
+      - name: Download the release desktop archive
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.DESKTOP_ARTIFACT }}
+          github-token: ${{ github.token }}
+          run-id: ${{ env.RELEASE_RUN }}
+          path: release-desktop
+
+      - name: Verify and extract the runtime
+        shell: bash
+        run: |
+          archive="release-desktop/com.folderspan-${RELEASE_VERSION}.tar.gz"
+          sha256sum "$archive"
+          mkdir -p payload channel-packages
+          tar -xzf "$archive" -C payload
+          for executable in bin/FolderSpan lib/runtime/lib/jspawnhelper lib/runtime/lib/jexec; do
+            test -x "payload/$executable"
+          done
+          for notice in LICENSE NOTICE LICENSING.md THIRD_PARTY_NOTICES.txt; do
+            test -s "payload/lib/app/resources/licenses/$notice"
+          done
+          test -d payload/lib/runtime/legal
+
+      - name: Install desktop smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth xdotool imagemagick desktop-file-utils libasound2t64 \
+            libgl1 libx11-6 libxext6 libxi6 libxrender1 libxtst6 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libfontconfig1 libfreetype6 libgbm1 libdrm2 libgtk-3-0t64
+
+      - name: Build and smoke-test AppImage
+        if: matrix.format == 'appimage'
+        shell: bash
+        run: |
+          install -m755 packaging/appimage/AppRun payload/AppRun
+          cp packaging/linux/folderspan.desktop payload/
+          cp payload/lib/FolderSpan.png payload/folderspan.png
+          mkdir -p payload/usr/bin
+          ln -s ../../bin/FolderSpan payload/usr/bin/folderspan
+          desktop-file-validate payload/folderspan.desktop
+
+          tool="$RUNNER_TEMP/appimagetool"
+          runtime="$RUNNER_TEMP/appimage-runtime"
+          curl --fail --location --retry 3 \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage -o "$tool"
+          curl --fail --location --retry 3 \
+            https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 -o "$runtime"
+          printf '%s  %s\n' ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 "$tool" \
+            2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d "$runtime" | sha256sum --check
+          chmod 755 "$tool"
+          appimage="channel-packages/FolderSpan-${RELEASE_VERSION}-x86_64.AppImage"
+          mv payload FolderSpan.AppDir
+          ARCH=x86_64 VERSION="$RELEASE_VERSION" "$tool" --appimage-extract-and-run --runtime-file "$runtime" FolderSpan.AppDir "$appimage"
+          python3 - "$appimage" <<'PY'
+          import sys
+          with open(sys.argv[1], 'rb') as package:
+              magic = package.read(11)
+          assert magic.startswith(b'\x7fELF') and magic[8:11] == b'AI\x02', magic
+          PY
+          xvfb-run -a python3 scripts/verify_distribution_linux.py appimage "$appimage" --appimage-extract-and-run
+
+      - name: Stage the current release for Snapcraft
+        if: matrix.format == 'snap'
+        shell: bash
+        run: |
+          mkdir -p snap-project/local
+          mv payload snap-project/local/payload
+          cp packaging/linux/folderspan.desktop snap-project/local/
+          # The channel recipe references the published v1.0.1 TAR. This candidate uses the verified local artifact.
+          sed -E \
+            -e "s/^version:.*/version: '${RELEASE_VERSION}'/" \
+            -e 's|^    source:.*|    source: local/payload|' \
+            -e '/^    source-checksum:/d' \
+            -e '/^    build-packages: \[curl\]/d' \
+            -e '/^    override-pull:/,/^    stage-packages:/{ /^    stage-packages:/!d; }' \
+            packaging/snap/snapcraft.yaml > snap-project/snapcraft.yaml
+          grep -Fx '    source: local/payload' snap-project/snapcraft.yaml
+          if grep -Fq 'v1.0.1' snap-project/snapcraft.yaml; then exit 1; fi
+
+      - name: Build strict Snap candidate
+        if: matrix.format == 'snap'
+        id: snap
+        uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79
+        with:
+          path: snap-project
+
+      - name: Install and smoke-test Snap
+        if: matrix.format == 'snap'
+        env:
+          BUILT_SNAP: ${{ steps.snap.outputs.snap }}
+        shell: bash
+        run: |
+          sudo snap install --dangerous "$BUILT_SNAP"
+          trap 'sudo snap remove folderspan' EXIT
+          xvfb-run -a -f "$HOME/.Xauthority" python3 scripts/verify_distribution_linux.py snap snap run folderspan
+          cp "$BUILT_SNAP" "channel-packages/folderspan-${RELEASE_VERSION}-amd64-candidate.snap"
+
+      - name: Upload validated channel package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-channel-${{ matrix.format }}
+          path: channel-packages/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload smoke-test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-${{ matrix.format }}
+          path: distribution-results/
+          if-no-files-found: ignore
+          retention-days: 14
