@@ -143,12 +143,14 @@ jobs:
           echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
       - name: Package and verify signed Mac App Store PKG
         if: matrix.platform == 'macos' && !inputs.macos_local_signing
+        timeout-minutes: 40
         env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         shell: bash
         run: |
           : "${MACOS_SIGNING_IDENTITY:?Missing MACOS_SIGNING_IDENTITY}"
-          ./gradlew --no-daemon --no-configuration-cache :app:desktopApp:packagePkg \
+          ./gradlew --no-daemon --no-configuration-cache :app:desktopApp:finalizeMacAppStoreImage \
             -PmacAppStore=true "-Pcompose.desktop.java.home=$JAVA_HOME" \
             -Pcompose.desktop.mac.sign=true \
             "-Pcompose.desktop.mac.signing.identity=$MACOS_SIGNING_IDENTITY" \
@@ -157,10 +159,24 @@ jobs:
             "-PmacAppStoreProvisioningProfile=$APPLE_SIGNING_DIR/embedded.provisionprofile" \
             "-PmacAppStoreRuntimeProvisioningProfile=$APPLE_SIGNING_DIR/runtime.provisionprofile" \
             --stacktrace
-          packages=(app/desktopApp/build/compose/appstore/main/pkg/*.pkg)
-          [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
-          pkgutil --check-signature "${packages[0]}"
-          echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
+          installer_identity="$(
+            security find-identity -v -p basic "$APPLE_KEYCHAIN" |
+              awk -F '"' -v team="($APPLE_TEAM_ID)" '
+                $2 ~ /^3rd Party Mac Developer Installer: / &&
+                substr($2, length($2) - length(team) + 1) == team {
+                  print $2
+                  count++
+                }
+                END { if (count != 1) exit 1 }'
+          )"
+          image=app/desktopApp/build/compose/appstore/store-ready/FolderSpan.app
+          package="$RUNNER_TEMP/FolderSpan-macOS.pkg"
+          /usr/bin/productbuild --component "$image" /Applications \
+            --sign "$installer_identity" --keychain "$APPLE_KEYCHAIN" --timestamp=none "$package"
+          signature="$(pkgutil --check-signature "$package")"
+          printf '%s\n' "$signature"
+          [[ "$signature" == *"$installer_identity"* ]]
+          echo "APPLE_PACKAGE=$package" >> "$GITHUB_ENV"
       - name: Build unsigned Mac App Store app image
         if: matrix.platform == 'macos' && inputs.macos_local_signing
         shell: bash
