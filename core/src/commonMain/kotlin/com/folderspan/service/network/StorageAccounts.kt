@@ -180,15 +180,22 @@ internal object StorageAccounts {
         return store.authorizationGeneration(id)
     }
     fun capabilities(config: NetworkConnectionConfig): StorageCapabilities {
+        if (runCatching { OfficialStorageAuthorization.requireAvailable(config.protocol) }.isFailure) {
+            return StorageCapabilities.Unavailable
+        }
         val account = runCatching { store.metadata(config.extras.cloud.accountId) }.getOrNull() ?: return StorageCapabilities.Unavailable
         if (account.kind != storageAccountKind(config.protocol) || account.needsAuthorization) return StorageCapabilities.Unavailable
         return if (account.readOnly || config.extras.cloud.readOnly) StorageCapabilities.ReadOnly else StorageCapabilities.ReadWrite
     }
     suspend fun install(value: StorageCredential, replaceId: String? = null) = store.install(value, replaceId)
-    suspend fun credential(config: NetworkConnectionConfig) = store.credential(config)
+    suspend fun credential(config: NetworkConnectionConfig): StorageCredential {
+        OfficialStorageAuthorization.requireAvailable(config.protocol)
+        return store.credential(config)
+    }
     suspend fun token(config: NetworkConnectionConfig) = credential(config).accessToken
 
     private suspend fun refresh(value: StorageCredential): StorageCredential {
+        OfficialStorageAuthorization.requireAvailable(value.kind.name)
         val base = checkedStorageBrokerUrl(value.brokerUrl)
         return client.preparePost("$base/refresh") {
             contentType(ContentType.Application.Json)
@@ -212,7 +219,7 @@ internal object StorageAccounts {
                 basicAuth(value.username, value.accessToken)
                 header("OCS-APIRequest", "true")
             }.execute { response -> check(response.status.isSuccess()) { "Local credentials removed; Nextcloud revocation failed" } }
-        } else if (value.brokerGrant.isNotEmpty()) {
+        } else if (value.brokerGrant.isNotEmpty() && OfficialStorageAuthorization.brokerUrl != null) {
             val base = checkedStorageBrokerUrl(value.brokerUrl)
             client.preparePost("$base/revoke") {
                 contentType(ContentType.Application.Json)

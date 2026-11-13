@@ -1,6 +1,5 @@
 package com.folderspan.service.network
 
-import com.folderspan.AppBuildConfig
 import com.folderspan.data.main.network.CloudDriveExtras
 import com.folderspan.data.main.network.NetworkDriveExtras
 import strings.AppStrings
@@ -37,10 +36,11 @@ actual object StorageAccountPlatform {
 internal class StorageAuthorizationManager(
     private val client: HttpClient = createNoProxyHttpClient { expectSuccess = false; followRedirects = false },
     private val store: StorageAccountStore = StorageAccounts.store,
-    brokerUrl: String = AppBuildConfig.STORAGE_OAUTH_BROKER_URL,
+    brokerUrl: String? = OfficialStorageAuthorization.brokerUrl,
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
-    private val broker = checkedStorageBrokerUrl(brokerUrl)
+    private val broker = brokerUrl?.let(::checkedStorageBrokerUrl)
+    private fun requireBroker() = checkNotNull(broker) { AppStrings.storage_official_authorization_pro_only }
     private val json = Json { ignoreUnknownKeys = true }
     private val mutex = Mutex()
     private class Pending(
@@ -52,7 +52,7 @@ internal class StorageAuthorizationManager(
 
     fun accounts() = store.accounts()
     private suspend fun broker(operation: String, body: JsonObject): JsonObject =
-        client.preparePost(broker + "/" + operation) {
+        client.preparePost(requireBroker() + "/" + operation) {
             contentType(ContentType.Application.Json); setBody(body.toString())
         }.execute { response ->
             if (response.status.value in setOf(404, 503)) error(AppStrings.storage_auth_not_configured)
@@ -93,6 +93,7 @@ internal class StorageAuthorizationManager(
             record = Pending(request, expiry, server = server, pollUrl = nextcloudUrl(server, poll.storageString("endpoint")), pollToken = poll.storageString("token"))
             start = StorageAuthorizationStart(handle, nextcloudUrl(server, result.storageString("login")), expiresAt = expiry)
         } else {
+            val broker = requireBroker()
             val provider = when (kind) { StorageAccountKind.GoogleDrive -> "google"; StorageAccountKind.Dropbox -> "dropbox" }
             val verifier = token()
             val challenge = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).encode(verifier.encodeToByteArray().sha256().bytes)
@@ -176,7 +177,7 @@ internal class StorageAuthorizationManager(
                 credential = StorageCredential(token(), storageAccountKind(record.request.protocol), result.storageString("providerAccountId"),
                     result.storageString("label"), accessToken = result.storageString("accessToken"),
                     expiresAt = result.storageLong("expiresAt") ?: error("Authorization expiry is missing"),
-                    brokerUrl = broker, brokerGrant = result.storageString("grant"))
+                    brokerUrl = requireBroker(), brokerGrant = result.storageString("grant"))
             }
             val installed = try {
                 check(record.request.hasGrantedPermissions(grantedScopes)) { AppStrings.storage_auth_permissions_unconfirmed }

@@ -55,6 +55,26 @@ class NetworkEditScreen(
             }
         }
         val network = entry.network
+        if (network.protocol in setOf("GoogleDrive", "Dropbox") &&
+            addedStorageProtocols.none { it.name == network.protocol }
+        ) {
+            AppScaffold(topBar = {
+                TopAppBar(
+                    title = { Text(AppStrings.ui_edit_network) },
+                    navigationIcon = {
+                        IconButton(onClick = navigator::pop) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        }
+                    },
+                )
+            }) { padding ->
+                Text(
+                    AppStrings.storage_official_authorization_pro_only,
+                    modifier = Modifier.padding(padding).padding(16.dp),
+                )
+            }
+            return
+        }
         val currentExtras = remember(network) { network.extras }
         val formKey = entry.id
         val usesStorageForm = addedStorageProtocols.any { it.name == network.protocol }

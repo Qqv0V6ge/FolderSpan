@@ -23,6 +23,7 @@ fun main(args: Array<String>) {
             printWebUiUrls(emptyList(), WebUiCredentialStore(createSettings()).rotate())
             return
         }
+        initializeOfficialStorageAuthorization()
         runBlocking {
             val job = launch(Dispatchers.Default, start = CoroutineStart.LAZY) {
                 startHeadlessPlatformRuntime()

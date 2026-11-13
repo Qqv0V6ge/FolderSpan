@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.main.network.*
 import com.folderspan.openUrl
+import com.folderspan.officialStorageProtocols
 import com.folderspan.service.network.*
 import com.folderspan.service.webui.WebUiAttachment
 import com.folderspan.ui.components.fields.PasswordOutlinedTextField
@@ -36,8 +37,8 @@ import kotlinx.serialization.json.Json
 import strings.AppStrings
 import kotlin.uuid.Uuid
 
-internal val addedStorageProtocols = listOf(NetworkProtocol.NFS, NetworkProtocol.HttpDirectory, NetworkProtocol.GoogleDrive,
-    NetworkProtocol.Dropbox, NetworkProtocol.Nextcloud, NetworkProtocol.Seafile)
+internal val addedStorageProtocols = listOf(NetworkProtocol.NFS, NetworkProtocol.HttpDirectory) +
+    officialStorageProtocols + listOf(NetworkProtocol.Nextcloud, NetworkProtocol.Seafile)
 internal fun storageProtocolLabel(protocol: NetworkProtocol): String = when (protocol) {
     NetworkProtocol.HttpDirectory -> AppStrings.storage_http_directory
     NetworkProtocol.GoogleDrive -> "Google Drive"

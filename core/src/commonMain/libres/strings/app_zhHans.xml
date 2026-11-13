@@ -69,7 +69,7 @@
     <string name="agreement_privacy_local_files">本地文件与内容：当你浏览、搜索、预览、分析、编辑、复制、移动、重命名、删除、分享或传输文件时，软件会处理所选目录及文件的名称、路径、类型、大小、时间、权限、缩略图和必要内容。编辑器还可能生成本地备份或恢复数据。这些数据默认留在你的设备或浏览器存储中。</string>
     <string name="agreement_privacy_devices">设备发现、连接与消息：局域网扫描和设备连接会处理设备标识、设备名称与类型、IP 地址、端口、连接方式、首次和最近连接时间、角色权限、证书及其指纹。你发送的设备消息、文件、目录信息和传输状态会传给指定对端，消息正文及会话状态可保存在双方本地数据库中。</string>
     <string name="agreement_privacy_link_sharing">链接分享与接收：创建分享链接或运行分享服务时，软件会在你的设备上提供选定文件、目录、名称、路径元数据、访问规则、密码验证状态、临时票据和传输状态。获得有效链接、票据或密码的接收方可在授权范围内下载；你开放网页上传或写入后，接收方也可向指定位置提交或改变内容。</string>
-    <string name="agreement_privacy_network_drives">网络位置与凭据：连接 FTP、SFTP、SMB、NFS、WebDAV、S3、Google Drive、Dropbox、Nextcloud、Seafile、HTTP/HTTPS 目录等位置时，软件处理名称、协议、地址、账号、密码、私钥、访问或刷新令牌、请求头、存储桶、区域、根目录或资料库等所需配置。使用 Google Drive 或 Dropbox 的运营者授权中转时，运营者服务器会加密保存第三方账号标识、邮箱、访问令牌、刷新令牌和授权范围，保存九十天；仅刷新访问令牌会重新计算九十天，单纯使用不续期。在网络位置编辑页移除授权会删除本机凭据并请求中转服务撤销、删除记录；远端撤销失败时请联系运营者，并可在第三方账号中撤销访问权限。也可在第三方账号的应用授权管理中撤销访问权限，但这不会立即删除中转记录，中转记录仍须撤销或到期删除。中转授权不关联 FolderSpan 账号，注销 FolderSpan 账号不会自动删除该授权。请求所需的路径、内容和元数据会发送给指定服务；经 Runtime 执行时，相应执行设备也会处理操作数据。本机保存的密码和扩展凭据加密存储，使用时需解密；这不表示远端服务或账号同步无法处理相关配置。</string>
+    <string name="agreement_privacy_network_drives">网络位置与凭据：连接 FTP、SFTP、SMB、NFS、WebDAV、S3、Google Drive、Dropbox、Nextcloud、Seafile、HTTP/HTTPS 目录等位置时，软件处理名称、协议、地址、账号、密码、私钥、访问或刷新令牌、请求头、存储桶、区域、根目录或资料库等所需配置。Google Drive 和 Dropbox 的官方授权仅在 Pro 版中提供。使用这两个服务的运营者授权中转时，运营者服务器会加密保存第三方账号标识、邮箱、访问令牌、刷新令牌和授权范围，保存九十天；仅刷新访问令牌会重新计算九十天，单纯使用不续期。在网络位置编辑页移除授权会删除本机凭据并请求中转服务撤销、删除记录；远端撤销失败时请联系运营者，并可在第三方账号中撤销访问权限。也可在第三方账号的应用授权管理中撤销访问权限，但这不会立即删除中转记录，中转记录仍须撤销或到期删除。中转授权不关联 FolderSpan 账号，注销 FolderSpan 账号不会自动删除该授权。请求所需的路径、内容和元数据会发送给指定服务；经 Runtime 执行时，相应执行设备也会处理操作数据。本机保存的密码和扩展凭据加密存储，使用时需解密；这不表示远端服务或账号同步无法处理相关配置。</string>
     <string name="agreement_privacy_sync_and_backup">同步与备份：文件同步、自动备份及多目标复制会读取所选来源与全部目标，处理文件内容、路径、大小、时间、差异、冲突、删除候选、执行记录及恢复资料，并按任务规则向对应设备或存储服务传输。定时或事件触发任务可在后台运行；任务记录、基线和恢复资料通常在本机保存。删除任务或清理本机记录不会删除已有备份。登录后的账号数据同步是另一项在线服务，所选配置的云端处理见账号与在线服务隐私政策。</string>
     <string name="agreement_privacy_content_encryption">内容加密：在支持的网络位置主动开启后，执行设备在写入前加密、读取时校验并解密文件内容；位置中保存恢复所需的加密资料，存储服务仍可看到文件名、路径、大小和请求元数据。内容密码与连接密码用途不同，原内容密码和位置资料是跨设备恢复所必需；Web 使用所连接 Runtime 的能力。已有普通文件不会自动转换，关闭功能不会自动解密或删除已有密文及位置资料。请保留可恢复备份。</string>
     <string name="agreement_privacy_webrtc">WebRTC：使用跨设备 WebRTC 时，软件会处理房间标识、信令服务器地址、STUN/TURN 地址及凭据、对等设备和连接候选等网络信息。信令数据会发送给你选择的信令服务；无法直连时，TURN 服务可能中继文件或消息流量。房间配置及凭据加密保存在本机。</string>
@@ -300,7 +300,7 @@
     <string name="ui_transmit_information">传输信息</string>
     <string name="ui_transmission_test">传输测试</string>
     <string name="ui_location">位置</string>
-    <string name="ui_you_can_use_folderspan_manage_local_files_connect_devices">服务内容：你可使用 FolderSpan 浏览、搜索、预览、分析和编辑文件，管理书签、收藏和最近记录，创建链接分享，在设备间传输文件或发送消息，配置同步、备份、WebRTC 与 MCP 自动化，并连接 FTP、SFTP、SMB、NFS、WebDAV、S3、Google Drive、Dropbox、Nextcloud、Seafile、HTTP/HTTPS 目录等网络位置。具体能力因平台、版本、执行设备、系统权限和协议支持而异。</string>
+    <string name="ui_you_can_use_folderspan_manage_local_files_connect_devices">服务内容：你可使用 FolderSpan 浏览、搜索、预览、分析和编辑文件，管理书签、收藏和最近记录，创建链接分享，在设备间传输文件或发送消息，配置同步、备份、WebRTC 与 MCP 自动化，并连接 FTP、SFTP、SMB、NFS、WebDAV、S3、Nextcloud、Seafile、HTTP/HTTPS 目录等网络位置。Google Drive 和 Dropbox 的官方授权仅在 Pro 版中提供。具体能力因平台、版本、执行设备、系统权限和协议支持而异。</string>
     <string name="ui_you_can_try_again_later">你可以稍后再试一次。</string>
     <string name="ui_you_should_ensure_that_you_have_rights_access_share">内容权利与责任：你应确保有权访问、编辑、分享、复制、移动、删除、上传或自动处理相关文件、消息和配置，并对其合法性、准确性和备份负责。你不得处理国家秘密、工作秘密或其他依法禁止通过相应设备、网络或第三方服务处理的数据。</string>
     <string name="ui_use_personalization_set_goals">使用个性化设置目标</string>
@@ -4102,6 +4102,7 @@
     <string name="ui_drop_copy_preparation_failed">准备复制失败</string>
     <string name="ui_drop_copy_received">复制到：${arg0}</string>
     <string name="ui_drop_copy_timeout">等待目标连接超时，请重试或取消。</string>
+    <string name="storage_official_authorization_pro_only">Google Drive 和 Dropbox 的官方授权仅在 Pro 版中提供。</string>
     <string name="storage_auth_not_configured">官方云盘应用尚未配置。</string>
     <string name="storage_ambiguous_copy_names">源目录中有多个不同条目映射到同一目标路径，请先重命名再复制。</string>
     <string name="storage_http_directory">HTTP/HTTPS 目录</string>
