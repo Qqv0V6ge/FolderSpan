@@ -58,7 +58,13 @@ jobs:
       - name: Verify and extract the runtime
         shell: bash
         run: |
-          archive="release-desktop/com.folderspan-${RELEASE_VERSION}.tar.gz"
+          mapfile -t archives < <(find release-desktop -type f -name "com.folderspan-${RELEASE_VERSION}.tar.gz")
+          if [[ ${#archives[@]} -ne 1 ]]; then
+            find release-desktop -type f -print
+            echo "::error::Expected exactly one Linux x64 no-pro release TAR"
+            exit 1
+          fi
+          archive="${archives[0]}"
           sha256sum "$archive"
           mkdir -p payload channel-packages
           tar -xzf "$archive" -C payload
