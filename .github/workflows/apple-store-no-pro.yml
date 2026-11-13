@@ -126,12 +126,7 @@ jobs:
         if: matrix.platform == 'ios'
         env:
           IOS_NATIVE_XCFRAMEWORKS_ROOT: ${{ github.workspace }}/build/ios-native-xcframeworks
-          # Compile dependencies in release caches to reduce the size of the final Kotlin/Native link.
-          GRADLE_OPTS: >-
-            -Dorg.gradle.jvmargs=-Xmx8g
-            -Dorg.gradle.workers.max=2
-            -Dorg.gradle.project.kotlin.native.binary.enableReleaseBinaryCache=true
-            -Dorg.gradle.project.kotlin.internal.native.enableReleaseBinaryCache=true
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx8g -Dorg.gradle.workers.max=2
         shell: bash
         run: |
           bash scripts/verify-ios-native-libs.sh "$IOS_NATIVE_XCFRAMEWORKS_ROOT"
