@@ -139,6 +139,7 @@ jobs:
             -configuration Release -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/FolderSpan.xcarchive" \
             -xcconfig "$APPLE_SIGNING_DIR/ios-signing.xcconfig" \
+            IOS_NATIVE_XCFRAMEWORKS_ROOT="$IOS_NATIVE_XCFRAMEWORKS_ROOT" \
             TEAM_ID= MARKETING_VERSION="$APPLE_VERSION" CURRENT_PROJECT_VERSION="$APPLE_BUILD_NUMBER" \
             OTHER_CODE_SIGN_FLAGS="--keychain $APPLE_KEYCHAIN" archive
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/FolderSpan.xcarchive" \
