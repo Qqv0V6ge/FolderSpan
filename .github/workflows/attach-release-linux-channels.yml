@@ -1,0 +1,83 @@
+name: Attach Linux packages to the v1.1.0 draft
+
+on:
+  push:
+    branches: [codex/v1.1.0-linux-channel-packages]
+    paths: [.github/workflows/attach-release-linux-channels.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  RELEASE_ID: '443832651'
+  RELEASE_TAG: v1.1.0
+  RELEASE_RUN: '43376194286'
+  RELEASE_COMMIT: b99ad43ff3322720fc271d1dc37a1f4a3150392f
+  CHANNEL_RUN: '43379798329'
+
+jobs:
+  attach:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Wait for the rebuilt draft
+        shell: bash
+        run: |
+          actual_commit=$(gh api "repos/$GH_REPO/actions/runs/$RELEASE_RUN" --jq .head_sha)
+          test "$actual_commit" = "$RELEASE_COMMIT"
+          for ((attempt = 1; attempt <= 85; attempt++)); do
+            if state=$(gh api "repos/$GH_REPO/actions/runs/$RELEASE_RUN" --jq .conclusion) &&
+               [[ "$state" == success ]]; then
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "::error::The v1.1.0 release rebuild did not succeed"
+          exit 1
+
+      - name: Download the verified AppImage and Snap
+        shell: bash
+        run: |
+          channel_state=$(gh api "repos/$GH_REPO/actions/runs/$CHANNEL_RUN" --jq .conclusion)
+          test "$channel_state" = success
+          gh run download "$CHANNEL_RUN" --pattern 'release-channel-*' --dir channels
+          test -s channels/release-channel-appimage/FolderSpan-1.1.0-x86_64.AppImage
+          test -s channels/release-channel-snap/folderspan-1.1.0-amd64-candidate.snap
+
+      - name: Attach channel packages and refresh checksums
+        shell: bash
+        run: |
+          release_api="repos/$GH_REPO/releases/$RELEASE_ID"
+          gh api "$release_api" > draft.json
+          jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" \
+            '.draft and .tag_name == $tag and .target_commitish == $commit' draft.json > /dev/null
+
+          for file in channels/release-channel-appimage/* channels/release-channel-snap/*; do
+            name=$(basename "$file")
+            actual=$(sha256sum "$file" | cut -d ' ' -f 1)
+            recorded=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' draft.json)
+            if [[ -n "$recorded" ]]; then
+              test "$recorded" = "sha256:$actual"
+            else
+              gh release upload "$RELEASE_TAG" "$file"
+            fi
+          done
+
+          gh api --paginate "$release_api/assets?per_page=100" | jq -esr '
+            add | map(select(.name != "SHA256SUMS.txt")) | sort_by(.name)[] |
+            if .state == "uploaded" and (.digest | test("^sha256:[0-9a-f]{64}$"))
+            then "\(.digest[7:])  \(.name)"
+            else error("Incomplete release asset: \(.name)")
+            end
+          ' > SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 126
+          gh release upload "$RELEASE_TAG" SHA256SUMS.txt --clobber
+          checksum=$(sha256sum SHA256SUMS.txt | cut -d ' ' -f 1)
+          gh api "$release_api" | jq -e --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" --arg checksum "sha256:$checksum" '
+            .draft and .tag_name == $tag and .target_commitish == $commit and
+            (.assets | length == 127) and
+            any(.assets[]; .name == "SHA256SUMS.txt" and .digest == $checksum)
+          '
