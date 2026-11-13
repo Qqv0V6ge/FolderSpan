@@ -12,7 +12,7 @@ permissions:
 env:
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
-  RELEASE_ID: '443832651'
+  RELEASE_ID: '443981035'
   RELEASE_TAG: v1.1.0
   RELEASE_RUN: '43376194286'
   RELEASE_COMMIT: b99ad43ff3322720fc271d1dc37a1f4a3150392f
