@@ -21,6 +21,10 @@ on:
         description: Produce a macOS app image for signing on a separate Mac
         type: boolean
         default: false
+      upload_to_app_store:
+        description: Upload the signed build to App Store Connect
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -177,7 +181,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload build to App Store Connect
-        if: matrix.platform == 'ios' || !inputs.macos_local_signing
+        if: inputs.upload_to_app_store && (matrix.platform == 'ios' || !inputs.macos_local_signing)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
