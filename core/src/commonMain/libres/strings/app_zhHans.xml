@@ -4449,4 +4449,19 @@
     <string name="storage_content_password">内容密码</string>
     <string name="storage_content_password_confirmation">确认密码</string>
     <string name="storage_content_unlock_action">解锁</string>
+    <string name="privacy_cross_border_confirmation">我已阅读账号隐私政策第五条，单独同意账号资料、登录及所选同步数据在韩国首尔处理；可通过隐私政策中的联系方式申请撤回。</string>
+    <string name="privacy_confirmation_required">请先阅读并单独确认境外处理说明。</string>
+    <string name="privacy_age_confirmation">我已满十八周岁，且已达到所在地法定成年年龄。</string>
+    <string name="privacy_public_profile_confirmation">我单独同意公开账号标识、昵称、签名及审核通过的头像，其他人无需登录即可查看；我可修改资料、移除头像或申请删除。</string>
+    <string name="privacy_sync_confirmation">我单独同意将所选配置及连接凭据上传至韩国首尔。运营者服务器在技术上能够解密同步的密码、私钥和令牌；取消确认会停止后续上传，已上传副本需另行申请删除。</string>
+    <string name="privacy_sync_required">请在数据同步页确认境外处理及凭据解密风险后再同步。</string>
+    <string name="privacy_delete_account">注销账号</string>
+    <string name="privacy_delete_description">请先处理页面列出的必要事项。申请受理后有十五天冷静期，可在本页显式撤回；再次登录不会自动撤回。注销完成后账号及可删除的关联数据将被删除，依法需保留的最小记录除外。请先备份需要的资料。</string>
+    <string name="privacy_delete_deadline">冷静期结束时间：</string>
+    <string name="privacy_delete_confirm">我已了解注销后果，确认申请注销此账号。</string>
+    <string name="privacy_delete_refresh">刷新申请状态</string>
+    <string name="privacy_delete_manual">邮件申请或咨询注销进度</string>
+    <string name="privacy_delete_withdraw">撤回注销申请</string>
+    <string name="privacy_delete_apply">申请注销</string>
+    <string name="privacy_delete_withdraw_confirm">确认撤回注销申请并恢复账号的正常使用？</string>
 </resources>
