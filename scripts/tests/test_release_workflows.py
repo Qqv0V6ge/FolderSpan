@@ -42,6 +42,42 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 self.assertTrue(any(fnmatch.fnmatchcase(accepted, p) for p in patterns))
                 self.assertFalse(any(fnmatch.fnmatchcase(rejected, p) for p in patterns))
 
+    def test_application_ios_workflows_reuse_signing_and_route_ipa(self):
+        preview = (WORKFLOWS / "build-preview.yml").read_text()
+        release = (WORKFLOWS / "build-release.yml").read_text()
+        apple = (WORKFLOWS / "apple-store-pro.yml").read_text()
+        for kind, workflow in (("preview", preview), ("release", release)):
+            ios = workflow.split("\n  ios:\n", 1)[1].split("\n  web:\n", 1)[0]
+            with self.subTest(workflow=kind):
+                self.assertIn("uses: ./.github/workflows/apple-store-pro.yml", ios)
+                self.assertIn(f"ipa_artifact_name: {kind}-ios-pro", ios)
+                self.assertNotIn("APPLE_APP_SPECIFIC_PASSWORD", ios)
+        self.assertIn("inputs.target == 'all' || inputs.target == 'ios'", preview)
+        self.assertIn("version: ${{ needs.prepare.outputs.version }}", release)
+        self.assertIn("      - ios\n", release.split("\n  release:\n", 1)[1])
+        self.assertIn("needs.ios.result == 'success'", release)
+        self.assertIn("path: ${{ env.APPLE_PACKAGE }}", apple)
+        self.assertIn("inputs.ipa_artifact_name == '' && inputs.upload_to_app_store", apple)
+
+    def test_application_release_stages_exactly_one_ipa_with_checksum(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        script = step_script(workflow, "Prepare release assets and checksums")
+        for count in range(3):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                ios = root / "artifacts/release-ios-pro"
+                ios.mkdir(parents=True)
+                for index in range(count):
+                    (ios / f"FolderSpan-{index}.ipa").write_bytes(b"signed ipa")
+                result = subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode == 0, count == 1, result.stdout + result.stderr)
+                if count == 1:
+                    assets = root / "release-assets"
+                    self.assertEqual((assets / "ios-pro-FolderSpan-0.ipa").read_bytes(), b"signed ipa")
+                    self.assertIn("ios-pro-FolderSpan-0.ipa", (assets / "SHA256SUMS.txt").read_text())
+
     def test_headless_version_is_normalized_and_validated_before_packaging(self):
         workflow = (WORKFLOWS / "build-headless-release.yml").read_text()
         script = step_script(workflow, "Validate version")

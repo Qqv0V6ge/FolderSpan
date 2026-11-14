@@ -70,7 +70,7 @@ GitHub Actions 的后续预览和发布仅构建 **Pro**。前往 [GitHub Releas
 | Linux | 自动打包为 x64 与 ARM64 TAR.GZ，按处理器架构选择。 |
 | Headless Runtime | 在独立的 `FolderSpan Headless` Release 中提供 Windows、macOS 和 Linux 的无窗口运行包，适合通过浏览器管理服务器或常开设备。首次使用推荐内置 JS 界面的 `headless-runtime-…-js-pro-…` 包。 |
 | Web | 已提供 JS 和 Wasm 前端包。独立部署后需要连接 Headless Runtime，管理该 Runtime 所在机器的文件。 |
-| iOS | 仓库包含源码与 Xcode 工程，当前发布未提供 iOS 安装包。 |
+| iOS | 常规预览与正式发布提供面向 App Store Connect 的签名 IPA。设备上的测试安装通过 TestFlight。 |
 
 Headless Runtime 独立构建和发布，请在 [Releases 列表](https://github.com/Qqv0V6ge/FolderSpan/releases)中查找标签为 `headless-v版本号` 的 Release；常规应用使用 `v版本号`，两者的安装包与校验文件分开存放。Headless Release 也提供同版本的 JS / Wasm 前端包。
 
@@ -132,8 +132,8 @@ Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
 
 ### CI 构建与发布
 
-- 常规应用：`Build Preview` 构建预览包；`Build and Release` 由 `v版本号` 标签或手动运行触发，创建常规应用的草稿 Release。
-- Headless：`Build Headless Preview` 单独构建预览包；`Build and Release Headless` 由 `headless-v版本号` 标签或手动运行触发，创建独立的 `FolderSpan Headless` 草稿 Release。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
+- 预览包仅通过 GitHub Actions 手动构建。打开 `Build Preview`（常规应用）或 `Build Headless Preview`，点击 `Run workflow`，选择 `all`、平台（如 `linux`，构建两种架构）或具体架构（如 `linux-arm64`）。常规应用还可单选 Android、iOS、Web JS 或 Web Wasm，`all` 包含这些目标。Headless 为选中的平台和架构生成无 Web UI、JS 和 Wasm 三种运行时包。构建产物可在运行详情的 `Artifacts` 下载，保留 14 天。
+- 正式发布使用 `Build and Release` 和 `Build and Release Headless`，可手动运行，也分别由 `v版本号` 和 `headless-v版本号` 标签触发，创建对应的草稿 Release。常规应用草稿的附件包含签名 IPA。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
 
 ## 工程结构
 

@@ -1,13 +1,22 @@
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
 
 
-WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS = ROOT / ".github" / "workflows"
+PREVIEW_TARGETS = ROOT / "scripts" / "ci" / "select-preview-targets.py"
+
+
+def select_preview(preview, target):
+    result = subprocess.check_output([sys.executable, str(PREVIEW_TARGETS), preview, target], text=True)
+    return {name: json.loads(value) for name, value in (line.split("=", 1) for line in result.splitlines())}
 
 
 class SinglePackageWorkflowsTest(unittest.TestCase):
@@ -24,34 +33,72 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                 self.assertNotIn("Build Flatpak", text)
 
     def test_each_platform_selects_one_matching_packaging_task_and_output(self):
-        entries = 0
+        entries = []
         for path in WORKFLOWS.glob("build-*.yml"):
-            for block in re.split(r"^          - os: ", path.read_text(), flags=re.M)[1:]:
-                task_match = re.search(r"^            tasks: (.+)$", block, re.M)
-                if not task_match:
-                    continue
-                label = re.search(r"^            label: (.+)$", block, re.M).group(1)
-                output = re.search(r"^            paths: (.+)$", block, re.M).group(1)
-                task = task_match.group(1)
-                with self.subTest(workflow=path.name, platform=label, output=output):
-                    module = re.search(r":app:(desktopApp|headlessRuntime):", task).group(1)
-                    mode = "Release" if "/main-release/" in output else ""
-                    if label.startswith("linux-"):
-                        selected, extension = f"package{mode}TarGz", ".tar.gz"
-                    elif label == "windows-x64":
-                        selected, extension = f"package{mode}Msi", ".msi"
-                    elif label == "windows-arm64":
-                        selected, extension = f"create{mode}Distributable", ".zip"
-                    elif label.startswith("macos-"):
-                        selected, extension = f"package{mode}Dmg", ".dmg"
-                    else:
-                        self.fail(f"未指定单包策略的平台：{label}")
-                    self.assertEqual(task, f":app:{module}:{selected}")
-                    self.assertTrue(output.startswith(f"app/{module}/build/compose/binaries/"))
-                    self.assertTrue(output.endswith(extension))
-                    self.assertEqual(len(output.splitlines()), 1)
-                entries += 1
-        self.assertEqual(entries, 24)
+            entries.extend(self.read_static_package_entries(path))
+        for preview in ("app", "headless"):
+            entries.extend(select_preview(preview, "all")["native"])
+
+        self.assertEqual(len(entries), 24)
+        for entry in entries:
+            label, output, task = entry["label"], entry["paths"], entry["tasks"]
+            with self.subTest(platform=label, output=output):
+                module = re.search(r":app:(desktopApp|headlessRuntime):", task).group(1)
+                mode = "Release" if "/main-release/" in output else ""
+                if label.startswith("linux-"):
+                    selected, extension = f"package{mode}TarGz", ".tar.gz"
+                elif label == "windows-x64":
+                    selected, extension = f"package{mode}Msi", ".msi"
+                elif label == "windows-arm64":
+                    selected, extension = f"create{mode}Distributable", ".zip"
+                elif label.startswith("macos-"):
+                    selected, extension = f"package{mode}Dmg", ".dmg"
+                else:
+                    self.fail(f"未指定单包策略的平台：{label}")
+                self.assertEqual(task, f":app:{module}:{selected}")
+                self.assertTrue(output.startswith(f"app/{module}/build/compose/binaries/"))
+                self.assertTrue(output.endswith(extension))
+                self.assertEqual(len(output.splitlines()), 1)
+
+    @staticmethod
+    def read_static_package_entries(path):
+        for block in re.split(r"^          - os: ", path.read_text(), flags=re.M)[1:]:
+            if re.search(r"^            tasks: ", block, re.M):
+                yield {
+                    key: re.search(rf"^            {key}: (.+)$", block, re.M).group(1)
+                    for key in ("label", "paths", "tasks")
+                }
+
+    def test_previews_only_dispatch_manually_and_filter_every_selectable_target(self):
+        platforms = ("linux", "windows", "macos")
+        native = {f"{platform}-{arch}" for platform in platforms for arch in ("x64", "arm64")}
+        for preview, file_name in (("app", "build-preview.yml"), ("headless", "build-headless-preview.yml")):
+            workflow = (WORKFLOWS / file_name).read_text()
+            trigger = workflow.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+            self.assertEqual(re.findall(r"^  ([\w-]+):", trigger, re.M), ["workflow_dispatch"])
+            self.assertIn("default: all", trigger)
+            targets = set(re.findall(r"^          - ([\w-]+)$", trigger, re.M))
+            extra = {"android", "ios", "web", "web-js", "web-wasm"} if preview == "app" else set()
+            self.assertEqual(targets, {"all", *platforms} | native | extra)
+
+            for target in sorted(targets):
+                with self.subTest(preview=preview, target=target):
+                    selected = select_preview(preview, target)
+                    self.assertCountEqual(
+                        [entry["label"] for entry in selected["native"]],
+                        [label for label in native if target in ("all", label, label.split("-")[0])],
+                    )
+                    if preview == "app":
+                        self.assertCountEqual(
+                            [entry["label"] for entry in selected["web"]],
+                            [label for label in ("js", "wasm") if target in ("all", "web", f"web-{label}")],
+                        )
+
+            result = subprocess.run(
+                [sys.executable, str(PREVIEW_TARGETS), preview, "invalid-target"], capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
 
     def test_upload_guard_accepts_one_package_and_rejects_missing_or_duplicate_files(self):
         guards = 0
