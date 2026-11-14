@@ -4453,4 +4453,8 @@
     <string name="privacy_software_withdraw_confirm">The app will exit and stop its local features and background services. When you reopen it, you must actively agree to the software documents before continuing. Local files and settings remain. This does not withdraw account service consent, delete your account, or remove cloud drive grants. Manage those separately. Save any open work first.</string>
     <string name="privacy_software_withdraw_exit">Withdraw and exit</string>
     <string name="privacy_software_withdraw_description">Withdraw software consent and exit while keeping local files and settings.</string>
+    <string name="privacy_delete_paused">The deletion process has stopped. Review the reasons, resolve any outstanding items, and check the status again.</string>
+    <string name="privacy_delete_eligibility_unknown">Eligibility could not be confirmed and no specific reason was provided. Check the status again and retry.</string>
+    <string name="privacy_delete_check_again">Check eligibility again</string>
+    <string name="privacy_withdraw_continue">Continue to withdraw consent</string>
 </resources>

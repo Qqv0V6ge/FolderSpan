@@ -4453,4 +4453,8 @@
     <string name="privacy_software_withdraw_confirm">撤回后将退出软件，停止本机的软件功能与后台服务。重新打开时须主动同意软件协议才能继续使用。本机文件与配置保留；这不会撤回账号在线服务许可、注销账号或移除第三方云盘授权，请分别在对应入口处理。请先保存正在编辑的内容。</string>
     <string name="privacy_software_withdraw_exit">撤回并退出</string>
     <string name="privacy_software_withdraw_description">撤回软件协议同意并退出，保留本机文件和配置。</string>
+    <string name="privacy_delete_paused">注销流程暂时停止。请查看具体原因，处理后重新检查状态。</string>
+    <string name="privacy_delete_eligibility_unknown">当前无法确认是否可以申请，尚未提供具体原因。请重新检查状态后再试。</string>
+    <string name="privacy_delete_check_again">重新检查申请条件</string>
+    <string name="privacy_withdraw_continue">继续撤回许可</string>
 </resources>
