@@ -1,5 +1,6 @@
 package com.folderspan.di
 
+import com.folderspan.initializeOfficialStorageAuthorization
 import com.russhwolf.settings.Settings
 import org.koin.core.context.startKoin
 import org.koin.mp.KoinPlatformTools
@@ -7,6 +8,7 @@ import org.koin.mp.KoinPlatformTools
 fun initKoin() {
     val context = KoinPlatformTools.defaultContext()
     if (context.getOrNull() == null) {
+        initializeOfficialStorageAuthorization()
         val koinApp = startKoin {
             modules(appModule())
         }

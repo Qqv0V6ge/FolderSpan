@@ -1,6 +1,24 @@
 package com.folderspan.service.network
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
+import strings.AppStrings
+
+/** The official OAuth broker is installed only by the Pro edition. */
+object OfficialStorageAuthorization {
+    private val broker = MutableStateFlow<String?>(null)
+    internal val brokerUrl: String? get() = broker.value
+
+    fun installBroker(url: String) {
+        broker.value = checkedStorageBrokerUrl(url)
+    }
+
+    internal fun requireAvailable(protocol: String) {
+        if (protocol in setOf("GoogleDrive", "Dropbox")) {
+            checkNotNull(brokerUrl) { AppStrings.storage_official_authorization_pro_only }
+        }
+    }
+}
 
 @Serializable
 enum class StorageAuthorizationPermission { SHARING }
