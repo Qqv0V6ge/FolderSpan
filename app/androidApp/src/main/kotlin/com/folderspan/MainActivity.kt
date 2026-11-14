@@ -75,7 +75,7 @@ class AndroidApp : Application() {
         syncState.startInBackground()
         ShizukuManager.initialize(this)
         RootManager.initialize(this)
-        if (SettingsUtils.isRootRequestOnStartupEnabled() && !RootManager.hasPermission()) {
+        if (SettingsUtils.isWelcomeAgreementAccepted() && SettingsUtils.isRootRequestOnStartupEnabled() && !RootManager.hasPermission()) {
             GlobalScope.launch(Dispatchers.IO) {
                 RootManager.requestPermission()
             }

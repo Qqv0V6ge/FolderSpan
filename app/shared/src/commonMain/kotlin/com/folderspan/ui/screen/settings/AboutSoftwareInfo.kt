@@ -225,6 +225,7 @@ internal fun AboutSoftwareLinks(
             onOpenLink = onOpenLink,
             modifier = Modifier.fillMaxWidth(),
         )
+        SoftwareConsentWithdrawal()
         AboutSoftwareAutoCaptureLogsItem(
             checked = autoCaptureLogs,
             onCheckedChange = onAutoCaptureLogsChange,

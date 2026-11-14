@@ -74,6 +74,8 @@ import java.io.File
 import com.folderspan.utils.MacAppStoreAccess
 import java.nio.file.Files
 import strings.AppStrings
+import com.folderspan.utils.SettingsUtils
+import kotlinx.coroutines.flow.collectLatest
 import java.awt.Window as AwtWindow
 
 private var desktopNotificationsInitialized = false
@@ -97,8 +99,10 @@ fun main(args: Array<String>) {
         initKoin()
         val ready = CompletableDeferred<Unit>()
         val job = runtimeScope.launch(start = CoroutineStart.LAZY) {
-            startFolderSpanRuntime(onStarted = { ready.complete(Unit) }) {
-                runAppBusinessServices(GlobalContext.get())
+            SettingsUtils.welcomeAgreementAccepted.collectLatest { accepted ->
+                if (accepted) startFolderSpanRuntime(onStarted = { ready.complete(Unit) }) {
+                    runAppBusinessServices(GlobalContext.get())
+                } else ready.complete(Unit)
             }
         }
         runtimeJob = job
@@ -109,6 +113,7 @@ fun main(args: Array<String>) {
         job.start()
         runBlocking { ready.await() }
     application {
+        val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
 
         val koin = remember { GlobalContext.get() }
         val externalPathArguments = remember(args) { args.toList() }
@@ -183,7 +188,7 @@ fun main(args: Array<String>) {
                     },
                 )
 
-                if (platformRuntimeReady) {
+                if (platformRuntimeReady && softwareConsent) {
                     val fileState = remember(koin) { koin.get<FileState>() }
                     val homeState = remember(koin) { koin.get<HomeState>() }
 
@@ -196,7 +201,7 @@ fun main(args: Array<String>) {
                 }
 
                 val pendingDevice = trayConnectDevice
-                if (platformRuntimeReady && pendingDevice != null) {
+                if (platformRuntimeReady && softwareConsent && pendingDevice != null) {
                     val connectScope = rememberCoroutineScope()
                     val database = remember(koin) { koin.get<FolderSpanDatabase>() }
                     val deviceState = remember(koin) { koin.get<DeviceState>() }
@@ -225,7 +230,7 @@ fun main(args: Array<String>) {
             }
         }
 
-        if (platformRuntimeReady) {
+        if (platformRuntimeReady && softwareConsent) {
             val settingsState = remember(koin) { koin.get<SettingsState>() }
             val resolvedLanguage by settingsState.resolvedAppLanguage.collectAsState()
 

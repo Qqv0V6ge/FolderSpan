@@ -2,11 +2,15 @@ package com.folderspan.utils
 
 import com.russhwolf.settings.Settings
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 设置工具类，用于快速读取设置值
  */
 object SettingsUtils {
+    private val softwareConsent = MutableStateFlow(false)
+    val welcomeAgreementAccepted = softwareConsent.asStateFlow()
     const val KEY_DEVICE_ID = "settings.deviceId"
     const val KEY_FILE_SHARE_ENABLED = "settings.fileShare.enabled"
     const val KEY_FILE_SHARE_PORT = "settings.fileShare.port"
@@ -179,6 +183,7 @@ object SettingsUtils {
      */
     fun init(settings: Settings) {
         this.settings = settings
+        softwareConsent.value = isWelcomeAgreementAccepted()
         fileShare.init(settings)
         mcp.init(settings)
         easyFileShare.init(settings)
@@ -270,6 +275,7 @@ object SettingsUtils {
      */
     fun setWelcomeAgreementAccepted(accepted: Boolean) {
         settings.putBoolean(KEY_WELCOME_AGREEMENT_ACCEPTED, accepted)
+        softwareConsent.value = accepted
     }
 
     /**

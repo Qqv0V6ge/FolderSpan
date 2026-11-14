@@ -30,6 +30,20 @@ class SettingsUtilsOnboardingTest {
     }
 
     @Test
+    fun withdrawalPersistsWithoutRemovingFilesOrOtherPreferences() {
+        val settings = createInMemorySettings()
+        SettingsUtils.init(settings)
+        settings.putString("settings.test.keep", "value")
+        SettingsUtils.setWelcomeAgreementAccepted(true)
+        assertTrue(SettingsUtils.welcomeAgreementAccepted.value)
+        SettingsUtils.setWelcomeAgreementAccepted(false)
+        assertFalse(SettingsUtils.welcomeAgreementAccepted.value)
+        SettingsUtils.init(settings)
+        assertFalse(SettingsUtils.isWelcomeAgreementAccepted())
+        assertEquals("value", settings.getString("settings.test.keep", ""))
+    }
+
+    @Test
     fun appUpdateChannelDefaultsToReleaseAndPersistsSelection() {
         SettingsUtils.init(createInMemorySettings())
 

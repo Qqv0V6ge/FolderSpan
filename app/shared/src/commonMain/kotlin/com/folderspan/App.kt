@@ -178,19 +178,20 @@ fun App(
     val crashState = koinInject<CrashState>()
     val crashInfo by crashState.crashInfo.collectAsState()
     val restartToken by crashState.restartToken.collectAsState()
-    var showWelcomeAgreement by remember { mutableStateOf(shouldShowWelcomeAgreement()) }
+    val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
+    val showWelcomeAgreement = !softwareConsent
     var showStandaloneOnboarding by remember { mutableStateOf(shouldShowStandaloneOnboarding()) }
-    val runtimeReady = rememberAppRuntimeReady(onFirstFrameRendered)
+    val runtimeReady = rememberAppRuntimeReady(onFirstFrameRendered, softwareConsent)
     val koin = getKoin()
     var runtimeDependencies by remember(koin) { mutableStateOf<AppRuntimeDependencies?>(null) }
 
-    LaunchedEffect(runtimeReady, koin) {
-        if (runtimeReady && runtimeDependencies == null) {
+    LaunchedEffect(runtimeReady, koin, softwareConsent) {
+        if (softwareConsent && runtimeReady && runtimeDependencies == null) {
             runtimeDependencies = loadAppRuntimeDependencies(koin)
         }
     }
 
-    runtimeDependencies?.let { dependencies ->
+    if (softwareConsent) runtimeDependencies?.let { dependencies ->
         AppRuntimeEffects(mainState, dependencies)
     }
 
@@ -230,7 +231,6 @@ fun App(
                                 showWelcomeAgreement -> {
                                     WelcomeAgreementScreen(
                                         onAccepted = {
-                                            showWelcomeAgreement = false
                                             showStandaloneOnboarding = shouldShowStandaloneOnboarding()
                                         }
                                     ).Content()
@@ -268,11 +268,13 @@ fun App(
 @Composable
 internal fun rememberAppRuntimeReady(
     onFirstFrameRendered: () -> Unit,
+    softwareConsent: Boolean = true,
 ): Boolean {
     var runtimeReady by remember { mutableStateOf(false) }
     val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(softwareConsent) {
+        if (!softwareConsent) return@LaunchedEffect
         withFrameNanos { }
         withFrameNanos { }
         currentOnFirstFrameRendered()

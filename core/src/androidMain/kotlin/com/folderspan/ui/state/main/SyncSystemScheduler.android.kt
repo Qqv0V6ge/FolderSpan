@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 internal const val SYNC_SYSTEM_TAG = "folderspan-sync"
+internal const val SYNC_SOFTWARE_CONSENT_BLOCKED = "softwareConsentBlocked"
 internal const val SYNC_SYSTEM_TASK_TAG = "sync-task:"
 internal const val SYNC_SYSTEM_SIGNATURE_TAG = "sync-version:"
 internal const val SYNC_SYSTEM_TASK_ID = "taskId"
@@ -67,6 +68,7 @@ internal class AndroidSyncSystemScheduler(
     override fun refresh() { changes.trySend(Unit) }
 
     private suspend fun reconcile() {
+        if (!com.folderspan.utils.SettingsUtils.isWelcomeAgreementAccepted()) return
         val tasks = withContext(Dispatchers.Main) {
             state.snapshotTasks().filter { syncSystemScheduleEligible(it, state.isTaskOwnedByCurrentDevice(it)) }
                 .associateWith { state.requiresSyncPreview(it) }
@@ -83,7 +85,7 @@ internal class AndroidSyncSystemScheduler(
             // Completion emits another WorkInfo; never replace a Worker from inside its own run.
             if (previous.any { it.state == WorkInfo.State.RUNNING }) continue
             val signature = SYNC_SYSTEM_SIGNATURE_TAG + syncSystemScheduleSignature(task, previewRequired)
-            if (previous.any { signature in it.tags }) continue
+            if (previous.any { signature in it.tags && !it.outputData.getBoolean(SYNC_SOFTWARE_CONSENT_BLOCKED, false) }) continue
             val request = OneTimeWorkRequestBuilder<SyncSystemWorker>()
                 .setInputData(workDataOf(SYNC_SYSTEM_TASK_ID to task.id, SYNC_SYSTEM_DUE to task.nextRunAt,
                     SYNC_SYSTEM_DEFINITION to syncPreviewFingerprint(task)))

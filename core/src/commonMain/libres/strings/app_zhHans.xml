@@ -61,7 +61,7 @@
     <string name="agreement_user_service_changes">服务变更：不同平台、系统版本和网络协议支持的功能可能不同，实验室功能可能不稳定。我们可为安全、兼容、法律或产品原因修复、调整、暂停或终止功能，并在需要时更新本协议；重大变更将通过软件界面、发布页或官方网站提示。</string>
     <string name="agreement_user_intellectual_property">知识产权：FolderSpan 的名称、界面、文档及软件成果受适用法律保护。以开源方式发布的软件及第三方组件适用各自许可证，本协议不限制该许可证授予的权利；其他部分按本协议授予有限、非独占、不可转让的使用许可。相关许可可在软件的开源许可入口或发布仓库查阅。</string>
     <string name="agreement_user_disclaimer">责任边界：在适用法律允许的范围内，软件按现状提供，不承诺无中断、无错误或适合所有文件系统、设备和远端服务。因你的配置、越权操作、不可信接收方或第三方服务导致的内容公开、凭据泄露、数据丢失或费用由相应责任方承担；我们依法应承担的责任不因本条而排除或限制。</string>
-    <string name="agreement_user_termination">停止使用与清理：你可随时停止使用，关闭任务与网络服务，并删除连接和记录。“清理软件数据”、清除浏览器站点数据或卸载软件仅按对应范围处理本机数据，不等于注销在线账号，也不会自动删除远端文件、账号同步副本、备份或接收方已取得的内容；请分别在相应设备、服务或账号入口处理。</string>
+    <string name="agreement_user_termination">停止使用与清理：你可在“设置 → 关于软件 → 撤回软件许可”中确认撤回并退出；重新打开需主动同意软件协议才能继续使用，本机文件和配置保留。此操作不撤回账号在线服务许可、不注销账号，也不移除独立云盘授权。你可随时停止使用，关闭任务与网络服务，并删除连接和记录。“清理软件数据”、清除浏览器站点数据或卸载软件仅按对应范围处理本机数据，不等于注销在线账号，也不会自动删除远端文件、账号同步副本、备份或接收方已取得的内容；请分别在相应设备、服务或账号入口处理。</string>
     <string name="agreement_user_minors">未成年人：无需账号的软件功能可由未满所在地法定成年年龄的用户在监护人阅读并同意后使用。监护人应指导未成年人避免公开文件、设备地址、链接、凭据或其他个人信息；不满十四周岁未成年人的个人信息应由监护人决定和管理。账号与在线服务及智能助理仅向年满十八周岁且达到所在地法定成年年龄的用户开放，不提供监护人代为同意注册的流程。</string>
     <string name="agreement_user_law_and_contact">法律与联系：本协议适用你所在地对消费者、网络安全、数据和知识产权具有强制效力的法律；开源部分继续适用其发布许可证。争议可先联系 FolderSpan 服务运营者，邮箱 572169725@qq.com，官方网站 https://folderspan.com；无法解决时，可依法向有管辖权的机构主张权利。</string>
     <string name="agreement_privacy_scope">适用范围与处理者（版本 1.1，更新日期：2026 年 11 月 12 日）：本政策说明 FolderSpan 软件功能在当前设备、你选择的执行设备及所连接服务之间如何处理信息。个人信息处理者为 FolderSpan 服务运营者（个人运营），联系邮箱 572169725@qq.com，官方网站 https://folderspan.com。账号、在线同步、商城、在线反馈等服务另适用登录页面的账号与在线服务隐私政策；接受本政策不表示已同意启用这些服务。</string>
@@ -80,7 +80,7 @@
     <string name="agreement_privacy_third_parties">共享、委托与第三方：基础文件功能当前不集成广告或行为分析 SDK，我们不出售个人信息。你选择设备连接、分享、网盘授权、远端读写、备份、WebRTC 中继、Runtime 或自动化客户端时，必要数据会传给相应接收方。开源库支持本机功能，本身不当然取得你的数据；但不能据此认定外部服务或在线服务都只在本机处理。</string>
     <string name="agreement_privacy_cross_border">跨境传输：我们不会为基础功能统一安排文件跨境传输。但如果你配置境外服务器、对象存储、信令/STUN/TURN 服务，或向境外接收方分享内容，相关数据可能按你的选择传往境外。请在操作前了解接收方、处理目的、数据种类、保护措施和行使权利的方式，并确保满足适用法律要求。</string>
     <string name="agreement_privacy_retention_and_security">保存与安全：本地记录通常保存至你删除相关项目、清理软件数据、清除浏览器站点数据或卸载软件；最近文件等部分记录设有数量限制，缓存和临时票据可更早失效。软件采用凭据加密、Token 哈希、TLS、自签名证书指纹、权限范围和访问控制等措施，但任何设备、局域网和互联网传输都无法保证绝对安全。</string>
-    <string name="agreement_privacy_rights">你的权利：你可查看、更正或删除本机设备、消息、网络位置、WebRTC 房间、书签、收藏、最近记录、任务和分享配置，关闭日志、MCP、分享及后台任务，撤销系统权限，并按清理范围移除本机数据。停止任务、撤权、退出登录或卸载不会自动删除远端文件、备份、账号或已传给第三方的数据；账号数据按在线服务入口或政策处理，第三方副本向相应接收方处理。其他查阅、复制、更正、删除或解释请求可发送至 572169725@qq.com。</string>
+    <string name="agreement_privacy_rights">你的权利：你也可在“设置 → 关于软件 → 撤回软件许可”中撤回软件协议同意并退出，重新打开后主动同意才可继续使用；账号许可与注销可分别在“我的账号 → 撤回在线服务许可”和“我的账号 → 注销账号”中处理。你可查看、更正或删除本机设备、消息、网络位置、WebRTC 房间、书签、收藏、最近记录、任务和分享配置，关闭日志、MCP、分享及后台任务，撤销系统权限，并按清理范围移除本机数据。停止任务、撤权、退出登录或卸载不会自动删除远端文件、备份、账号或已传给第三方的数据；账号数据按在线服务入口或政策处理，第三方副本向相应接收方处理。其他查阅、复制、更正、删除或解释请求可发送至 572169725@qq.com。</string>
     <string name="agreement_privacy_minors">未成年人信息：FolderSpan 不以收集未成年人信息为目的。未成年人应在监护人指导下使用；处理不满十四周岁未成年人的个人信息前应取得监护人同意。若监护人发现软件处理了不适当的信息，可通过官方联系渠道请求说明或删除。</string>
     <string name="agreement_privacy_changes_and_contact">政策更新与联系：功能、处理目的、数据种类、接收方或法律要求发生重大变化时，我们会更新本政策并通过软件界面、发布页或官方网站提示，依法需要时重新取得同意；接受本政策不代替系统权限或依法需要的单独同意。对本政策或个人信息处理有疑问、投诉或权利请求，可联系 FolderSpan 服务运营者，邮箱 572169725@qq.com，官方网站 https://folderspan.com。</string>
     <string name="notification_error_log_title">检测到错误</string>
@@ -4449,4 +4449,8 @@
     <string name="storage_content_password">内容密码</string>
     <string name="storage_content_password_confirmation">确认密码</string>
     <string name="storage_content_unlock_action">解锁</string>
+    <string name="privacy_withdraw_software">撤回软件许可</string>
+    <string name="privacy_software_withdraw_confirm">撤回后将退出软件，停止本机的软件功能与后台服务。重新打开时须主动同意软件协议才能继续使用。本机文件与配置保留；这不会撤回账号在线服务许可、注销账号或移除第三方云盘授权，请分别在对应入口处理。请先保存正在编辑的内容。</string>
+    <string name="privacy_software_withdraw_exit">撤回并退出</string>
+    <string name="privacy_software_withdraw_description">撤回软件协议同意并退出，保留本机文件和配置。</string>
 </resources>
