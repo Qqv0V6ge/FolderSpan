@@ -1,4 +1,4 @@
-name: Upload no-Pro Apple builds
+name: Upload Pro Apple builds
 
 on:
   workflow_dispatch:
@@ -31,12 +31,12 @@ permissions:
 
 jobs:
   upload:
-    name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (no-Pro)
+    name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (Pro)
     # The iOS Kotlin/Native release linker needs more heap than the 7 GB arm64 runner can spare.
     runs-on: ${{ matrix.platform == 'ios' && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 120
     concurrency:
-      group: apple-store-no-pro-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
+      group: apple-store-pro-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
@@ -46,7 +46,7 @@ jobs:
       APPLE_PLATFORM: ${{ matrix.platform }}
       APPLE_VERSION: ${{ inputs.version }}
       APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
-      ORG_GRADLE_PROJECT_includeProMain: "false"
+      ORG_GRADLE_PROJECT_includeProMain: "true"
       ORG_GRADLE_PROJECT_folderspanBuildType: release
     steps:
       - name: Validate Apple version and build number
@@ -67,8 +67,9 @@ jobs:
           echo "ORG_GRADLE_PROJECT_releaseVersion=$gradle_version" >> "$GITHUB_ENV"
       - uses: actions/checkout@v6
         with:
+          token: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
           persist-credentials: false
-          submodules: false
+          submodules: true
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

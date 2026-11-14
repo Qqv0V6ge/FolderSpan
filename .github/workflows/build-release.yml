@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -105,38 +105,24 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
           echo "ANDROID_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
 
-      - name: Build signed release AAB
-        env:
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: >-
-          ./gradlew --no-daemon :app:androidApp:bundleRelease
-          -PandroidEnableAbiSplits=false
-          --stacktrace
-
-      - name: Stage release AAB
-        shell: bash
-        run: |
-          mkdir -p release-artifacts/android
-          cp app/androidApp/build/outputs/bundle/release/*.aab release-artifacts/android/
-
       - name: Build signed release APKs
         env:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon :app:androidApp:clean :app:androidApp:assembleRelease --stacktrace
+        run: ./gradlew --no-daemon :app:androidApp:assembleRelease --stacktrace
 
       - name: Stage release APKs
         shell: bash
-        run: cp app/androidApp/build/outputs/apk/release/*.apk release-artifacts/android/
+        run: |
+          mkdir -p release-artifacts/android
+          cp app/androidApp/build/outputs/apk/release/*.apk release-artifacts/android/
 
       - name: Upload Android release packages
         uses: actions/upload-artifact@v7
         with:
           name: release-android-${{ matrix.edition }}
-          path: release-artifacts/android/*
+          path: release-artifacts/android/*.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -156,7 +142,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
         platform:
           - label: js
             target: js
@@ -202,138 +188,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  headless-runtime:
-    name: Package Headless Runtime (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
-    needs: [quality, web]
-    runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [pro, no-pro]
-        web_ui: [none, js, wasm]
-        platform:
-          - os: ubuntu-24.04
-            label: linux-x64
-            tasks: :app:headlessRuntime:packageReleaseDistributionForCurrentOS :app:headlessRuntime:packageReleaseTarGz
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/deb/*.deb
-              app/headlessRuntime/build/compose/binaries/main-release/rpm/*.rpm
-              app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            tasks: :app:headlessRuntime:packageReleaseDistributionForCurrentOS :app:headlessRuntime:packageReleaseTarGz
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/deb/*.deb
-              app/headlessRuntime/build/compose/binaries/main-release/rpm/*.rpm
-              app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
-          - os: windows-2025
-            label: windows-x64
-            tasks: :app:headlessRuntime:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/msi/*.msi
-              app/headlessRuntime/build/compose/binaries/main-release/exe/*.exe
-          - os: windows-11-arm
-            label: windows-arm64
-            java_distribution: microsoft
-            tasks: :app:headlessRuntime:createReleaseDistributable
-            paths: app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip
-          - os: macos-15-intel
-            label: macos-x64
-            tasks: :app:headlessRuntime:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
-          - os: macos-15
-            label: macos-arm64
-            tasks: :app:headlessRuntime:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
-    env:
-      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
-      ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
-      ORG_GRADLE_PROJECT_folderspanBuildType: release
-      NODE_OPTIONS: --max-old-space-size=8192
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
-          submodules: ${{ matrix.edition == 'pro' }}
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install Linux packaging tools
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes fakeroot rpm
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Download selected production Web UI
-        if: matrix.web_ui != 'none'
-        uses: actions/download-artifact@v8
-        with:
-          name: release-web-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: runtime-web-ui
-
-      - name: Select Web UI archive for runtime packaging
-        if: matrix.web_ui != 'none'
-        shell: bash
-        run: |
-          archives=(runtime-web-ui/*.zip)
-          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
-            echo "::error::Expected exactly one production Web UI archive."
-            exit 1
-          fi
-          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
-
-      - name: Build runtime distribution
-        shell: bash
-        run: >-
-          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
-          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
-          "-Pkotlin.daemon.jvmargs=-Xmx2g"
-          --stacktrace
-
-      - name: Package Windows ARM64 archive
-        if: matrix.platform.label == 'windows-arm64'
-        shell: pwsh
-        run: |
-          $version = $env:ORG_GRADLE_PROJECT_releaseVersion -replace '^v', ''
-          $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
-          $appImage = 'app/headlessRuntime/build/compose/binaries/main-release/app/FolderSpan-Runtime'
-          $outputDir = 'app/headlessRuntime/build/compose/binaries/main-release/zip'
-          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
-          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-windows-arm64.zip" -Force
-
-      - name: Upload Runtime packages
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: ${{ matrix.platform.paths }}
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload runtime packaging diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: |
-            app/headlessRuntime/build/compose/logs/
-            app/headlessRuntime/build/compose/tmp/*.args.txt
-          if-no-files-found: warn
-          retention-days: 14
-
   desktop:
     name: Package Desktop (${{ matrix.platform.label }}, ${{ matrix.edition }})
     needs: quality
@@ -342,47 +196,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
         platform:
           - os: ubuntu-24.04
             label: linux-x64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
-            paths: |
-              app/desktopApp/build/compose/binaries/main-release/**/*.deb
-              app/desktopApp/build/compose/binaries/main-release/**/*.rpm
-              app/desktopApp/build/compose/binaries/main-release/**/*.tar.gz
-              app/desktopApp/build/compose/binaries/main-release/**/*.flatpak
+            tasks: :app:desktopApp:packageReleaseTarGz
+            paths: app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
           - os: ubuntu-24.04-arm
             label: linux-arm64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
-            paths: |
-              app/desktopApp/build/compose/binaries/main-release/**/*.deb
-              app/desktopApp/build/compose/binaries/main-release/**/*.rpm
-              app/desktopApp/build/compose/binaries/main-release/**/*.tar.gz
-              app/desktopApp/build/compose/binaries/main-release/**/*.flatpak
+            tasks: :app:desktopApp:packageReleaseTarGz
+            paths: app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
           - os: windows-2025
             label: windows-x64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main-release/**/*.msi
-              app/desktopApp/build/compose/binaries/main-release/**/*.exe
+            tasks: :app:desktopApp:packageReleaseMsi
+            paths: app/desktopApp/build/compose/binaries/main-release/msi/*.msi
           - os: windows-11-arm
             label: windows-arm64
             java_distribution: microsoft
             tasks: :app:desktopApp:createReleaseDistributable
-            paths: app/desktopApp/build/compose/binaries/main-release/**/*.zip
+            paths: app/desktopApp/build/compose/binaries/main-release/zip/*.zip
           - os: macos-15-intel
             label: macos-x64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main-release/**/*.dmg
-              app/desktopApp/build/compose/binaries/main-release/**/*.pkg
+            tasks: :app:desktopApp:packageReleaseDmg
+            paths: app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
           - os: macos-15
             label: macos-arm64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main-release/**/*.dmg
-              app/desktopApp/build/compose/binaries/main-release/**/*.pkg
+            tasks: :app:desktopApp:packageReleaseDmg
+            paths: app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -397,34 +237,6 @@ jobs:
         with:
           distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
           java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install Linux packaging tools
-        if: runner.os == 'Linux'
-        shell: bash
-        env:
-          BUILD_LINUX_NATIVE_INSTALLERS: ${{ startsWith(matrix.platform.label, 'linux-') }}
-        run: |
-          sudo apt-get update
-          packages=(
-            appstream
-            desktop-file-utils
-            flatpak
-            flatpak-builder
-          )
-          if [[ "$BUILD_LINUX_NATIVE_INSTALLERS" == "true" ]]; then
-            packages+=(fakeroot rpm)
-          fi
-          sudo apt-get install --yes "${packages[@]}"
-
-      - name: Install Flatpak SDK
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          flatpak remote-add --user --if-not-exists \
-            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --noninteractive flathub \
-            org.freedesktop.Platform//25.08 \
-            org.freedesktop.Sdk//25.08
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -437,46 +249,6 @@ jobs:
           "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
 
-      - name: Build Flatpak bundle
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
-          release_date="$(date -u +%F)"
-          metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
-          manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
-          # The public metadata describes no-pro; retain Pro's previous license scope.
-          if [[ "$ORG_GRADLE_PROJECT_includeProMain" == "true" ]]; then
-            sed -i -E \
-              's#<project_license>[^<]+</project_license>#<project_license>LicenseRef-proprietary</project_license>#' \
-              "$metainfo"
-          fi
-          sed -i -E \
-            's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
-            "$metainfo"
-
-          desktop-file-validate \
-            packaging/flatpak/com.folderspan.FolderSpan.desktop
-          appstreamcli validate --no-net "$metainfo"
-
-          flatpak_builder_dir="$RUNNER_TEMP/folderspan-flatpak-build"
-          flatpak_repo_dir="$RUNNER_TEMP/folderspan-flatpak-repo"
-          flatpak_output_dir="app/desktopApp/build/compose/binaries/main-release/flatpak"
-          mkdir -p "$flatpak_output_dir"
-
-          flatpak-builder --user --force-clean \
-            --repo="$flatpak_repo_dir" \
-            "$flatpak_builder_dir" \
-            "$manifest"
-
-          flatpak_arch="$(flatpak --default-arch)"
-          flatpak build-bundle \
-            --arch="$flatpak_arch" \
-            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
-            "$flatpak_repo_dir" \
-            "$flatpak_output_dir/FolderSpan-${version}-${flatpak_arch}.flatpak" \
-            com.folderspan.FolderSpan
-
       - name: Package Windows ARM64 portable archive
         if: matrix.platform.label == 'windows-arm64'
         shell: pwsh
@@ -486,6 +258,19 @@ jobs:
           $outputDir = 'app/desktopApp/build/compose/binaries/main-release/zip'
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-windows-arm64.zip" -Force
+
+      - name: Verify single platform package
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.platform.paths }}
+        run: |
+          shopt -s nullglob
+          # shellcheck disable=SC2206
+          packages=( $PACKAGE_PATH )
+          if (( ${#packages[@]} != 1 )) || [[ ! -f "${packages[0]}" ]]; then
+            echo "::error::Expected exactly one platform package; found ${#packages[@]}."
+            exit 1
+          fi
 
       - name: Upload Desktop packages
         uses: actions/upload-artifact@v7
@@ -502,13 +287,11 @@ jobs:
       - android
       - web
       - desktop
-      - headless-runtime
     if: >-
       (startsWith(github.ref, 'refs/tags/v') || inputs.create_draft) &&
       needs.android.result == 'success' &&
       needs.web.result == 'success' &&
-      needs.desktop.result == 'success' &&
-      needs.headless-runtime.result == 'success'
+      needs.desktop.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

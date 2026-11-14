@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
         platform:
           - os: ubuntu-24.04
             label: linux
@@ -60,6 +60,10 @@ jobs:
       - name: Test native macOS installer
         if: runner.os == 'macOS'
         run: swift test --package-path app/desktopApp/installer
+
+      - name: Check single-package workflow contract
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_single_package_workflows.py'
 
       - name: Run JVM tests on Linux and macOS
         if: runner.os != 'Windows'
