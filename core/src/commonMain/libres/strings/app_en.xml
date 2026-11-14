@@ -538,7 +538,6 @@
     <string name="ui_password">Password</string>
     <string name="ui_password_has_been_updated">Password has been updated.</string>
     <string name="ui_password_has_been_reset_please_log_again">Password has been reset, please log in again.</string>
-    <string name="ui_password_recommended_8_20_characters_long_must_contain_letters">The password is recommended to be 8-20 characters long and must contain letters and numbers.</string>
     <string name="ui_password_management">Password management</string>
     <string name="ui_password_requires_least_6_characters">Password requires at least 6 characters.</string>
     <string name="ui_password_access">Password access</string>
@@ -883,8 +882,6 @@
     <string name="ui_add_network">Add network</string>
     <string name="ui_add_new_items">Add new items</string>
     <string name="ui_new_password">New password</string>
-    <string name="ui_new_password_needs_least_6_characters_long">The new password needs to be at least 6 characters long.</string>
-    <string name="ui_new_password_needs_least_8_characters_long">The new password needs to be at least 8 characters long.</string>
     <string name="ui_dialog_preview_new">New</string>
     <string name="ui_create_new_folder">Create new folder</string>
     <string name="ui_new_device_pending">New device pending</string>
@@ -1227,7 +1224,6 @@
     <string name="ui_automatically_connect">Automatically connect</string>
     <string name="ui_custom_header">Custom Header</string>
     <string name="ui_custom_color">Custom color</string>
-    <string name="ui_least_8_digits">At least 8 digits</string>
     <string name="ui_abandon">Abandon</string>
     <string name="ui_get">Get</string>
     <string name="ui_get_personalization_goals">Get personalization goals</string>
@@ -1331,7 +1327,6 @@
     <string name="ui_convert_cr">Convert to CR</string>
     <string name="ui_convert_crlf">Convert to CRLF</string>
     <string name="ui_convert_lf">Convert to LF</string>
-    <string name="ui_enter_6_digit_verification_code">Enter the 6-digit verification code</string>
     <string name="ui_enter_keyword">Enter keyword</string>
     <string name="ui_enter_name">Enter name</string>
     <string name="ui_enter_your_frequently_used_email_address">Enter your frequently used email address</string>
@@ -4472,4 +4467,14 @@
     <string name="privacy_delete_eligibility_unknown">Eligibility could not be confirmed and no specific reason was provided. Check the status again and retry.</string>
     <string name="privacy_delete_check_again">Check eligibility again</string>
     <string name="privacy_withdraw_continue">Continue to withdraw consent</string>
+    <string name="account_password_requirements">Use at least 6 characters and at most 72 UTF-8 bytes. The password must differ from your email and nickname.</string>
+    <string name="account_password_length_error">Use at least 6 characters and at most 72 UTF-8 bytes.</string>
+    <string name="account_password_minimum_hint">At least 6 characters</string>
+    <string name="ui_enter_10_character_verification_code">Enter the 10-character verification code</string>
+    <string name="account_recovery_code_format_error">Enter the 10-character code from your email, keeping uppercase and lowercase letters as shown.</string>
+    <string name="ui_sync_data_too_large">This data exceeds the sync size limit. Reduce its contents and try again.</string>
+    <string name="ui_feedback_manage">Manage ticket</string>
+    <string name="pro_restore_retry_required">Settings restoration is incomplete. Select a settings source and try restoring again.</string>
+    <string name="pro_sync_encryption_restore_required">The encryption information for these settings has changed. Select these settings again and restore them fully before syncing.</string>
+    <string name="pro_sync_credentials_unreadable">The saved credentials in these settings could not be verified. Your local settings have been kept. Choose other settings or back them up again and retry.</string>
 </resources>

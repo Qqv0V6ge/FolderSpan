@@ -1,6 +1,8 @@
 package com.folderspan.utils
 
 import com.russhwolf.settings.Settings
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.io.encoding.Base64
 
 /**
@@ -12,30 +14,44 @@ import kotlin.io.encoding.Base64
 object DataEncryptionKey {
     const val SIZE_BYTES = AesGcm.KEY_BYTES
 
+    private val lock = CredentialKeyLock()
+    private val credentialAccess = Mutex()
     private var settings: Settings? = null
 
-    fun init(settings: Settings) {
+    fun init(settings: Settings) = withKeyLock {
         this.settings = settings
     }
 
-    fun encodedOrNull(): String? {
-        val stored = settings?.getStringOrNull(SettingsUtils.KEY_CRYPTO_KEY) ?: return null
-        return stored.takeIf(::isValidEncoded)
+    fun encodedOrNull(): String? = withKeyLock {
+        val stored = settings?.getStringOrNull(SettingsUtils.KEY_CRYPTO_KEY) ?: return@withKeyLock null
+        stored.takeIf(::isValidEncoded)
     }
 
     fun encodedForSync(): String? = encodedOrNull()
 
-    fun keyBytes(): ByteArray = decode(getOrCreateEncoded())
+    // 保护依赖密钥的整次读写；持有期间可挂起，但不能再次进入此范围。
+    suspend fun <T> withCredentialAccess(block: suspend () -> T): T = credentialAccess.withLock { block() }
 
-    fun replaceFromRemote(encoded: String): Boolean {
-        val target = settings ?: return false
-        if (!isValidEncoded(encoded)) return false
+    fun keyBytes(): ByteArray = withKeyLock { decode(getOrCreateEncoded()) }
+
+    fun replaceFromRemote(encoded: String): Boolean = withKeyLock {
+        val target = settings ?: return@withKeyLock false
+        if (!isValidEncoded(encoded)) return@withKeyLock false
         target.putString(SettingsUtils.KEY_CRYPTO_KEY, encoded)
-        return true
+        true
     }
 
-    internal fun clearForTests() {
+    internal fun clearForTests() = withKeyLock {
         settings = null
+    }
+
+    private inline fun <T> withKeyLock(block: () -> T): T {
+        lock.lock()
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
     }
 
     private fun getOrCreateEncoded(): String {
@@ -52,4 +68,9 @@ object DataEncryptionKey {
     internal fun encode(bytes: ByteArray): String = Base64.encode(bytes)
 
     private fun decode(value: String): ByteArray = Base64.decode(value)
+}
+
+internal expect class CredentialKeyLock() {
+    fun lock()
+    fun unlock()
 }

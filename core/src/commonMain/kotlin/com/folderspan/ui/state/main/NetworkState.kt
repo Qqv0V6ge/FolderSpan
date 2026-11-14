@@ -81,7 +81,7 @@ class NetworkState(private val database: FolderSpanDatabase) {
         hasLoaded
     }
 
-    suspend fun reloadPersisted(): Boolean {
+    suspend fun reloadPersisted(): Boolean = DataEncryptionKey.withCredentialAccess {
         val saved = try {
             withContext(Dispatchers.Default) {
                 database.networkDriveQueries.selectAll().executeAsListAwait()
@@ -90,12 +90,12 @@ class NetworkState(private val database: FolderSpanDatabase) {
             throw e
         } catch (e: Exception) {
             LogKit.w(AppStrings.ui_failed_load_network_disk_arg0.format(arg0 = (e.message).toString()))
-            return false
+            return@withCredentialAccess false
         }
         entries.filter { it.isPersisted }.forEach { it.network.close() }
         entries.removeAll { item -> item.isPersisted }
         connectedEntries.removeAll { item -> item.isPersisted }
-        if (saved.isEmpty()) return true
+        if (saved.isEmpty()) return@withCredentialAccess true
         val newItems = saved.map { item ->
             val extras = decodeExtras(item.extras)
             val password = decodePassword(item.password)
@@ -127,10 +127,10 @@ class NetworkState(private val database: FolderSpanDatabase) {
             )
         }
         entries.addAll(newItems)
-        return true
+        return@withCredentialAccess true
     }
 
-    suspend fun addNetwork(network: Network, persist: Boolean) {
+    suspend fun addNetwork(network: Network, persist: Boolean) = DataEncryptionKey.withCredentialAccess {
         val entry = if (persist) {
             val id = insertNetwork(network)
             NetworkEntry(id = id, network = network, isPersisted = true)
@@ -174,10 +174,10 @@ class NetworkState(private val database: FolderSpanDatabase) {
         connectedEntries.removeAll { item -> item.id == entry.id }
     }
 
-    suspend fun updatePersisted(entry: NetworkEntry, persist: Boolean) {
+    suspend fun updatePersisted(entry: NetworkEntry, persist: Boolean) = DataEncryptionKey.withCredentialAccess {
         val index = entries.indexOf(entry)
-        if (index < 0) return
-        if (entry.isPersisted == persist) return
+        if (index < 0) return@withCredentialAccess
+        if (entry.isPersisted == persist) return@withCredentialAccess
 
         val updated = if (persist) {
             val id = insertNetwork(entry.network)
@@ -191,7 +191,7 @@ class NetworkState(private val database: FolderSpanDatabase) {
         SyncSnapshotChangeNotifier.onNetworkConfigurationChanged()
     }
 
-    suspend fun removeEntry(entry: NetworkEntry) {
+    suspend fun removeEntry(entry: NetworkEntry) = DataEncryptionKey.withCredentialAccess {
         if (entry.isPersisted) {
             deleteNetwork(entry)
         }
@@ -203,9 +203,9 @@ class NetworkState(private val database: FolderSpanDatabase) {
         }
     }
 
-    suspend fun updateEntry(entry: NetworkEntry, network: Network) {
+    suspend fun updateEntry(entry: NetworkEntry, network: Network) = DataEncryptionKey.withCredentialAccess {
         val index = entries.indexOf(entry)
-        if (index < 0) return
+        if (index < 0) return@withCredentialAccess
         if (entry.isPersisted) {
             try {
                 withContext(Dispatchers.Default) {

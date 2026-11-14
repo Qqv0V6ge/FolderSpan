@@ -107,4 +107,26 @@ class CredentialCryptoTest {
         assertTrue(DataEncryptionKey.replaceFromRemote(checkNotNull(encodedDek)))
         assertEquals("smb-secret", SymmetricCrypto.decrypt(ciphertext))
     }
+
+    @Test
+    fun explicitKeyValidationDoesNotCreateOrReplaceTheLocalKey() {
+        DataEncryptionKey.init(createInMemorySettings())
+        val ciphertext = SymmetricCrypto.encrypt("fixture-password".encodeToByteArray())
+        val key = DataEncryptionKey.keyBytes()
+        val untouched = createInMemorySettings()
+        DataEncryptionKey.init(untouched)
+
+        assertContentEquals("fixture-password".encodeToByteArray(), SymmetricCrypto.decrypt(ciphertext, key))
+        assertFalse(untouched.hasKey(SettingsUtils.KEY_CRYPTO_KEY))
+        assertFailsWith<IllegalArgumentException> { SymmetricCrypto.decrypt(ciphertext, ByteArray(32) { 3 }) }
+        assertFalse(untouched.hasKey(SettingsUtils.KEY_CRYPTO_KEY))
+    }
+
+    @Test
+    fun invalidShortPayloadDoesNotCreateALocalKey() {
+        val settings = createInMemorySettings()
+        DataEncryptionKey.init(settings)
+        assertFailsWith<IllegalArgumentException> { SymmetricCrypto.decrypt(ByteArray(0)) }
+        assertFalse(settings.hasKey(SettingsUtils.KEY_CRYPTO_KEY))
+    }
 }
