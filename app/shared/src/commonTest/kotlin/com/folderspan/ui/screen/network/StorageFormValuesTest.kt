@@ -1,5 +1,6 @@
 package com.folderspan.ui.screen.network
 
+import com.folderspan.PRO_AVAILABLE
 import com.folderspan.ui.screen.network.form.*
 
 import com.folderspan.data.main.network.NetworkProtocol
@@ -7,8 +8,10 @@ import kotlin.test.*
 
 class StorageFormValuesTest {
     @Test
-    fun newProviderSelectionHasExactlyTheSixAgreedTypes() {
-        assertEquals(setOf("NFS","HttpDirectory","GoogleDrive","Dropbox","Nextcloud","Seafile"), addedStorageProtocols.map { it.name }.toSet())
+    fun newProviderSelectionMatchesAvailableEdition() {
+        val expected = setOf("NFS", "HttpDirectory", "Nextcloud", "Seafile") +
+            if (PRO_AVAILABLE) setOf("GoogleDrive", "Dropbox") else emptySet()
+        assertEquals(expected, addedStorageProtocols.map { it.name }.toSet())
     }
 
     @Test
