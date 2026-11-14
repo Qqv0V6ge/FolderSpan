@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "FolderSpan";
 "NSLocalNetworkUsageDescription" = "FolderSpan uses your local network to connect to nearby devices and network storage, browse files, and transfer files you choose.";
+"NSCameraUsageDescription" = "FolderSpan includes the WebRTC library for file transfers between devices. FolderSpan does not use the camera.";

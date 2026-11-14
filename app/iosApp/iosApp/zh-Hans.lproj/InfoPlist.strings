@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "FolderSpan";
 "NSLocalNetworkUsageDescription" = "FolderSpan 需要访问本地网络，以连接附近设备和网络存储、浏览文件并传输你选择的文件。";
+"NSCameraUsageDescription" = "FolderSpan 内置 WebRTC 库，用于在设备之间传输文件。相机访问保持关闭。";
