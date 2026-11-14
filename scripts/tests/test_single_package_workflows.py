@@ -78,7 +78,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
             self.assertEqual(re.findall(r"^  ([\w-]+):", trigger, re.M), ["workflow_dispatch"])
             self.assertIn("default: all", trigger)
             targets = set(re.findall(r"^          - ([\w-]+)$", trigger, re.M))
-            extra = {"android", "web", "web-js", "web-wasm"} if preview == "app" else set()
+            extra = {"android", "ios", "web", "web-js", "web-wasm"} if preview == "app" else set()
             self.assertEqual(targets, {"all", *platforms} | native | extra)
 
             for target in sorted(targets):

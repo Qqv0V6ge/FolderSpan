@@ -29,7 +29,7 @@ def main():
     native_platforms = {label.split("-")[0] for label in native_labels}
     allowed = {"all"} | native_labels | native_platforms
     if args.preview == "app":
-        allowed |= {"android", "web", "web-js", "web-wasm"}
+        allowed |= {"android", "ios", "web", "web-js", "web-wasm"}
     if args.target not in allowed:
         parser.error(f"unsupported {args.preview} preview target: {args.target}")
 

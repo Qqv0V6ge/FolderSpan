@@ -22,6 +22,7 @@ on:
           - macos-x64
           - macos-arm64
           - android
+          - ios
           - web
           - web-js
           - web-wasm
@@ -98,6 +99,23 @@ jobs:
           path: app/androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+  ios:
+    needs: quality
+    if: inputs.target == 'all' || inputs.target == 'ios'
+    uses: ./.github/workflows/apple-store-pro.yml
+    with:
+      version: ${{ format('1.0.{0}', github.run_number) }}
+      build_number: ${{ format('{0}', github.run_number) }}
+      ipa_artifact_name: preview-ios-pro
+      ipa_retention_days: 14
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+      IOS_SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
 
   web:
     name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
