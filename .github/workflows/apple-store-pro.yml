@@ -1,6 +1,47 @@
 name: Upload Pro Apple builds
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      build_number:
+        required: true
+        type: string
+      ipa_artifact_name:
+        required: true
+        type: string
+      ipa_retention_days:
+        required: true
+        type: number
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      IOS_CERTIFICATE_P12_BASE64:
+        required: true
+      IOS_CERTIFICATE_PASSWORD:
+        required: true
+      IOS_APP_PROFILE_BASE64:
+        required: true
+      IOS_SHARE_PROFILE_BASE64:
+        required: true
+      MACOS_STORE_CERTIFICATES_P12_BASE64:
+        required: false
+      MACOS_STORE_CERTIFICATES_PASSWORD:
+        required: false
+      MACOS_APP_PROFILE_BASE64:
+        required: false
+      MACOS_RUNTIME_PROFILE_BASE64:
+        required: false
+      MACOS_SIGNING_IDENTITY:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -41,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ inputs.platform == 'both' && fromJSON('["ios", "macos"]') || fromJSON(format('["{0}"]', inputs.platform)) }}
+        platform: ${{ inputs.platform == 'both' && fromJSON('["ios", "macos"]') || fromJSON(format('["{0}"]', inputs.platform || 'ios')) }}
     env:
       APPLE_PLATFORM: ${{ matrix.platform }}
       APPLE_VERSION: ${{ inputs.version }}
@@ -144,6 +185,14 @@ jobs:
           packages=("$RUNNER_TEMP"/app-store/*.ipa)
           [[ ${#packages[@]} -eq 1 && -f "${packages[0]}" ]]
           echo "APPLE_PACKAGE=${packages[0]}" >> "$GITHUB_ENV"
+      - name: Upload signed iOS IPA artifact
+        if: matrix.platform == 'ios' && inputs.ipa_artifact_name != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.ipa_artifact_name }}
+          path: ${{ env.APPLE_PACKAGE }}
+          if-no-files-found: error
+          retention-days: ${{ inputs.ipa_retention_days }}
       - name: Package and verify signed Mac App Store PKG
         if: matrix.platform == 'macos' && !inputs.macos_local_signing
         timeout-minutes: 40
@@ -200,7 +249,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload build to App Store Connect
-        if: inputs.upload_to_app_store && (matrix.platform == 'ios' || !inputs.macos_local_signing)
+        if: inputs.ipa_artifact_name == '' && inputs.upload_to_app_store && (matrix.platform == 'ios' || !inputs.macos_local_signing)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}

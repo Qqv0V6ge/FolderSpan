@@ -1,19 +1,37 @@
 name: Build Preview
 
+run-name: ${{ github.workflow }} · ${{ inputs.target }}
+
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
+    inputs:
+      target:
+        description: "选择平台及架构（all 构建全部）"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - linux
+          - linux-x64
+          - linux-arm64
+          - windows
+          - windows-x64
+          - windows-arm64
+          - macos
+          - macos-x64
+          - macos-arm64
+          - android
+          - ios
+          - web
+          - web-js
+          - web-wasm
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-preview-${{ github.workflow }}-${{ github.ref }}
+  group: build-preview-${{ github.workflow }}-${{ github.ref }}-${{ inputs.target }}
   cancel-in-progress: true
 
 env:
@@ -23,7 +41,22 @@ env:
   ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
 
 jobs:
+  targets:
+    name: Select preview targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.matrix.outputs.native }}
+      web: ${{ steps.matrix.outputs.web }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: matrix
+        env:
+          PREVIEW_TARGET: ${{ inputs.target }}
+        run: python3 scripts/ci/select-preview-targets.py app "$PREVIEW_TARGET" >> "$GITHUB_OUTPUT"
+
   quality:
+    needs: targets
     uses: ./.github/workflows/shared-quality.yml
     secrets:
       PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
@@ -31,6 +64,7 @@ jobs:
   android:
     name: Package Android preview (${{ matrix.edition }})
     needs: quality
+    if: inputs.target == 'all' || inputs.target == 'android'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -66,20 +100,34 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  ios:
+    needs: quality
+    if: inputs.target == 'all' || inputs.target == 'ios'
+    uses: ./.github/workflows/apple-store-pro.yml
+    with:
+      version: ${{ format('1.0.{0}', github.run_number) }}
+      build_number: ${{ format('{0}', github.run_number) }}
+      ipa_artifact_name: preview-ios-pro
+      ipa_retention_days: 14
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+      IOS_SHARE_PROFILE_BASE64: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
+
   web:
     name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
-    needs: quality
+    needs: [targets, quality]
+    if: needs.targets.outputs.web != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         edition: [pro]
-        platform:
-          - label: js
-            target: js
-          - label: wasm
-            target: wasmJs
+        platform: ${{ fromJSON(needs.targets.outputs.web) }}
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -121,40 +169,15 @@ jobs:
 
   desktop:
     name: Package Desktop preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
-    needs: quality
-    if: github.event_name != 'pull_request'
+    needs: [targets, quality]
+    if: needs.targets.outputs.native != '[]'
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         edition: [pro]
-        platform:
-          - os: ubuntu-24.04
-            label: linux-x64
-            tasks: :app:desktopApp:packageTarGz
-            paths: app/desktopApp/build/compose/binaries/main/targz/*.tar.gz
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            tasks: :app:desktopApp:packageTarGz
-            paths: app/desktopApp/build/compose/binaries/main/targz/*.tar.gz
-          - os: windows-2025
-            label: windows-x64
-            tasks: :app:desktopApp:packageMsi
-            paths: app/desktopApp/build/compose/binaries/main/msi/*.msi
-          - os: windows-11-arm
-            label: windows-arm64
-            java_distribution: microsoft
-            tasks: :app:desktopApp:createDistributable
-            paths: app/desktopApp/build/compose/binaries/main/zip/*.zip
-          - os: macos-15-intel
-            label: macos-x64
-            tasks: :app:desktopApp:packageDmg
-            paths: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
-          - os: macos-15
-            label: macos-arm64
-            tasks: :app:desktopApp:packageDmg
-            paths: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
+        platform: ${{ fromJSON(needs.targets.outputs.native) }}
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
