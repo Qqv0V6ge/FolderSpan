@@ -15,6 +15,24 @@ class StorageAuthorizationManagerTest {
     private fun store() = StorageAccountStore(MapSettings(), { error("Unexpected refresh") }, now = { 1000L })
 
     @Test
+    fun officialAuthorizationWithoutAnInstalledBrokerDoesNotSendARequest() = runSuspendTest {
+        var requests = 0
+        val http = HttpClient(MockEngine {
+            requests++
+            respondError(HttpStatusCode.ServiceUnavailable)
+        })
+        try {
+            val manager = StorageAuthorizationManager(http, store())
+            for (protocol in listOf("GoogleDrive", "Dropbox")) {
+                assertFailsWith<IllegalStateException> { manager.begin(StorageAuthorizationRequest(protocol)) }
+            }
+            assertEquals(0, requests)
+        } finally {
+            http.close()
+        }
+    }
+
+    @Test
     fun brokerProofRemainsInRuntimeAndSuccessfulResultContainsOnlyAccountMetadata() = runSuspendTest {
         var challenge = ""
         var polls = 0

@@ -1,6 +1,7 @@
 package com.folderspan
 
 import androidx.compose.runtime.Composable
+import com.folderspan.data.main.network.NetworkProtocol
 import com.folderspan.notification.NotificationPayload
 import com.folderspan.notification.RequestNotificationDispatcher
 import com.folderspan.service.account.AccountDeviceTrustRefreshTrigger
@@ -16,6 +17,8 @@ import org.koin.core.module.Module
 import strings.AppStrings
 
 internal const val PRO_AVAILABLE = false
+internal val officialStorageProtocols = emptyList<NetworkProtocol>()
+internal fun initializeOfficialStorageAuthorization() = Unit
 internal object ProRuntimeDependencies
 internal fun loadProRuntimeDependencies(koin: Koin) = ProRuntimeDependencies
 internal fun initializeProAuthSession(settings: Settings) = Unit

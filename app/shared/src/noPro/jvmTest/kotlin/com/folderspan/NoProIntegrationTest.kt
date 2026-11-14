@@ -11,6 +11,7 @@ import com.folderspan.ui.navigation.AppRoutePayloadStore
 import com.folderspan.ui.navigation.MutableAppNavigator
 import com.folderspan.ui.screen.main.NotificationDetailScreen
 import com.folderspan.ui.screen.main.openLocalNotification
+import com.folderspan.ui.screen.network.form.addedStorageProtocols
 import com.folderspan.ui.screen.settings.LocalAboutSoftwareContent
 import strings.AppStrings
 import kotlin.test.Test
@@ -20,6 +21,14 @@ import kotlin.test.assertNull
 
 @OptIn(ExperimentalTestApi::class)
 class NoProIntegrationTest : ChineseLocalizationTest() {
+    @Test
+    fun additionalNetworkStorageKeepsSelfHostedOptionsWithoutOfficialCloudAuthorization() {
+        assertEquals(
+            listOf("NFS", "HttpDirectory", "Nextcloud", "Seafile"),
+            addedStorageProtocols.map { it.name },
+        )
+    }
+
     @Test
     fun errorLogOpensLocalDetailWithoutProRoutes() {
         val notification = RequestNotificationFactory.buildErrorLogNotification("Captured failure").notification

@@ -71,8 +71,13 @@ java {
     targetCompatibility = JavaVersion.VERSION_11
 }
 
+val isStandardEdition = rootProject.findProject(":proMain") == null
+
 dependencies {
     implementation(projects.core)
+    if (!isStandardEdition) {
+        implementation(project(":proMain"))
+    }
     // Compose packaging requires its compiler plugin; the entry point itself has no UI.
     compileOnly(libs.compose.runtime)
     implementation(libs.multiplatform.settings)
@@ -80,11 +85,13 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 }
 
-val isStandardEdition = rootProject.findProject(":proMain") == null
-if (isStandardEdition) {
-    sourceSets.named("main") {
+sourceSets.named("main") {
+    if (isStandardEdition) {
         resources.srcDir(rootProject.tasks.named("prepareLicenseBundle"))
     }
+}
+kotlin.sourceSets.named("main") {
+    kotlin.srcDir(if (isStandardEdition) "src/noPro/kotlin" else "src/pro/kotlin")
 }
 
 val embedWebUi = tasks.register<Sync>("embedWebUiDistribution") {

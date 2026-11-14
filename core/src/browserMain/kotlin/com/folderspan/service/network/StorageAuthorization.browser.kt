@@ -13,6 +13,7 @@ actual object StorageAccountPlatform {
     actual suspend fun accounts(): List<StorageAccount> = WebUiPlatformClient.get("/storage/accounts")
     actual suspend fun begin(request: StorageAuthorizationRequest): StorageAuthorizationStart {
         request.validatePermissions()
+        OfficialStorageAuthorization.requireAvailable(request.protocol)
         val session = sessionKey()
         val result = WebUiPlatformClient.post<StorageAuthorizationRequest, StorageAuthorizationStart>("/storage/start", request)
         check(session == sessionKey()) { "Runtime session changed" }

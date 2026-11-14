@@ -101,6 +101,8 @@ abstract class FinalizeMacStoreImage : DefaultTask() {
                 "--entitlements", entitlements.get().asFile.absolutePath) +
                 (signingKeychain.orNull?.let { listOf("--keychain", it) } ?: emptyList()) + destination.absolutePath)
         }
+        // The App Store package is installed by root and must be readable by ordinary users.
+        execOperations.exec { commandLine("/bin/chmod", "-RP", "a+rX", destination.absolutePath) }
         execOperations.exec {
             commandLine("/usr/bin/codesign", "--verify", "--deep", "--strict", destination.absolutePath)
         }
