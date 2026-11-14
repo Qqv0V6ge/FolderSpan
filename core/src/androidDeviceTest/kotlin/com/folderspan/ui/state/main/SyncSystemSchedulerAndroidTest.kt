@@ -34,6 +34,7 @@ import com.folderspan.service.mcp.http.createMcpHttpTestDatabase
 import com.folderspan.service.sync.SyncConditionsMonitor
 import com.folderspan.service.sync.SyncNetworkType
 import com.folderspan.service.sync.SyncPlatformConditions
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.installAppLogging
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.SensitiveFileAccessPolicy
@@ -123,6 +124,31 @@ class SyncSystemSchedulerAndroidTest {
             f.awaitWork(task.id, differentFrom = owned.id)
             f.sync.deleteTask(task.id)
             f.awaitNoPending(task.id)
+        }
+    }
+
+    @Test fun withdrawalSkipsBackgroundWorkAndRenewedConsentRequeuesIt() = runBlocking {
+        fixture { f ->
+            File(f.source, "consent.txt").writeText("kept local")
+            val task = f.save(due = true)
+            f.sync.start(backgroundOnly = true)
+            val first = f.awaitWork(task.id)
+            val driver = checkNotNull(WorkManagerTestInitHelper.getTestDriver(f.context))
+            SettingsUtils.setWelcomeAgreementAccepted(false)
+            driver.setAllConstraintsMet(first.id)
+            withTimeout(15_000) {
+                while (!checkNotNull(f.manager.getWorkInfoById(first.id).get(5, TimeUnit.SECONDS)).state.isFinished) delay(20)
+            }
+            val blocked = checkNotNull(f.manager.getWorkInfoById(first.id).get(5, TimeUnit.SECONDS))
+            assertTrue(blocked.outputData.getBoolean(SYNC_SOFTWARE_CONSENT_BLOCKED, false))
+            assertFalse(File(f.target, "consent.txt").exists())
+            assertTrue(f.sync.recordsFor(task.id).isEmpty())
+            SettingsUtils.setWelcomeAgreementAccepted(true)
+            f.sync.notifyChanged()
+            val resumed = f.awaitWork(task.id, differentFrom = first.id)
+            driver.setAllConstraintsMet(resumed.id)
+            f.awaitRecord(task.id)
+            assertEquals("kept local", File(f.target, "consent.txt").readText())
         }
     }
 
@@ -373,9 +399,12 @@ class SyncSystemSchedulerAndroidTest {
         val platformScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val platform = MutableStateFlow(SyncPlatformConditions(true, SyncNetworkType.Wifi, true))
         val monitor = SyncConditionsMonitor(platformScope, true, platform)
+        val settings = MapSettings()
+        SettingsUtils.init(settings)
+        SettingsUtils.setWelcomeAgreementAccepted(true)
         stopKoin()
         startKoin { modules(module {
-            single<Settings> { MapSettings() }
+            single<Settings> { settings }
             single { database }
             single { sync }
             single { SyncLocalStore(database, driver) }

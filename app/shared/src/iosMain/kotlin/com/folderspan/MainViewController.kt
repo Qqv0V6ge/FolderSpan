@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.koin.mp.KoinPlatformTools
 import strings.AppStrings
 
@@ -39,6 +40,7 @@ private fun startBackgroundShareServicesOnce() {
     backgroundShareServicesStarted = true
     val fileShareState = KoinPlatformTools.defaultContext().get().get<FileShareState>()
     serviceScope.launch {
+        SettingsUtils.welcomeAgreementAccepted.first { it }
         startBackgroundShareServices(fileShareState)
     }
 }

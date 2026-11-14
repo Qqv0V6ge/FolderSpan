@@ -15,10 +15,12 @@ import com.folderspan.shared.R
 import com.folderspan.service.http.server.startBackgroundShareServices
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.utils.LogKit
+import com.folderspan.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.koin.core.context.GlobalContext
 import java.util.concurrent.atomic.AtomicBoolean
 import strings.AppStrings
@@ -35,6 +37,7 @@ class BackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!SettingsUtils.isWelcomeAgreementAccepted()) { stopSelf(); return }
         createNotificationChannel()
         if (!startForegroundServiceCompat()) {
             return
@@ -44,6 +47,7 @@ class BackgroundService : Service() {
         serviceScope.launch {
             val fileShareState = GlobalContext.get().get<FileShareState>()
             try {
+                SettingsUtils.welcomeAgreementAccepted.first { it }
                 startBackgroundShareServices(
                     fileShareState = fileShareState,
                     awaitEasyShareInitializationReady = {
@@ -57,6 +61,7 @@ class BackgroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!SettingsUtils.isWelcomeAgreementAccepted()) { stopSelf(); return START_NOT_STICKY }
         return START_STICKY
     }
 
@@ -228,6 +233,7 @@ class BackgroundService : Service() {
             "android.app.ForegroundServiceStartNotAllowedException"
 
         fun start(context: Context) {
+            if (!SettingsUtils.isWelcomeAgreementAccepted()) return
             val intent = Intent(context, BackgroundService::class.java)
 
             // Android 8.0+ (API 26+) - 必须使用 startForegroundService

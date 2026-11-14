@@ -55,6 +55,9 @@ class SyncSystemWorker(context: Context, parameters: WorkerParameters) : Corouti
     }
 
     override suspend fun doWork(): Result {
+        if (!com.folderspan.utils.SettingsUtils.isWelcomeAgreementAccepted()) {
+            return Result.success(workDataOf(SYNC_SOFTWARE_CONSENT_BLOCKED to true))
+        }
         val taskId = inputData.getLong(SYNC_SYSTEM_TASK_ID, 0)
         val dueAt = inputData.getLong(SYNC_SYSTEM_DUE, 0)
         val definition = inputData.getString(SYNC_SYSTEM_DEFINITION) ?: return Result.failure()

@@ -39,6 +39,8 @@ import com.folderspan.utils.LogKit
 import com.folderspan.utils.SyncSnapshotChangeNotifier
 import com.folderspan.utils.currentSyncTimeZone
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import com.folderspan.utils.SettingsUtils
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
@@ -182,7 +184,10 @@ class SyncState(
     var revision by mutableIntStateOf(0)
         private set
 
-    fun startInBackground() { scope.launch { start(backgroundOnly = true) } }
+    fun startInBackground() { scope.launch {
+        SettingsUtils.welcomeAgreementAccepted.first { it }
+        start(backgroundOnly = true)
+    } }
 
     suspend fun start() = start(backgroundOnly = false)
 
