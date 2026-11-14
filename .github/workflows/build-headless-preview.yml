@@ -1,0 +1,204 @@
+name: Build Headless Preview
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-headless-preview-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
+  ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
+
+jobs:
+  quality:
+    uses: ./.github/workflows/shared-quality.yml
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
+
+  web:
+    name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro]
+        platform:
+          - label: js
+            target: js
+          - label: wasm
+            target: wasmJs
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Web development distribution
+        run: >-
+          ./gradlew --no-daemon
+          :app:webApp:${{ matrix.platform.target }}BrowserDevelopmentExecutableDistribution
+          --stacktrace
+
+      - name: Create Web preview archive
+        shell: bash
+        run: |
+          archive="$GITHUB_WORKSPACE/folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-${GITHUB_SHA:0:7}.zip"
+          cd app/webApp/build/dist/${{ matrix.platform.target }}/developmentExecutable
+          zip -q -r "$archive" .
+
+      - name: Upload Web preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-web-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  headless-runtime:
+    name: Package Headless Runtime preview (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
+    needs: [quality, web]
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro]
+        web_ui: [none, js, wasm]
+        platform:
+          - os: ubuntu-24.04
+            label: linux-x64
+            tasks: :app:headlessRuntime:packageTarGz
+            paths: app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            tasks: :app:headlessRuntime:packageTarGz
+            paths: app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
+          - os: windows-2025
+            label: windows-x64
+            tasks: :app:headlessRuntime:packageMsi
+            paths: app/headlessRuntime/build/compose/binaries/main/msi/*.msi
+          - os: windows-11-arm
+            label: windows-arm64
+            java_distribution: microsoft
+            tasks: :app:headlessRuntime:createDistributable
+            paths: app/headlessRuntime/build/compose/binaries/main/zip/*.zip
+          - os: macos-15-intel
+            label: macos-x64
+            tasks: :app:headlessRuntime:packageDmg
+            paths: app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
+          - os: macos-15
+            label: macos-arm64
+            tasks: :app:headlessRuntime:packageDmg
+            paths: app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
+    env:
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Download selected preview Web UI
+        if: matrix.web_ui != 'none'
+        uses: actions/download-artifact@v8
+        with:
+          name: preview-web-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: runtime-web-ui
+
+      - name: Select Web UI archive for runtime preview packaging
+        if: matrix.web_ui != 'none'
+        shell: bash
+        run: |
+          archives=(runtime-web-ui/*.zip)
+          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
+            echo "::error::Expected exactly one preview Web UI archive."
+            exit 1
+          fi
+          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
+
+      - name: Build runtime distribution
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
+          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
+          "-Pkotlin.daemon.jvmargs=-Xmx2g"
+          --stacktrace
+
+      - name: Package Windows ARM64 preview archive
+        if: matrix.platform.label == 'windows-arm64'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion
+          $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
+          $appImage = 'app/headlessRuntime/build/compose/binaries/main/app/FolderSpan-Runtime'
+          $outputDir = 'app/headlessRuntime/build/compose/binaries/main/zip'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-preview-windows-arm64.zip" -Force
+
+      - name: Verify single platform package
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.platform.paths }}
+        run: |
+          shopt -s nullglob
+          # shellcheck disable=SC2206
+          packages=( $PACKAGE_PATH )
+          if (( ${#packages[@]} != 1 )) || [[ ! -f "${packages[0]}" ]]; then
+            echo "::error::Expected exactly one platform package; found ${#packages[@]}."
+            exit 1
+          fi
+
+      - name: Upload Runtime preview packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload runtime preview packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: |
+            app/headlessRuntime/build/compose/logs/
+            app/headlessRuntime/build/compose/tmp/*.args.txt
+          if-no-files-found: warn
+          retention-days: 14

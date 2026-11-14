@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
         platform:
           - label: js
             target: js
@@ -119,139 +119,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  headless-runtime:
-    name: Package Headless Runtime preview (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
-    needs: [quality, web]
-    if: github.event_name != 'pull_request'
-    runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [pro, no-pro]
-        web_ui: [none, js, wasm]
-        platform:
-          - os: ubuntu-24.04
-            label: linux-x64
-            tasks: :app:headlessRuntime:packageDistributionForCurrentOS :app:headlessRuntime:packageTarGz
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main/deb/*.deb
-              app/headlessRuntime/build/compose/binaries/main/rpm/*.rpm
-              app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            tasks: :app:headlessRuntime:packageDistributionForCurrentOS :app:headlessRuntime:packageTarGz
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main/deb/*.deb
-              app/headlessRuntime/build/compose/binaries/main/rpm/*.rpm
-              app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz
-          - os: windows-2025
-            label: windows-x64
-            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main/msi/*.msi
-              app/headlessRuntime/build/compose/binaries/main/exe/*.exe
-          - os: windows-11-arm
-            label: windows-arm64
-            java_distribution: microsoft
-            tasks: :app:headlessRuntime:createDistributable
-            paths: app/headlessRuntime/build/compose/binaries/main/zip/*.zip
-          - os: macos-15-intel
-            label: macos-x64
-            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main/pkg/*.pkg
-          - os: macos-15
-            label: macos-arm64
-            tasks: :app:headlessRuntime:packageDistributionForCurrentOS
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main/pkg/*.pkg
-    env:
-      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
-      ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
-      ORG_GRADLE_PROJECT_folderspanBuildType: release
-      NODE_OPTIONS: --max-old-space-size=8192
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
-          submodules: ${{ matrix.edition == 'pro' }}
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install Linux packaging tools
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes fakeroot rpm
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Download selected preview Web UI
-        if: matrix.web_ui != 'none'
-        uses: actions/download-artifact@v8
-        with:
-          name: preview-web-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: runtime-web-ui
-
-      - name: Select Web UI archive for runtime preview packaging
-        if: matrix.web_ui != 'none'
-        shell: bash
-        run: |
-          archives=(runtime-web-ui/*.zip)
-          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
-            echo "::error::Expected exactly one preview Web UI archive."
-            exit 1
-          fi
-          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
-
-      - name: Build runtime distribution
-        shell: bash
-        run: >-
-          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
-          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
-          "-Pkotlin.daemon.jvmargs=-Xmx2g"
-          --stacktrace
-
-      - name: Package Windows ARM64 preview archive
-        if: matrix.platform.label == 'windows-arm64'
-        shell: pwsh
-        run: |
-          $version = $env:ORG_GRADLE_PROJECT_releaseVersion
-          $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
-          $appImage = 'app/headlessRuntime/build/compose/binaries/main/app/FolderSpan-Runtime'
-          $outputDir = 'app/headlessRuntime/build/compose/binaries/main/zip'
-          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
-          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-preview-windows-arm64.zip" -Force
-
-      - name: Upload Runtime preview packages
-        uses: actions/upload-artifact@v7
-        with:
-          name: preview-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: ${{ matrix.platform.paths }}
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload runtime preview packaging diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: preview-runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
-          path: |
-            app/headlessRuntime/build/compose/logs/
-            app/headlessRuntime/build/compose/tmp/*.args.txt
-          if-no-files-found: warn
-          retention-days: 14
-
   desktop:
     name: Package Desktop preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
     needs: quality
@@ -261,47 +128,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro, no-pro]
+        edition: [pro]
         platform:
           - os: ubuntu-24.04
             label: linux-x64
-            tasks: :app:desktopApp:packageDistributionForCurrentOS :app:desktopApp:packageTarGz
-            paths: |
-              app/desktopApp/build/compose/binaries/main/**/*.deb
-              app/desktopApp/build/compose/binaries/main/**/*.rpm
-              app/desktopApp/build/compose/binaries/main/**/*.tar.gz
-              app/desktopApp/build/compose/binaries/main/**/*.flatpak
+            tasks: :app:desktopApp:packageTarGz
+            paths: app/desktopApp/build/compose/binaries/main/targz/*.tar.gz
           - os: ubuntu-24.04-arm
             label: linux-arm64
-            tasks: :app:desktopApp:packageDistributionForCurrentOS :app:desktopApp:packageTarGz
-            paths: |
-              app/desktopApp/build/compose/binaries/main/**/*.deb
-              app/desktopApp/build/compose/binaries/main/**/*.rpm
-              app/desktopApp/build/compose/binaries/main/**/*.tar.gz
-              app/desktopApp/build/compose/binaries/main/**/*.flatpak
+            tasks: :app:desktopApp:packageTarGz
+            paths: app/desktopApp/build/compose/binaries/main/targz/*.tar.gz
           - os: windows-2025
             label: windows-x64
-            tasks: :app:desktopApp:packageDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main/**/*.msi
-              app/desktopApp/build/compose/binaries/main/**/*.exe
+            tasks: :app:desktopApp:packageMsi
+            paths: app/desktopApp/build/compose/binaries/main/msi/*.msi
           - os: windows-11-arm
             label: windows-arm64
             java_distribution: microsoft
             tasks: :app:desktopApp:createDistributable
-            paths: app/desktopApp/build/compose/binaries/main/**/*.zip
+            paths: app/desktopApp/build/compose/binaries/main/zip/*.zip
           - os: macos-15-intel
             label: macos-x64
-            tasks: :app:desktopApp:packageDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main/**/*.dmg
-              app/desktopApp/build/compose/binaries/main/**/*.pkg
+            tasks: :app:desktopApp:packageDmg
+            paths: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
           - os: macos-15
             label: macos-arm64
-            tasks: :app:desktopApp:packageDistributionForCurrentOS
-            paths: |
-              app/desktopApp/build/compose/binaries/main/**/*.dmg
-              app/desktopApp/build/compose/binaries/main/**/*.pkg
+            tasks: :app:desktopApp:packageDmg
+            paths: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -316,29 +169,6 @@ jobs:
         with:
           distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
           java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install Linux packaging tools
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            appstream \
-            desktop-file-utils \
-            fakeroot \
-            flatpak \
-            flatpak-builder \
-            rpm
-
-      - name: Install Flatpak SDK
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          flatpak remote-add --user --if-not-exists \
-            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --noninteractive flathub \
-            org.freedesktop.Platform//25.08 \
-            org.freedesktop.Sdk//25.08
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -351,41 +181,6 @@ jobs:
           "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
 
-      - name: Build Flatpak preview bundle
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          version="${ORG_GRADLE_PROJECT_releaseVersion}"
-          release_date="$(date -u +%F)"
-          manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
-          metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
-          sed -i 's#/main-release/app/#/main/app/#' "$manifest"
-          sed -i -E \
-            's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
-            "$metainfo"
-
-          desktop-file-validate \
-            packaging/flatpak/com.folderspan.FolderSpan.desktop
-          appstreamcli validate --no-net "$metainfo"
-
-          flatpak_builder_dir="$RUNNER_TEMP/folderspan-flatpak-build"
-          flatpak_repo_dir="$RUNNER_TEMP/folderspan-flatpak-repo"
-          flatpak_output_dir="app/desktopApp/build/compose/binaries/main/flatpak"
-          mkdir -p "$flatpak_output_dir"
-
-          flatpak-builder --user --force-clean \
-            --repo="$flatpak_repo_dir" \
-            "$flatpak_builder_dir" \
-            "$manifest"
-
-          flatpak_arch="$(flatpak --default-arch)"
-          flatpak build-bundle \
-            --arch="$flatpak_arch" \
-            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
-            "$flatpak_repo_dir" \
-            "$flatpak_output_dir/FolderSpan-${version}-preview-${flatpak_arch}.flatpak" \
-            com.folderspan.FolderSpan
-
       - name: Package Windows ARM64 preview archive
         if: matrix.platform.label == 'windows-arm64'
         shell: pwsh
@@ -395,6 +190,19 @@ jobs:
           $outputDir = 'app/desktopApp/build/compose/binaries/main/zip'
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-preview-windows-arm64.zip" -Force
+
+      - name: Verify single platform package
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.platform.paths }}
+        run: |
+          shopt -s nullglob
+          # shellcheck disable=SC2206
+          packages=( $PACKAGE_PATH )
+          if (( ${#packages[@]} != 1 )) || [[ ! -f "${packages[0]}" ]]; then
+            echo "::error::Expected exactly one platform package; found ${#packages[@]}."
+            exit 1
+          fi
 
       - name: Upload Desktop preview
         uses: actions/upload-artifact@v7

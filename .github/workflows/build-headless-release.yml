@@ -1,0 +1,324 @@
+name: Build and Release Headless
+
+on:
+  push:
+    tags:
+      - "headless-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本（MAJOR.MINOR.PATCH）"
+        required: true
+        default: "1.0.0"
+        type: string
+      create_draft:
+        description: "Headless 构建通过后创建独立的草稿 Release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-headless-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_folderspanBuildType: release
+  ORG_GRADLE_PROJECT_releaseVersion: ${{ startsWith(github.ref, 'refs/tags/headless-v') && github.ref_name || inputs.version || '1.0.0' }}
+
+jobs:
+  prepare:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate version
+        id: version
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#headless-v}"
+          version="${version#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release version must use MAJOR.MINOR.PATCH format."
+            exit 1
+          fi
+          echo "tag=headless-v$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  quality:
+    needs: prepare
+    uses: ./.github/workflows/shared-quality.yml
+    secrets:
+      PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
+
+  web:
+    name: Package Web (${{ matrix.platform.label }}, ${{ matrix.edition }})
+    needs: [prepare, quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro]
+        platform:
+          - label: js
+            target: js
+          - label: wasm
+            target: wasmJs
+    env:
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Web production distribution
+        run: >-
+          ./gradlew --no-daemon --max-workers=1
+          :app:webApp:${{ matrix.platform.target }}BrowserDistribution
+          --stacktrace
+
+      - name: Create Web release archive
+        shell: bash
+        run: |
+          archive="$GITHUB_WORKSPACE/folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-${ORG_GRADLE_PROJECT_releaseVersion#v}.zip"
+          cd app/webApp/build/dist/${{ matrix.platform.target }}/productionExecutable
+          zip -q -r "$archive" .
+
+      - name: Upload Web package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-web-${{ matrix.platform.label }}-${{ matrix.edition }}
+          path: folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  headless-runtime:
+    name: Package Headless Runtime (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
+    needs: [prepare, quality, web]
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro]
+        web_ui: [none, js, wasm]
+        platform:
+          - os: ubuntu-24.04
+            label: linux-x64
+            tasks: :app:headlessRuntime:packageReleaseTarGz
+            paths: app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            tasks: :app:headlessRuntime:packageReleaseTarGz
+            paths: app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
+          - os: windows-2025
+            label: windows-x64
+            tasks: :app:headlessRuntime:packageReleaseMsi
+            paths: app/headlessRuntime/build/compose/binaries/main-release/msi/*.msi
+          - os: windows-11-arm
+            label: windows-arm64
+            java_distribution: microsoft
+            tasks: :app:headlessRuntime:createReleaseDistributable
+            paths: app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip
+          - os: macos-15-intel
+            label: macos-x64
+            tasks: :app:headlessRuntime:packageReleaseDmg
+            paths: app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+          - os: macos-15
+            label: macos-arm64
+            tasks: :app:headlessRuntime:packageReleaseDmg
+            paths: app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+    env:
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}
+      ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ matrix.edition == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
+          submodules: ${{ matrix.edition == 'pro' }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Download selected production Web UI
+        if: matrix.web_ui != 'none'
+        uses: actions/download-artifact@v8
+        with:
+          name: release-web-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: runtime-web-ui
+
+      - name: Select Web UI archive for runtime packaging
+        if: matrix.web_ui != 'none'
+        shell: bash
+        run: |
+          archives=(runtime-web-ui/*.zip)
+          if (( ${#archives[@]} != 1 )) || [[ ! -f "${archives[0]}" ]]; then
+            echo "::error::Expected exactly one production Web UI archive."
+            exit 1
+          fi
+          echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
+
+      - name: Build runtime distribution
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
+          "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
+          "-Pkotlin.daemon.jvmargs=-Xmx2g"
+          --stacktrace
+
+      - name: Package Windows ARM64 archive
+        if: matrix.platform.label == 'windows-arm64'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion -replace '^v', ''
+          $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
+          $appImage = 'app/headlessRuntime/build/compose/binaries/main-release/app/FolderSpan-Runtime'
+          $outputDir = 'app/headlessRuntime/build/compose/binaries/main-release/zip'
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-windows-arm64.zip" -Force
+
+      - name: Verify single platform package
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ matrix.platform.paths }}
+        run: |
+          shopt -s nullglob
+          # shellcheck disable=SC2206
+          packages=( $PACKAGE_PATH )
+          if (( ${#packages[@]} != 1 )) || [[ ! -f "${packages[0]}" ]]; then
+            echo "::error::Expected exactly one platform package; found ${#packages[@]}."
+            exit 1
+          fi
+
+      - name: Upload Runtime packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-headless-runtime-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload runtime packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-packaging-diagnostics-${{ matrix.platform.label }}-${{ matrix.web_ui }}-${{ matrix.edition }}
+          path: |
+            app/headlessRuntime/build/compose/logs/
+            app/headlessRuntime/build/compose/tmp/*.args.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    name: Prepare draft Headless GitHub Release
+    needs:
+      - prepare
+      - web
+      - headless-runtime
+    if: >-
+      (startsWith(github.ref, 'refs/tags/headless-v') || inputs.create_draft) &&
+      needs.web.result == 'success' &&
+      needs.headless-runtime.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Check out release commit and tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify existing tag targets this build
+        shell: bash
+        run: |
+          if tag_commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" 2>/dev/null); then
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::Existing release tag points to another commit. Choose a new version."
+              exit 1
+            fi
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: artifacts
+
+      - name: Prepare release assets and checksums
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          asset_count=0
+          while IFS= read -r -d '' source; do
+            relative="${source#artifacts/}"
+            artifact_name="${relative%%/*}"
+            file_name="$(basename "$source")"
+            cp "$source" "release-assets/${artifact_name#release-}-$file_name"
+            ((asset_count += 1))
+          done < <(find artifacts -type f -print0)
+
+          if (( asset_count == 0 )); then
+            echo "::error::No release assets were downloaded."
+            exit 1
+          fi
+
+          cd release-assets
+          sha256sum ./* > SHA256SUMS.txt
+
+      - name: Create or update draft GitHub Release
+        shell: bash
+        run: |
+          if release_info=$(gh release view "$RELEASE_TAG" --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv' 2>/dev/null); then
+            read -r is_draft target_commit <<< "$release_info"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "::error::Refusing to overwrite an already published release."
+              exit 1
+            fi
+            if ! git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" >/dev/null 2>&1 &&
+              [[ "$target_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::Existing draft belongs to another commit. Choose a new version or rerun that commit."
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --draft --latest=false --target "$GITHUB_SHA" \
+              --title "FolderSpan Headless ${RELEASE_TAG#headless-v}" \
+              --generate-notes
+          fi
+          gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"

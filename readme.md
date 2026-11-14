@@ -7,7 +7,7 @@
 <p align="center">让文件管理保持简洁有序</p>
 
 <p align="center">
-  <a href="https://github.com/Qqv0V6ge/FolderSpan/releases/latest">下载普通版</a> ·
+  <a href="https://github.com/Qqv0V6ge/FolderSpan/releases/latest">下载 Pro</a> ·
   <a href="#界面截图">界面截图</a> ·
   <a href="#源码运行">源码运行</a> ·
   <a href="https://github.com/Qqv0V6ge/FolderSpan/issues">问题反馈</a>
@@ -60,21 +60,23 @@ FolderSpan 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台
 
 ## 下载与平台支持
 
-前往 [GitHub Releases](https://github.com/Qqv0V6ge/FolderSpan/releases/latest)，按操作系统和处理器架构选择名称中包含 **`no-pro`** 的安装包。
+GitHub Actions 的后续预览和发布仅构建 **Pro**。前往 [GitHub Releases](https://github.com/Qqv0V6ge/FolderSpan/releases/latest)，按操作系统和处理器架构选择 Pro 安装包；公开源码仍可按下文命令自行构建普通版。
 
 | 平台 / 使用方式 | 状态与选择建议 |
 | --- | --- |
 | Android | 已提供 APK，要求 Android 8.0（API 26）或更高版本。不确定架构时选择 `universal` APK。 |
-| Windows | 已提供 x64 安装包和 ARM64 压缩包；ARM64 包解压后运行。 |
-| macOS | 已提供 Apple Silicon 与 Intel 安装包，按芯片类型选择 DMG 或 PKG。 |
-| Linux | 已提供 x64 与 ARM64 包，可按发行版选择 DEB、RPM、Flatpak 或 TAR.GZ。 |
-| Headless Runtime | 已提供 Windows、macOS 和 Linux 的无窗口运行包，适合通过浏览器管理服务器或常开设备。首次使用推荐内置 JS 界面的 `headless-runtime-…-js-no-pro-…` 包。 |
+| Windows | 自动打包为 x64 MSI 和 ARM64 ZIP；ARM64 包解压后运行。 |
+| macOS | 自动打包为 Apple Silicon 与 Intel DMG，按芯片类型选择。 |
+| Linux | 自动打包为 x64 与 ARM64 TAR.GZ，按处理器架构选择。 |
+| Headless Runtime | 在独立的 `FolderSpan Headless` Release 中提供 Windows、macOS 和 Linux 的无窗口运行包，适合通过浏览器管理服务器或常开设备。首次使用推荐内置 JS 界面的 `headless-runtime-…-js-pro-…` 包。 |
 | Web | 已提供 JS 和 Wasm 前端包。独立部署后需要连接 Headless Runtime，管理该 Runtime 所在机器的文件。 |
 | iOS | 仓库包含源码与 Xcode 工程，当前发布未提供 iOS 安装包。 |
 
+Headless Runtime 独立构建和发布，请在 [Releases 列表](https://github.com/Qqv0V6ge/FolderSpan/releases)中查找标签为 `headless-v版本号` 的 Release；常规应用使用 `v版本号`，两者的安装包与校验文件分开存放。Headless Release 也提供同版本的 JS / Wasm 前端包。
+
 Desktop 和 Headless 发行包包含 Java Runtime，直接使用安装包无需另装 Java。Windows ARM64 包当前不支持本机原生 WebRTC。
 
-Headless 启动后，按控制台提示打开页面并输入访问密钥。独立部署 Web 前端时，应选择与 Runtime 相同版本的 `no-pro` 包；前端与 Runtime 不同源时，需要在 Runtime 的 `FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS` 中配置前端的完整来源。
+Headless 启动后，按控制台提示打开页面并输入访问密钥。独立部署 Web 前端时，应选择与 Runtime 相同版本的 `pro` 包；前端与 Runtime 不同源时，需要在 Runtime 的 `FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS` 中配置前端的完整来源。
 
 Headless 提供宿主文件与连接能力，任务由浏览器页面管理；关闭页面或会话断开后，不保证任务继续运行。
 
@@ -127,6 +129,11 @@ WebAssembly：
 按 Gradle 输出的地址访问页面。Wasm 版本需要浏览器支持 Kotlin/Wasm 所需特性；不确定兼容性时优先使用 JS 版本。管理宿主文件时，需要配套运行 Headless Runtime。
 
 Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
+
+### CI 构建与发布
+
+- 常规应用：`Build Preview` 构建预览包；`Build and Release` 由 `v版本号` 标签或手动运行触发，创建常规应用的草稿 Release。
+- Headless：`Build Headless Preview` 单独构建预览包；`Build and Release Headless` 由 `headless-v版本号` 标签或手动运行触发，创建独立的 `FolderSpan Headless` 草稿 Release。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
 
 ## 工程结构
 
