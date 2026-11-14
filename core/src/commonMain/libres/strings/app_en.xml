@@ -4449,4 +4449,19 @@
     <string name="storage_content_password">Content password</string>
     <string name="storage_content_password_confirmation">Confirm password</string>
     <string name="storage_content_unlock_action">Unlock</string>
+    <string name="privacy_cross_border_confirmation">I have read section 5 of the account Privacy Policy and separately consent to processing my account, sign-in and selected sync data in Seoul, South Korea. I can request withdrawal through the contact in that policy.</string>
+    <string name="privacy_confirmation_required">Please read and separately confirm the overseas processing notice first.</string>
+    <string name="privacy_age_confirmation">I am at least 18 and have reached the legal age of adulthood where I live.</string>
+    <string name="privacy_public_profile_confirmation">I separately consent to making my account identifier, nickname, signature and approved avatar public, including to visitors who are not signed in. I can edit my profile, remove my avatar or request deletion.</string>
+    <string name="privacy_sync_confirmation">I separately consent to uploading selected settings and connection credentials to Seoul, South Korea. The operator server can technically decrypt synced passwords, private keys and tokens. Withdrawing stops future uploads; deletion of existing copies requires a separate request.</string>
+    <string name="privacy_sync_required">Please confirm overseas processing and credential decryption risks on the data sync page before syncing.</string>
+    <string name="privacy_delete_account">Delete account</string>
+    <string name="privacy_delete_description">Resolve any required items listed below first. An accepted request has a 15-day cooling-off period and can be explicitly withdrawn here; signing in does not withdraw it. Completion deletes the account and associated data eligible for deletion, except minimum records that must legally be retained. Back up anything you need first.</string>
+    <string name="privacy_delete_deadline">Cooling-off period ends:</string>
+    <string name="privacy_delete_confirm">I understand the consequences and confirm my request to delete this account.</string>
+    <string name="privacy_delete_refresh">Refresh request status</string>
+    <string name="privacy_delete_manual">Request deletion or ask about progress by email</string>
+    <string name="privacy_delete_withdraw">Withdraw deletion request</string>
+    <string name="privacy_delete_apply">Request deletion</string>
+    <string name="privacy_delete_withdraw_confirm">Withdraw the deletion request and restore normal account use?</string>
 </resources>
