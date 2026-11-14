@@ -132,8 +132,8 @@ Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
 
 ### CI 构建与发布
 
-- 常规应用：`Build Preview` 构建预览包；`Build and Release` 由 `v版本号` 标签或手动运行触发，创建常规应用的草稿 Release。
-- Headless：`Build Headless Preview` 单独构建预览包；`Build and Release Headless` 由 `headless-v版本号` 标签或手动运行触发，创建独立的 `FolderSpan Headless` 草稿 Release。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
+- 预览包仅通过 GitHub Actions 手动构建。打开 `Build Preview`（常规应用）或 `Build Headless Preview`，点击 `Run workflow`，选择 `all`、平台（如 `linux`，构建两种架构）或具体架构（如 `linux-arm64`）。常规应用还可单选 Android、Web JS 或 Web Wasm。Headless 为选中的平台和架构生成无 Web UI、JS 和 Wasm 三种运行时包。构建产物可在运行详情的 `Artifacts` 下载，保留 14 天。
+- 正式发布使用 `Build and Release` 和 `Build and Release Headless`，可手动运行，也分别由 `v版本号` 和 `headless-v版本号` 标签触发，创建对应的草稿 Release。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
 
 ## 工程结构
 
