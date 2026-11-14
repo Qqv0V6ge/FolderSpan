@@ -20,11 +20,11 @@ if (providers.gradleProperty("webrtcInterop").isPresent) {
 val appReleaseVersion = providers.gradleProperty("releaseVersion")
     .map { item -> item.removePrefix("v") }
     .orElse("1.0.0")
-val debugGatewayBaseUrl = "http://10.0.0.122"
+val debugGatewayBaseUrl = "https://api.folderspan.com"
 val releaseGatewayBaseUrl = "https://api.folderspan.com"
-val debugHttpProxyUrl = "http://10.0.0.122:8080"
+val debugHttpProxyUrl = ""
 val releaseHttpProxyUrl = ""
-val debugApiHostHeader = "127.0.0.1:8888"
+val debugApiHostHeader = "api.folderspan.com"
 val releaseApiHostHeader = "api.folderspan.com"
 val requestedTasks = gradle.startParameter.taskNames.map(String::lowercase)
 val inferredBuildType =

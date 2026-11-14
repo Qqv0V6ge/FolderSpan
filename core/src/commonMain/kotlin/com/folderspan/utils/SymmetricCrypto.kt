@@ -37,10 +37,15 @@ object SymmetricCrypto : SymmetricCryptoInterface {
 
     override fun decrypt(data: ByteArray): ByteArray {
         require(data.size >= AesGcm.NONCE_BYTES + AesGcm.TAG_BYTES) { "Encrypted payload too short" }
+        return decrypt(data, DataEncryptionKey.keyBytes())
+    }
+
+    fun decrypt(data: ByteArray, key: ByteArray): ByteArray {
+        require(data.size >= AesGcm.NONCE_BYTES + AesGcm.TAG_BYTES) { "Encrypted payload too short" }
         val nonce = data.copyOfRange(0, AesGcm.NONCE_BYTES)
         val ciphertextAndTag = data.copyOfRange(AesGcm.NONCE_BYTES, data.size)
         return AesGcm.decrypt(
-            key = DataEncryptionKey.keyBytes(),
+            key = key,
             nonce = nonce,
             ciphertextAndTag = ciphertextAndTag,
             aad = aad,

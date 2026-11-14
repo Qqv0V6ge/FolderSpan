@@ -29,6 +29,65 @@ import kotlin.test.*
 
 class WebRtcRoomStateTest {
     @Test
+    fun pinningARoomRemovedBeforeRefreshReturnsZeroWithoutNotifying() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        val state = WebRtcRoomState(database)
+        val id = assertNotNull(state.addRoom(WebRtcRoomInput("Local", "wss://fixture.invalid", generateRoomId(), "", "", "", "", WebRtcRoomSource.Other)))
+        database.webRtcRoomQueries.deleteById(id).awaitDatabaseReady()
+        var changes = 0
+        SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler { changes++ }
+        try {
+            assertEquals(0, state.setPinned(listOf(id), true))
+            assertEquals(0, changes)
+        } finally {
+            SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler(null)
+            settings.clear()
+        }
+    }
+
+    @Test
+    fun deletingARoomRemovedBeforeRefreshReturnsZeroWithoutNotifying() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        val state = WebRtcRoomState(database)
+        val id = assertNotNull(state.addRoom(WebRtcRoomInput("Local", "wss://fixture.invalid", generateRoomId(), "", "", "", "", WebRtcRoomSource.Other)))
+        database.webRtcRoomQueries.deleteById(id).awaitDatabaseReady()
+        var changes = 0
+        SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler { changes++ }
+        try {
+            assertEquals(0, state.deleteRooms(listOf(id)))
+            assertEquals(0, changes)
+        } finally {
+            SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler(null)
+            settings.clear()
+        }
+    }
+
+    @Test
+    fun editingARemovedRoomDoesNotReportSuccessOrEnqueueChanges() = runBlocking {
+        val settings = createIsolatedSettings()
+        val database = createInMemoryDatabase(settings)
+        val state = WebRtcRoomState(database)
+        val input = WebRtcRoomInput("Local", "wss://fixture.invalid", generateRoomId(), "", "", "", "fixture-turn", WebRtcRoomSource.Other)
+        assertNotNull(state.addRoom(input))
+        val oldRoom = state.rooms.single()
+        assertTrue(state.deleteRoom(oldRoom))
+        assertNotNull(state.addRoom(input.copy(name = "Replacement", roomId = generateRoomId())))
+        val replacement = database.webRtcRoomQueries.selectAll().executeAsListAwait().single()
+        var changes = 0
+        SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler { changes++ }
+        try {
+            assertFalse(state.updateRoom(oldRoom, input.copy(name = "Edited")))
+            assertEquals(0, changes)
+            assertEquals(replacement, database.webRtcRoomQueries.selectAll().executeAsListAwait().single())
+        } finally {
+            SyncSnapshotChangeNotifier.setWebRtcConfigurationHandler(null)
+            settings.clear()
+        }
+    }
+
+    @Test
     fun addUpdateDeleteRoomPersistsRecords() = runBlocking {
         val settings = createIsolatedSettings()
         val database = createInMemoryDatabase(settings)

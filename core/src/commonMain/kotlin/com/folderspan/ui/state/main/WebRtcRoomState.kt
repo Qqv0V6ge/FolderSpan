@@ -59,7 +59,9 @@ class WebRtcRoomState(
         hasLoaded
     }
 
-    suspend fun refreshRooms(): Boolean {
+    suspend fun refreshRooms(): Boolean = DataEncryptionKey.withCredentialAccess { refreshRoomsInternal() }
+
+    private suspend fun refreshRoomsInternal(): Boolean {
         val persisted = try {
             withContext(Dispatchers.Default) {
                 database.webRtcRoomQueries.deleteBySource(WebRtcRoomSource.Official.name).awaitDatabaseReady()
@@ -173,17 +175,19 @@ class WebRtcRoomState(
             )
         }
 
-        val timestamp = Clock.System.now().toEpochMilliseconds()
-        val sortOrder = (localRooms.maxOfOrNull { item -> item.sortOrder } ?: -1L) + 1L
-        val insertedId = insertRoomInternal(
-            input = normalized,
-            sortOrder = sortOrder,
-            createdAt = timestamp,
-            updatedAt = timestamp
-        ) ?: return null
-        refreshRooms()
-        SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
-        return insertedId
+        return DataEncryptionKey.withCredentialAccess {
+            val timestamp = Clock.System.now().toEpochMilliseconds()
+            val sortOrder = (localRooms.maxOfOrNull { item -> item.sortOrder } ?: -1L) + 1L
+            val insertedId = insertRoomInternal(
+                input = normalized,
+                sortOrder = sortOrder,
+                createdAt = timestamp,
+                updatedAt = timestamp
+            ) ?: return@withCredentialAccess null
+            refreshRoomsInternal()
+            SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
+            return@withCredentialAccess insertedId
+        }
     }
 
     suspend fun updateRoom(room: WebRtcRoomProfile, input: WebRtcRoomInput): Boolean {
@@ -228,31 +232,33 @@ class WebRtcRoomState(
 
     suspend fun setPinned(ids: Collection<Long>, pinned: Boolean): Int {
         ensureLoaded()
-        val targetIds = ids.toSet()
-        if (targetIds.isEmpty()) return 0
+        return DataEncryptionKey.withCredentialAccess {
+            val targetIds = ids.toSet()
+            if (targetIds.isEmpty()) return@withCredentialAccess 0
 
-        val targetRooms = localRooms.filter { item ->
-            item.id in targetIds && item.pinned != pinned
-        }
-        if (targetRooms.isEmpty()) return 0
-
-        return try {
-            val updatedAt = Clock.System.now().toEpochMilliseconds()
-            withContext(Dispatchers.Default) {
-                targetRooms.forEach { room ->
-                    database.webRtcRoomQueries.updatePinnedById(
-                        pinned = if (pinned) 1L else 0L,
-                        updatedAt = updatedAt,
-                        id = room.id
-                    ).awaitDatabaseReady()
-                }
+            val targetRooms = localRooms.filter { item ->
+                item.id in targetIds && item.pinned != pinned
             }
-            refreshRooms()
-            SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
-            targetRooms.size
-        } catch (e: Exception) {
-            LogKit.w(AppStrings.ui_batch_update_webrtc_room_top_status_failed_arg0.format(arg0 = (e.message).toString()))
-            0
+            if (targetRooms.isEmpty()) return@withCredentialAccess 0
+
+            return@withCredentialAccess try {
+                val updatedAt = Clock.System.now().toEpochMilliseconds()
+                val changed = withContext(Dispatchers.Default) {
+                    targetRooms.sumOf { room ->
+                        database.webRtcRoomQueries.updatePinnedById(
+                            pinned = if (pinned) 1L else 0L,
+                            updatedAt = updatedAt,
+                            id = room.id
+                        ).awaitDatabaseReady()
+                    }
+                }
+                refreshRoomsInternal()
+                if (changed > 0) SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
+                changed.toInt()
+            } catch (e: Exception) {
+                LogKit.w(AppStrings.ui_batch_update_webrtc_room_top_status_failed_arg0.format(arg0 = (e.message).toString()))
+                0
+            }
         }
     }
 
@@ -285,35 +291,35 @@ class WebRtcRoomState(
         return deleteLocalRooms(ids)
     }
 
-    private suspend fun deleteLocalRooms(ids: Collection<Long>): Int {
+    private suspend fun deleteLocalRooms(ids: Collection<Long>): Int = DataEncryptionKey.withCredentialAccess {
         val targetIds = ids.toSet()
-        if (targetIds.isEmpty()) return 0
+        if (targetIds.isEmpty()) return@withCredentialAccess 0
 
         val existingIds = localRooms.asSequence()
             .map { item -> item.id }
             .filter { id -> id in targetIds }
             .toList()
-        if (existingIds.isEmpty()) return 0
+        if (existingIds.isEmpty()) return@withCredentialAccess 0
 
-        return try {
-            withContext(Dispatchers.Default) {
-                existingIds.forEach { id ->
+        return@withCredentialAccess try {
+            val deleted = withContext(Dispatchers.Default) {
+                existingIds.sumOf { id ->
                     database.webRtcRoomQueries.deleteById(id).awaitDatabaseReady()
                 }
             }
             localRooms.removeAll { item -> item.id in targetIds }
             publishRooms()
-            SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
-            existingIds.size
+            if (deleted > 0) SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
+            deleted.toInt()
         } catch (e: Exception) {
             LogKit.w(AppStrings.ui_batch_deletion_webrtc_rooms_failed_arg0.format(arg0 = (e.message).toString()))
             0
         }
     }
 
-    private suspend fun updateLocalRoom(id: Long, normalized: WebRtcRoomInput): Boolean {
-        return try {
-            withContext(Dispatchers.Default) {
+    private suspend fun updateLocalRoom(id: Long, normalized: WebRtcRoomInput): Boolean = DataEncryptionKey.withCredentialAccess {
+        return@withCredentialAccess try {
+            val updated = withContext(Dispatchers.Default) {
                 database.webRtcRoomQueries.updateById(
                     name = normalized.name,
                     wssUrl = normalized.wssUrl,
@@ -327,7 +333,8 @@ class WebRtcRoomState(
                     id = id
                 ).awaitDatabaseReady()
             }
-            refreshRooms()
+            if (updated == 0L) return@withCredentialAccess false
+            refreshRoomsInternal()
             SyncSnapshotChangeNotifier.onWebRtcConfigurationChanged()
             true
         } catch (e: Exception) {
