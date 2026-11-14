@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.v2.runSkikoComposeUiTest
+import com.folderspan.PRO_AVAILABLE
 import com.folderspan.data.main.network.Network
 import com.folderspan.ui.state.file.FileState
 import kotlinx.coroutines.cancel
@@ -181,7 +182,9 @@ class NetworkAddInlineFormTest {
                     CompositionLocalProvider(LocalAppNavigator provides navigator) { screen.Content() }
                 }
             }
-            for (protocol in listOf("FTP", "SFTP", "SMB", "WebDav", "S3", "NFS", "Google Drive", "Dropbox", "Nextcloud", "Seafile")) {
+            val protocols = listOf("FTP", "SFTP", "SMB", "WebDav", "S3", "NFS", "Nextcloud", "Seafile") +
+                if (PRO_AVAILABLE) listOf("Google Drive", "Dropbox") else emptyList()
+            for (protocol in protocols) {
                 if (protocol != "FTP") {
                     onNode(hasScrollToIndexAction()).performScrollToIndex(0)
                     onNodeWithText(AppStrings.ui_agreement).performClick()
