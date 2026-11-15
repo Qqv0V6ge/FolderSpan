@@ -10,6 +10,24 @@ credentials=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --
 work_dir="$(mktemp -d "$APPLE_SIGNING_DIR/notary.XXXXXX")"
 trap 'rm -rf -- "$work_dir"' EXIT
 
+run_stapler() {
+  local action="$1" path="$2" delay status
+  for delay in 5 10 20; do
+    if xcrun stapler "$action" "$path"; then
+      return 0
+    else
+      status=$?
+    fi
+    # EX_NOHOST can indicate a temporary CloudKit failure after notarization is accepted.
+    if (( status != 68 )); then
+      return "$status"
+    fi
+    printf '::warning::stapler %s 返回 68，%s 秒后重试：%s\n' "$action" "$delay" "$path" >&2
+    sleep "$delay"
+  done
+  xcrun stapler "$action" "$path"
+}
+
 if [[ "$input" == *.app ]]; then
   packages=("$input")
 else
@@ -73,6 +91,6 @@ PY
     exit 1
   fi
   echo "Apple 公证通过：$package (ID: $submission_id)"
-  xcrun stapler staple "$package"
-  xcrun stapler validate "$package"
+  run_stapler staple "$package"
+  run_stapler validate "$package"
 done
