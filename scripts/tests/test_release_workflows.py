@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,7 @@ def step_script(workflow, name):
 class ReleaseWorkflowsTest(unittest.TestCase):
     def test_application_release_restores_both_editions_and_platform_formats(self):
         workflow = (WORKFLOWS / "build-release.yml").read_text()
-        self.assertEqual(re.findall(r"^        edition: (.*)$", workflow, re.M), ["[pro, no-pro]"] * 3)
+        self.assertEqual(re.findall(r"^        edition: (.*)$", workflow, re.M), ["[pro, no-pro]"] * 4)
         self.assertIn(":app:androidApp:bundleRelease", workflow)
         self.assertIn("-PandroidEnableAbiSplits=false", workflow)
         self.assertIn("outputs/bundle/release/*.aab release-artifacts/android/", workflow)
@@ -45,7 +46,8 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 entry = desktop.split(f"label: {label}\n", 1)[1].split("          - os: ", 1)[0]
                 self.assertEqual(set(re.findall(r"\*\.(\w+(?:\.gz)?)$", entry, re.M)),
                                  {extension[1:] for extension in formats})
-        for extra in ("release-linux-channel-no-pro", "release-chocolatey-no-pro", "release-channel-recipes"):
+        for extra in ("release-linux-channel-${{ matrix.edition }}", "release-chocolatey-${{ matrix.edition }}",
+                      "release-channel-recipes"):
             self.assertIn(extra, workflow)
 
     def test_desktop_release_requires_every_format(self):
@@ -67,14 +69,15 @@ class ReleaseWorkflowsTest(unittest.TestCase):
     def test_channel_recipes_use_the_current_build_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for platform, name in (
-                ("windows-x64", "FolderSpan-1.2.3.msi"),
-                ("windows-arm64", "FolderSpan-1.2.3-windows-arm64.zip"),
-                ("linux-x64", "com.folderspan-1.2.3.tar.gz"),
+            for platform, edition, name, content in (
+                ("windows-x64", "no-pro", "FolderSpan-1.2.3.msi", b"windows-x64"),
+                ("windows-x64", "pro", "FolderSpan-1.2.3.msi", b"windows-x64-pro"),
+                ("windows-arm64", "no-pro", "FolderSpan-1.2.3-windows-arm64.zip", b"windows-arm64"),
+                ("linux-x64", "no-pro", "com.folderspan-1.2.3.tar.gz", b"linux-x64"),
             ):
-                target = root / f"release-desktop-{platform}-no-pro" / name
+                target = root / f"release-desktop-{platform}-{edition}" / name
                 target.parent.mkdir()
-                target.write_bytes(platform.encode())
+                target.write_bytes(content)
             msiinfo = root / "msiinfo"
             msiinfo.write_text("#!/bin/sh\nprintf 'ProductCode\\t{PRODUCT}\\nUpgradeCode\\t{UPGRADE}\\n'\n")
             msiinfo.chmod(0o755)
@@ -97,11 +100,55 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 self.assertIn("Disabled:", fdroid)
                 self.assertIn(f"commit: {commit}", fdroid)
                 self.assertIn("androidVersionCode=42", fdroid)
+                for channel, edition, package_id, content in (
+                    ("chocolatey", "no-pro", "folderspan", b"windows-x64"),
+                    ("chocolatey-pro", "pro", "folderspan-pro", b"windows-x64-pro"),
+                ):
+                    nuspec = bundle.read(f"{channel}/folderspan.nuspec").decode()
+                    installer = bundle.read(f"{channel}/tools/chocolateyInstall.ps1").decode()
+                    self.assertIn(f"<id>{package_id}</id>", nuspec)
+                    self.assertIn(f"desktop-windows-x64-{edition}-FolderSpan-1.2.3.msi", installer)
+                    self.assertIn(hashlib.sha256(content).hexdigest().upper(), installer)
+                    if edition == "pro":
+                        self.assertIn("/blob/v1.2.3/LICENSING.md", nuspec)
+                        self.assertNotIn("permanently free", nuspec)
                 for recipe in ("aur/PKGBUILD", "aur/.SRCINFO", "nix/package.nix"):
                     text = bundle.read(recipe).decode()
                     self.assertIn(hashlib.sha256(b"linux-x64").hexdigest(), text)
                     self.assertNotIn("THIRD_PARTY_NOTICES-2026-10-27", text)
                 subprocess.run(["bash", "-n"], input=bundle.read("aur/PKGBUILD"), check=True)
+
+    def test_snap_stages_the_matching_edition_and_license(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        script = step_script(workflow, "Prepare strict Snap from the app image")
+        for edition, name, license_type in (
+            ("no-pro", "folderspan", "Apache-2.0"),
+            ("pro", "folderspan-pro", "Proprietary"),
+        ):
+            with self.subTest(edition=edition), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                app = root / "app/desktopApp/build/compose/binaries/main-release/app/FolderSpan"
+                app.mkdir(parents=True)
+                (app / "launcher").write_text(edition)
+                for source in ("packaging/snap/snapcraft.yaml", "packaging/linux/folderspan.desktop"):
+                    target = root / source
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(ROOT / source, target)
+                subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, check=True,
+                    env=dict(os.environ, ORG_GRADLE_PROJECT_releaseVersion="v1.2.3", PACKAGE_EDITION=edition),
+                )
+                project = root / "build/release-snap"
+                content = (project / "snapcraft.yaml").read_text()
+                self.assertIn(f"name: {name}\n", content)
+                self.assertIn(f"apps:\n  {name}:\n", content)
+                self.assertIn(f"license: {license_type}\n", content)
+                self.assertIn("version: '1.2.3'", content)
+                self.assertIn("source: local/application", content)
+                self.assertNotIn("v1.0.1", content)
+                self.assertEqual((project / "local/application/launcher").read_text(), edition)
+                if edition == "pro":
+                    self.assertNotIn("Apache-2.0", content)
 
     def test_application_rebuild_retargets_only_an_untagged_draft(self):
         workflow = (WORKFLOWS / "build-release.yml").read_text()
@@ -168,33 +215,55 @@ gh() {
             ios = workflow.split("\n  ios:\n", 1)[1].split("\n  web:\n", 1)[0]
             with self.subTest(workflow=kind):
                 self.assertIn("uses: ./.github/workflows/apple-store-pro.yml", ios)
-                self.assertIn(f"ipa_artifact_name: {kind}-ios-pro", ios)
+                artifact_name = "preview-ios-pro" if kind == "preview" else "release-ios-${{ matrix.edition }}"
+                self.assertIn(f"ipa_artifact_name: {artifact_name}", ios)
                 self.assertNotIn("APPLE_APP_SPECIFIC_PASSWORD", ios)
         self.assertIn("inputs.target == 'all' || inputs.target == 'ios'", preview)
         self.assertIn("version: ${{ needs.prepare.outputs.version }}", release)
+        self.assertIn("edition: ${{ matrix.edition }}", release.split("\n  ios:\n", 1)[1].split("\n  web:\n", 1)[0])
+        self.assertIn("format('{0}.1', github.run_number)", release)
         self.assertIn("      - ios\n", release.split("\n  release:\n", 1)[1])
         self.assertIn("needs.ios.result == 'success'", release)
         self.assertIn("path: ${{ env.APPLE_PACKAGE }}", apple)
         self.assertIn("inputs.ipa_artifact_name == '' && inputs.upload_to_app_store", apple)
 
-    def test_application_release_stages_exactly_one_ipa_with_checksum(self):
+    def test_application_release_stages_exactly_one_ipa_per_edition_with_checksums(self):
         workflow = (WORKFLOWS / "build-release.yml").read_text()
         script = step_script(workflow, "Prepare release assets and checksums")
-        for count in range(3):
-            with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
+        for pro, ordinary in ((0, 1), (1, 0), (1, 1), (2, 1), (1, 2)):
+            with self.subTest(pro=pro, ordinary=ordinary), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                ios = root / "artifacts/release-ios-pro"
-                ios.mkdir(parents=True)
-                for index in range(count):
-                    (ios / f"FolderSpan-{index}.ipa").write_bytes(b"signed ipa")
+                for edition, count in (("pro", pro), ("no-pro", ordinary)):
+                    ios = root / f"artifacts/release-ios-{edition}"
+                    ios.mkdir(parents=True)
+                    for index in range(count):
+                        (ios / f"FolderSpan-{index}.ipa").write_bytes(edition.encode())
                 result = subprocess.run(
                     ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, capture_output=True, text=True,
                 )
-                self.assertEqual(result.returncode == 0, count == 1, result.stdout + result.stderr)
-                if count == 1:
+                self.assertEqual(result.returncode == 0, (pro, ordinary) == (1, 1), result.stdout + result.stderr)
+                if (pro, ordinary) == (1, 1):
                     assets = root / "release-assets"
-                    self.assertEqual((assets / "ios-pro-FolderSpan-0.ipa").read_bytes(), b"signed ipa")
-                    self.assertIn("ios-pro-FolderSpan-0.ipa", (assets / "SHA256SUMS.txt").read_text())
+                    for edition in ("pro", "no-pro"):
+                        package = f"ios-{edition}-FolderSpan-0.ipa"
+                        self.assertEqual((assets / package).read_bytes(), edition.encode())
+                        self.assertIn(package, (assets / "SHA256SUMS.txt").read_text())
+
+    def test_application_release_rejects_a_duplicate_channel_filename(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        script = step_script(workflow, "Prepare release assets and checksums")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for edition in ("pro", "no-pro"):
+                for artifact, filename in (("ios", "FolderSpan.ipa"), ("linux-channel", "FolderSpan.AppImage")):
+                    target = root / f"artifacts/release-{artifact}-{edition}" / filename
+                    target.parent.mkdir(parents=True)
+                    target.write_bytes(edition.encode())
+            result = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Duplicate release asset name", result.stdout)
 
     def test_headless_version_is_normalized_and_validated_before_packaging(self):
         workflow = (WORKFLOWS / "build-headless-release.yml").read_text()

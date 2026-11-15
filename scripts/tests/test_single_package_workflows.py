@@ -128,7 +128,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                 guards += 1
         self.assertEqual(guards, 3)
 
-    def test_apple_store_builds_use_pro(self):
+    def test_apple_store_builds_default_to_pro_and_only_pro_fetches_the_submodule(self):
         release = (WORKFLOWS / "build-release.yml").read_text()
         if "APPLE_STORE_EDITION:" in release:
             self.assertIn("APPLE_STORE_EDITION: pro", release)
@@ -136,8 +136,10 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
         for path in WORKFLOWS.glob("apple-store-*.yml"):
             text = path.read_text()
             self.assertEqual(path.name, "apple-store-pro.yml")
-            self.assertIn('ORG_GRADLE_PROJECT_includeProMain: "true"', text)
-            self.assertIn("submodules: true", text)
+            edition_check = "${{ (inputs.edition || 'pro') == 'pro' }}"
+            self.assertIn("default: pro", text)
+            self.assertIn(f"ORG_GRADLE_PROJECT_includeProMain: {edition_check}", text)
+            self.assertIn(f"submodules: {edition_check}", text)
             self.assertIn("secrets.PROMAIN_REPOSITORY_TOKEN", text)
 
 

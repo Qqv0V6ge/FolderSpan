@@ -22,8 +22,8 @@ def digest(path):
         return hashlib.file_digest(package, "sha256").hexdigest()
 
 
-def asset_url(version, platform, path):
-    return f"{REPO}/releases/download/v{version}/desktop-{platform}-no-pro-{path.name}"
+def asset_url(version, platform, path, edition="no-pro"):
+    return f"{REPO}/releases/download/v{version}/desktop-{platform}-{edition}-{path.name}"
 
 
 def copy_recipe(channel, destination, convert):
@@ -34,21 +34,34 @@ def copy_recipe(channel, destination, convert):
             target.write_text(convert(source, source.read_text(encoding="utf-8")), encoding="utf-8")
 
 
-def chocolatey(version, msi, destination):
+def chocolatey(edition, version, msi, destination):
     checksum = digest(msi).upper()
-    url = asset_url(version, "windows-x64", msi)
+    url = asset_url(version, "windows-x64", msi, edition)
+    title = "FolderSpan Pro" if edition == "pro" else "FolderSpan standard edition"
 
     def convert(source, text):
         if source.name == "VERIFICATION.txt":
-            return f"FolderSpan {version} (standard edition)\nInstaller: {url}\nSHA-256: {checksum}\n"
-        return (text.replace(OLD_MSI_URL, url).replace(OLD_VERSION, version).replace(OLD_MSI_HASH, checksum)
+            return f"{title} {version}\nInstaller: {url}\nSHA-256: {checksum}\n"
+        text = (text.replace(OLD_MSI_URL, url).replace(OLD_VERSION, version).replace(OLD_MSI_HASH, checksum)
                 .replace("tree/codex/channel-validation/", f"tree/v{version}/"))
+        if edition == "pro" and source.suffix == ".nuspec":
+            text = (text.replace("<id>folderspan</id>", "<id>folderspan-pro</id>")
+                    .replace("<title>FolderSpan</title>", "<title>FolderSpan Pro</title>")
+                    .replace(f"/blob/v{version}/LICENSE</licenseUrl>", f"/blob/v{version}/LICENSING.md</licenseUrl>"))
+            text = re.sub(r"<!-- Standard-edition own code:.*?-->\n    ", "", text)
+            text = re.sub(
+                r"(?s)<description>.*?</description>",
+                "<description>FolderSpan Pro is a file manager and sharing tool with account settings sync "
+                "and official online services. This package installs the Windows x64 Pro MSI.</description>",
+                text,
+            )
+        return text
 
     copy_recipe("chocolatey", destination, convert)
 
 
-def one_asset(artifacts, platform, pattern):
-    package, = (artifacts / f"release-desktop-{platform}-no-pro").rglob(pattern)
+def one_asset(artifacts, platform, pattern, edition="no-pro"):
+    package, = (artifacts / f"release-desktop-{platform}-{edition}").rglob(pattern)
     return package
 
 
@@ -100,7 +113,8 @@ def recipe_bundle(version, commit, version_code, artifacts, output):
                                  ("nix", nix), ("fdroid", fdroid)):
             copy_recipe(channel, bundle / channel, convert)
         shutil.copyfile(PACKAGING / "linux/folderspan.desktop", bundle / "aur/folderspan.desktop")
-        chocolatey(version, msi, bundle / "chocolatey")
+        chocolatey("no-pro", version, msi, bundle / "chocolatey")
+        chocolatey("pro", version, one_asset(artifacts, "windows-x64", "*.msi", "pro"), bundle / "chocolatey-pro")
         shutil.make_archive(str(output / f"FolderSpan-{version}-channel-recipes"), "zip", bundle)
 
 
@@ -109,8 +123,10 @@ if __name__ == "__main__":
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise SystemExit(f"Invalid release version: {version}")
     if mode == "chocolatey":
-        msi, destination = map(Path, arguments)
-        chocolatey(version, msi, destination)
+        edition, msi, destination = arguments
+        if edition not in ("pro", "no-pro"):
+            raise SystemExit(f"Invalid Chocolatey edition: {edition}")
+        chocolatey(edition, version, Path(msi), Path(destination))
     elif mode == "recipes":
         commit, version_code, artifacts, output = arguments
         recipe_bundle(version, commit, version_code, Path(artifacts), Path(output))

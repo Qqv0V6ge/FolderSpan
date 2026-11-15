@@ -152,11 +152,16 @@ jobs:
 
   ios:
     needs: [prepare, quality]
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [pro, no-pro]
     uses: ./.github/workflows/apple-store-pro.yml
     with:
+      edition: ${{ matrix.edition }}
       version: ${{ needs.prepare.outputs.version }}
-      build_number: ${{ format('{0}', github.run_number) }}
-      ipa_artifact_name: release-ios-pro
+      build_number: ${{ matrix.edition == 'pro' && format('{0}', github.run_number) || format('{0}.1', github.run_number) }}
+      ipa_artifact_name: release-ios-${{ matrix.edition }}
       ipa_retention_days: 30
     secrets:
       PROMAIN_REPOSITORY_TOKEN: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
@@ -270,6 +275,7 @@ jobs:
               app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
               app/desktopApp/build/compose/binaries/main-release/pkg/*.pkg
     env:
+      PACKAGE_EDITION: ${{ matrix.edition }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
@@ -394,13 +400,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Build ordinary-edition AppImage
-        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+      - name: Build AppImage
+        if: matrix.platform.label == 'linux-x64'
         shell: bash
-        run: bash scripts/ci/package-release-appimage.sh "${ORG_GRADLE_PROJECT_releaseVersion#v}"
+        run: bash scripts/ci/package-release-appimage.sh "$PACKAGE_EDITION" "${ORG_GRADLE_PROJECT_releaseVersion#v}"
 
-      - name: Prepare strict Snap from the ordinary-edition app image
-        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+      - name: Prepare strict Snap from the app image
+        if: matrix.platform.label == 'linux-x64'
         shell: bash
         run: |
           project=build/release-snap
@@ -414,50 +420,65 @@ jobs:
             -e '/^    source-checksum:/d' \
             -e '/^    build-packages:/,/^    stage-packages:/{ /^    stage-packages:/!d; }' \
             packaging/snap/snapcraft.yaml > "$project/snapcraft.yaml"
+          if [[ "$PACKAGE_EDITION" == pro ]]; then
+            sed -E \
+              -e 's/^name: folderspan$/name: folderspan-pro/' \
+              -e 's/^  folderspan:$/  folderspan-pro:/' \
+              -e 's/^license:.*/license: Proprietary/' \
+              -e 's/^  FolderSpan standard edition.*/  FolderSpan Pro adds account sync and official online services./' \
+              -e '/^  Its own source code is Apache-2.0/,/^  respective licenses/d' \
+              "$project/snapcraft.yaml" > "$project/snapcraft.yaml.pro"
+            mv "$project/snapcraft.yaml.pro" "$project/snapcraft.yaml"
+            sed 's/^Name=FolderSpan$/Name=FolderSpan Pro/' packaging/linux/folderspan.desktop > "$project/local/folderspan.desktop"
+          fi
 
-      - name: Build ordinary-edition strict Snap
-        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+      - name: Build strict Snap
+        if: matrix.platform.label == 'linux-x64'
         uses: snapcore/action-build@v1
         id: snap
         with:
           path: build/release-snap
 
       - name: Stage Linux channel packages
-        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        if: matrix.platform.label == 'linux-x64'
         shell: bash
         env:
           SNAP_PACKAGE: ${{ steps.snap.outputs.snap }}
         run: |
           version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
-          cp "$SNAP_PACKAGE" "release-artifacts/linux-channel/folderspan-$version-amd64-candidate.snap"
+          name=folderspan
+          if [[ "$PACKAGE_EDITION" == pro ]]; then
+            name=folderspan-pro
+          fi
+          cp "$SNAP_PACKAGE" "release-artifacts/linux-channel/$name-$version-amd64-candidate.snap"
 
       - name: Upload Linux channel packages
-        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        if: matrix.platform.label == 'linux-x64'
         uses: actions/upload-artifact@v7
         with:
-          name: release-linux-channel-no-pro
+          name: release-linux-channel-${{ matrix.edition }}
           path: release-artifacts/linux-channel/
           if-no-files-found: error
           retention-days: 30
 
-      - name: Build ordinary-edition Chocolatey wrapper
-        if: matrix.platform.label == 'windows-x64' && matrix.edition == 'no-pro'
+      - name: Build Chocolatey wrapper
+        if: matrix.platform.label == 'windows-x64'
         shell: pwsh
         run: |
           $version = $env:ORG_GRADLE_PROJECT_releaseVersion -replace '^v', ''
           $msi = @(Get-ChildItem app/desktopApp/build/compose/binaries/main-release/msi/*.msi)
           if ($msi.Count -ne 1) { throw 'Expected exactly one MSI.' }
-          python scripts/ci/prepare-release-channel-recipes.py chocolatey $version ($msi[0].FullName) build/release-chocolatey
+          python scripts/ci/prepare-release-channel-recipes.py chocolatey $version $env:PACKAGE_EDITION ($msi[0].FullName) build/release-chocolatey
           if ($LASTEXITCODE -ne 0) { throw 'Preparing Chocolatey recipes failed.' }
           New-Item -ItemType Directory -Force -Path release-artifacts/chocolatey | Out-Null
           choco pack build/release-chocolatey/folderspan.nuspec --output-directory release-artifacts/chocolatey
           if ($LASTEXITCODE -ne 0) { throw 'Chocolatey packaging failed.' }
 
       - name: Upload Chocolatey package
-        if: matrix.platform.label == 'windows-x64' && matrix.edition == 'no-pro'
+        if: matrix.platform.label == 'windows-x64'
         uses: actions/upload-artifact@v7
         with:
-          name: release-chocolatey-no-pro
+          name: release-chocolatey-${{ matrix.edition }}
           path: release-artifacts/chocolatey/*.nupkg
           if-no-files-found: error
           retention-days: 30
@@ -524,11 +545,13 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          ipa_files=(artifacts/release-ios-pro/*.ipa)
-          if (( ${#ipa_files[@]} != 1 )) || [[ ! -f "${ipa_files[0]}" ]]; then
-            echo "::error::Expected exactly one signed iOS IPA."
-            exit 1
-          fi
+          for edition in pro no-pro; do
+            ipa_files=(artifacts/release-ios-"$edition"/*.ipa)
+            if (( ${#ipa_files[@]} != 1 )) || [[ ! -s "${ipa_files[0]}" ]]; then
+              echo "::error::Expected exactly one signed iOS IPA for $edition."
+              exit 1
+            fi
+          done
 
           mkdir -p release-assets
           asset_count=0
@@ -537,13 +560,18 @@ jobs:
             artifact_name="${relative%%/*}"
             file_name="$(basename "$source")"
             case "$artifact_name" in
-              release-linux-channel-no-pro|release-chocolatey-no-pro|release-channel-recipes)
-                cp "$source" "release-assets/$file_name"
+              release-linux-channel-*|release-chocolatey-*|release-channel-recipes)
+                destination="release-assets/$file_name"
                 ;;
               *)
-                cp "$source" "release-assets/${artifact_name#release-}-$file_name"
+                destination="release-assets/${artifact_name#release-}-$file_name"
                 ;;
             esac
+            if [[ -e "$destination" ]]; then
+              echo "::error::Duplicate release asset name: $destination"
+              exit 1
+            fi
+            cp "$source" "$destination"
             ((asset_count += 1))
           done < <(find artifacts -type f -print0)
 
