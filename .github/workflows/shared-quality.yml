@@ -69,7 +69,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          tasks=(:core:jvmTest :app:shared:jvmTest :app:desktopApp:test :app:headlessRuntime:compileKotlin :core:verifyNotificationRoutes)
+          tasks=(:core:jvmTest :app:shared:jvmTest :app:desktopApp:test :app:headlessRuntime:test :core:verifyNotificationRoutes)
           if [[ "$ORG_GRADLE_PROJECT_includeProMain" == "true" ]]; then
             tasks+=(:proMain:jvmTest)
           fi
@@ -96,7 +96,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $gradleTasks = @(':core:jvmTest', ':app:shared:jvmTest', ':app:desktopApp:test', ':app:headlessRuntime:compileKotlin', ':core:verifyNotificationRoutes')
+          $gradleTasks = @(':core:jvmTest', ':app:shared:jvmTest', ':app:desktopApp:test', ':app:headlessRuntime:test', ':core:verifyNotificationRoutes')
           if ($env:ORG_GRADLE_PROJECT_includeProMain -eq 'true') {
             $gradleTasks += ':proMain:jvmTest'
           }
@@ -118,6 +118,8 @@ jobs:
             app/shared/build/test-results/jvmTest/
             app/desktopApp/build/reports/tests/test/
             app/desktopApp/build/test-results/test/
+            app/headlessRuntime/build/reports/tests/test/
+            app/headlessRuntime/build/test-results/test/
             proMain/build/reports/tests/jvmTest/
             proMain/build/test-results/jvmTest/
           if-no-files-found: warn

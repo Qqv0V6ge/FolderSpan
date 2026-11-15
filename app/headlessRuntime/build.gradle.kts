@@ -83,6 +83,41 @@ dependencies {
     implementation(libs.multiplatform.settings)
     implementation(libs.napier)
     implementation(libs.kotlinx.coroutines.core)
+    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.multiplatform.settings.test)
+    testImplementation(libs.kotlinx.serialization.json)
+    testCompileOnly(libs.compose.runtime)
+}
+
+// shortcut: core still contains UI bytecode; split presentation code if host services start loading it.
+configurations.matching { it.name == "runtimeClasspath" || it.name == "testRuntimeClasspath" }.configureEach {
+    listOf(
+        "org.jetbrains.compose.material",
+        "org.jetbrains.compose.material3",
+        "org.jetbrains.compose.foundation",
+        "org.jetbrains.compose.animation",
+        "com.github.alorma.compose-settings",
+        "com.materialkolor",
+        "sh.calvin.reorderable",
+        "io.github.qdsfdhvh",
+        "androidx.navigation3",
+        "org.jetbrains.androidx.navigation3",
+        "androidx.navigationevent",
+        "org.jetbrains.androidx.navigationevent",
+        "dev.nucleusframework",
+    ).forEach { exclude(group = it) }
+    exclude(group = "io.insert-koin", module = "koin-compose")
+    exclude(group = "io.insert-koin", module = "koin-compose-jvm")
+    exclude(group = "androidx.paging", module = "paging-compose")
+    exclude(group = "androidx.paging", module = "paging-compose-desktop")
+    exclude(group = "org.jetbrains.runtime", module = "jbr-api")
+}
+
+tasks.test {
+    val testHome = temporaryDir.resolve("home")
+    systemProperty("user.home", testHome.absolutePath)
+    systemProperty("java.util.prefs.userRoot", testHome.resolve(".preferences").absolutePath)
+    doFirst { check(testHome.deleteRecursively()) }
 }
 
 sourceSets.named("main") {
