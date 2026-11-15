@@ -295,6 +295,8 @@ compose.desktop {
             }
 
             macOS {
+                val signingEnabled = providers.gradleProperty("compose.desktop.mac.sign")
+                    .map(String::toBoolean).orElse(false)
                 iconFile.set(packagingResourcesDir.file("icon.icns"))
                 installationPath = "/Applications"
                 bundleID = if (macAppStoreEnabled) "com.folderspan.FolderSpan" else desktopPackageName
@@ -311,6 +313,10 @@ compose.desktop {
                     providers.gradleProperty("macAppStoreRuntimeProvisioningProfile").orNull?.let {
                         runtimeProvisioningProfile.set(file(it))
                     }
+                } else if (signingEnabled.get()) {
+                    val directEntitlements = packagingResourcesDir.file("developer-id-entitlements.plist")
+                    entitlementsFile.set(directEntitlements)
+                    runtimeEntitlementsFile.set(directEntitlements)
                 }
                 appCategory = "public.app-category.utilities"
                 infoPlist {
@@ -318,11 +324,7 @@ compose.desktop {
                 }
 
                 signing {
-                    sign.set(
-                        providers.gradleProperty("compose.desktop.mac.sign")
-                            .map { item -> item.toBoolean() }
-                            .orElse(false)
-                    )
+                    sign.set(signingEnabled)
                     identity.set(providers.gradleProperty("compose.desktop.mac.signing.identity").orNull)
                     keychain.set(providers.gradleProperty("compose.desktop.mac.signing.keychain").orNull)
                     prefix.set(providers.gradleProperty("compose.desktop.mac.signing.prefix").orNull)

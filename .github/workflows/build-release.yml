@@ -229,7 +229,7 @@ jobs:
     name: Package Desktop (${{ matrix.platform.label }}, ${{ matrix.edition }})
     needs: quality
     runs-on: ${{ matrix.platform.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ startsWith(matrix.platform.label, 'macos-') && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -264,18 +264,17 @@ jobs:
             paths: app/desktopApp/build/compose/binaries/main-release/zip/*.zip
           - os: macos-15-intel
             label: macos-x64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
             paths: |
               app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
               app/desktopApp/build/compose/binaries/main-release/pkg/*.pkg
           - os: macos-15
             label: macos-arm64
-            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
             paths: |
               app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
               app/desktopApp/build/compose/binaries/main-release/pkg/*.pkg
     env:
       PACKAGE_EDITION: ${{ matrix.edition }}
+      MACOS_RELEASE_DIR: app/desktopApp/build/compose/binaries/main-release
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
@@ -319,12 +318,75 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build native installers
+        if: runner.os != 'macOS'
         shell: bash
         run: >-
           ./gradlew --no-daemon ${{ matrix.platform.tasks }}
           "-Dorg.gradle.jvmargs=-Xmx3g"
           "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
+
+      - name: Import Developer ID certificates
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.MACOS_DIRECT_CERTIFICATES_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DIRECT_CERTIFICATES_PASSWORD }}
+        run: bash scripts/ci/apple-keychain.sh setup
+
+      - name: Build Developer ID signed macOS app and PKG
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          : "${APPLE_TEAM_ID:?缺少 APPLE_TEAM_ID}"
+          identities="$(security find-identity -v -p basic "$APPLE_KEYCHAIN")"
+          identity="$(sed -nE 's/.*"Developer ID Application: ([^"]+)"$/\1/p' <<< "$identities")"
+          if [[ "$identity" != *" ($APPLE_TEAM_ID)" || "$identity" == *$'\n'* ||
+            "$identities" != *"\"Developer ID Installer: $identity\""* ]]; then
+            echo "::error::Expected matching Developer ID Application and Installer identities for the configured Apple team."
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          ./gradlew --no-daemon :app:desktopApp:createReleaseDistributable :app:desktopApp:packageReleasePkg \
+            "-Dorg.gradle.jvmargs=-Xmx3g" "-Pkotlin.daemon.jvmargs=-Xmx2g" --stacktrace \
+            -Pcompose.desktop.mac.sign=true "-Pcompose.desktop.mac.signing.identity=$identity" \
+            "-Pcompose.desktop.mac.signing.keychain=$APPLE_KEYCHAIN"
+
+      - name: Notarize the macOS app for the guided installer
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/ci/notarize-macos.sh "$MACOS_RELEASE_DIR/app/FolderSpan.app"
+
+      - name: Build Developer ID signed guided DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          FOLDERSPAN_INSTALLER_SIGN=true \
+          FOLDERSPAN_INSTALLER_SIGN_IDENTITY="$MACOS_SIGNING_IDENTITY" \
+          FOLDERSPAN_INSTALLER_SIGN_KEYCHAIN="$APPLE_KEYCHAIN" \
+            bash app/desktopApp/installer/package-dmg.sh "$MACOS_RELEASE_DIR/app/FolderSpan.app" \
+              "$MACOS_RELEASE_DIR/dmg/FolderSpan-$version.dmg" "$version"
+
+      - name: Notarize and staple macOS DMG and PKG
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/ci/notarize-macos.sh "$MACOS_RELEASE_DIR"
+
+      - name: Clean up Developer ID keychain
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/ci/apple-keychain.sh cleanup
 
       - name: Build Flatpak bundle
         if: runner.os == 'Linux'
