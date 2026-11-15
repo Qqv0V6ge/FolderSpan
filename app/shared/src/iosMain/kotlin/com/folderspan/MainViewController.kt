@@ -6,6 +6,7 @@ import com.folderspan.di.initKoin
 import com.folderspan.service.http.server.startBackgroundShareServices
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.utils.LogKit
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.installAppLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
