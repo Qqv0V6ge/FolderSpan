@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version=$1
+edition=$1
+version=$2
+name=FolderSpan
+if [[ "$edition" == pro ]]; then
+  name=FolderSpan-Pro
+fi
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 appdir="$work/FolderSpan.AppDir"
-output="release-artifacts/linux-channel/FolderSpan-${version}-x86_64.AppImage"
+output="release-artifacts/linux-channel/$name-${version}-x86_64.AppImage"
 
 mkdir -p "$appdir/usr/bin" "$(dirname "$output")"
 cp -a app/desktopApp/build/compose/binaries/main-release/app/FolderSpan/. "$appdir/"
 install -m755 packaging/appimage/AppRun "$appdir/AppRun"
-cp packaging/linux/folderspan.desktop "$appdir/"
+sed "s/^Name=FolderSpan$/Name=${name//-/ }/" packaging/linux/folderspan.desktop > "$appdir/folderspan.desktop"
 cp "$appdir/lib/FolderSpan.png" "$appdir/folderspan.png"
 ln -s ../../bin/FolderSpan "$appdir/usr/bin/folderspan"
 test -x "$appdir/bin/FolderSpan"

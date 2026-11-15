@@ -3,6 +3,9 @@ name: Upload Pro Apple builds
 on:
   workflow_call:
     inputs:
+      edition:
+        type: string
+        default: pro
       version:
         required: true
         type: string
@@ -72,12 +75,12 @@ permissions:
 
 jobs:
   upload:
-    name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (Pro)
+    name: ${{ matrix.platform == 'ios' && 'iOS' || 'macOS' }} App Store (${{ inputs.edition == 'no-pro' && 'no-pro' || 'Pro' }})
     # The iOS Kotlin/Native release linker needs more heap than the 7 GB arm64 runner can spare.
     runs-on: ${{ matrix.platform == 'ios' && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 120
     concurrency:
-      group: apple-store-pro-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
+      group: apple-store-${{ inputs.edition || 'pro' }}-${{ inputs.version }}-${{ inputs.build_number }}-${{ matrix.platform }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
@@ -85,14 +88,19 @@ jobs:
         platform: ${{ inputs.platform == 'both' && fromJSON('["ios", "macos"]') || fromJSON(format('["{0}"]', inputs.platform || 'ios')) }}
     env:
       APPLE_PLATFORM: ${{ matrix.platform }}
+      APPLE_EDITION: ${{ inputs.edition || 'pro' }}
       APPLE_VERSION: ${{ inputs.version }}
       APPLE_BUILD_NUMBER: ${{ inputs.build_number }}
-      ORG_GRADLE_PROJECT_includeProMain: "true"
+      ORG_GRADLE_PROJECT_includeProMain: ${{ (inputs.edition || 'pro') == 'pro' }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release
     steps:
       - name: Validate Apple version and build number
         shell: bash
         run: |
+          if [[ "$APPLE_EDITION" != pro && "$APPLE_EDITION" != no-pro ]]; then
+            echo '::error::Choose pro or no-pro for the Apple build.'
+            exit 1
+          fi
           if [[ ! "$APPLE_VERSION" =~ ^[1-9][0-9]*\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo '::error::Use an Apple version such as 1.1 or 1.1.0.'
             exit 1
@@ -108,9 +116,9 @@ jobs:
           echo "ORG_GRADLE_PROJECT_releaseVersion=$gradle_version" >> "$GITHUB_ENV"
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.PROMAIN_REPOSITORY_TOKEN }}
+          token: ${{ (inputs.edition || 'pro') == 'pro' && secrets.PROMAIN_REPOSITORY_TOKEN || github.token }}
           persist-credentials: false
-          submodules: true
+          submodules: ${{ (inputs.edition || 'pro') == 'pro' }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
