@@ -90,8 +90,10 @@ print(f'  2) CCDD "Developer ID Installer: Fixture ({installer_team})"')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
 
-    def notarize(self, status, *, app=False, with_pkg=True, signed=True):
+    def notarize(self, status, *, app=False, with_pkg=True, signed=True, stapler_statuses=None):
         self.env["NOTARY_STATUS"] = status
+        self.env["STAPLER_STATUSES"] = json.dumps(stapler_statuses or {})
+        self.stub("sleep", "")
         self.env["APPLE_SIGNING_DIR"] = str(self.root)
         if signed:
             self.stub("codesign", """
@@ -112,11 +114,19 @@ import pathlib, sys
 pathlib.Path(sys.argv[-1]).touch()
 """)
         self.stub("xcrun", '''
-import json, os, sys
-with open(os.environ["CALL_LOG"], "a") as log:
-    log.write(json.dumps(sys.argv[1:]) + "\\n")
-if sys.argv[1:3] == ["notarytool", "submit"]:
+import json, os, pathlib, sys
+calls = pathlib.Path(os.environ["CALL_LOG"])
+prior = calls.read_text().splitlines() if calls.exists() else []
+args = sys.argv[1:]
+with calls.open("a") as log:
+    log.write(json.dumps(args) + "\\n")
+if args[:2] == ["notarytool", "submit"]:
     print(json.dumps({"status": os.environ["NOTARY_STATUS"], "id": "fixture-id"}))
+elif args[0] == "stapler":
+    statuses = json.loads(os.environ["STAPLER_STATUSES"]).get(args[1], [])
+    previous_attempts = sum(json.loads(line) == args for line in prior)
+    if previous_attempts < len(statuses):
+        sys.exit(statuses[previous_attempts])
 ''')
         if app:
             packages = self.root / "FolderSpan.app"
@@ -147,6 +157,25 @@ if sys.argv[1:3] == ["notarytool", "submit"]:
                          [["stapler", operation, str(self.root / "FolderSpan.app")]
                           for operation in ("staple", "validate")])
         self.assertFalse(Path(calls[0][2]).exists())
+
+    def test_cloudkit_disconnect_retries_validation_without_resubmitting(self):
+        result, calls = self.notarize("Accepted", app=True, stapler_statuses={"validate": [68, 0]})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[:2] for call in calls], [
+            ["notarytool", "submit"], ["stapler", "staple"],
+            ["stapler", "validate"], ["stapler", "validate"],
+        ])
+
+    def test_persistent_cloudkit_error_fails_after_bounded_attempts(self):
+        result, calls = self.notarize("Accepted", app=True, stapler_statuses={"staple": [68] * 4})
+        self.assertEqual(result.returncode, 68, result.stderr)
+        self.assertEqual([call[:2] for call in calls[1:]], [["stapler", "staple"]] * 4)
+
+    def test_invalid_ticket_is_not_retried(self):
+        result, calls = self.notarize("Accepted", app=True, stapler_statuses={"validate": [65]})
+        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertEqual([call[:2] for call in calls[1:]],
+                         [["stapler", "staple"], ["stapler", "validate"]])
 
     def test_missing_package_format_fails_before_submission(self):
         result, calls = self.notarize("Accepted", with_pkg=False)
