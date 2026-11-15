@@ -340,14 +340,7 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          : "${APPLE_TEAM_ID:?缺少 APPLE_TEAM_ID}"
-          identities="$(security find-identity -v -p basic "$APPLE_KEYCHAIN")"
-          identity="$(sed -nE 's/.*"Developer ID Application: ([^"]+)"$/\1/p' <<< "$identities")"
-          if [[ "$identity" != *" ($APPLE_TEAM_ID)" || "$identity" == *$'\n'* ||
-            "$identities" != *"\"Developer ID Installer: $identity\""* ]]; then
-            echo "::error::Expected matching Developer ID Application and Installer identities for the configured Apple team."
-            exit 1
-          fi
+          identity="$(bash scripts/ci/apple-keychain.sh developer-id-identity)"
           echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
           ./gradlew --no-daemon :app:desktopApp:createReleaseDistributable :app:desktopApp:packageReleasePkg \
             "-Dorg.gradle.jvmargs=-Xmx3g" "-Pkotlin.daemon.jvmargs=-Xmx2g" --stacktrace \

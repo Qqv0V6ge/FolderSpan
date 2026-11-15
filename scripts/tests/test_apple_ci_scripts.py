@@ -74,6 +74,22 @@ elif args[0] == "import" and os.environ.get("FAIL_IMPORT"):
         self.assertEqual(self.run_script("apple-keychain.sh", "cleanup").returncode, 0)
         self.assertFalse((self.root / "folderspan-apple-signing").exists())
 
+    def test_developer_id_requires_two_matching_identities_from_the_configured_team(self):
+        self.stub("security", """
+import os
+team = os.environ["APPLE_TEAM_ID"]
+installer_team = os.environ.get("INSTALLER_TEAM", team)
+print(f'  1) AABB "Developer ID Application: Fixture ({team})"')
+print(f'  2) CCDD "Developer ID Installer: Fixture ({installer_team})"')
+""")
+        result = self.run_script("apple-keychain.sh", "developer-id-identity")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), f'Fixture ({self.env["APPLE_TEAM_ID"]})')
+        self.env["INSTALLER_TEAM"] = "OTHER12345"
+        result = self.run_script("apple-keychain.sh", "developer-id-identity")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+
     def notarize(self, status, *, app=False, with_pkg=True, signed=True):
         self.env["NOTARY_STATUS"] = status
         self.env["APPLE_SIGNING_DIR"] = str(self.root)

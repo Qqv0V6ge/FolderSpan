@@ -314,7 +314,7 @@ compose.desktop {
                         runtimeProvisioningProfile.set(file(it))
                     }
                 } else if (signingEnabled.get()) {
-                    val directEntitlements = packagingResourcesDir.file("developer-id-entitlements.plist")
+                    val directEntitlements = rootProject.layout.projectDirectory.file("packaging/macos/developer-id-entitlements.plist")
                     entitlementsFile.set(directEntitlements)
                     runtimeEntitlementsFile.set(directEntitlements)
                 }

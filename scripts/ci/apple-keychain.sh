@@ -28,6 +28,17 @@ subprocess.run(["security", "list-keychains", "-d", "user", "-s", sys.argv[2], *
 PY
     rm -f "$signing_dir/certificates.p12"
     ;;
+  developer-id-identity)
+    : "${APPLE_TEAM_ID:?缺少 APPLE_TEAM_ID}"
+    identities="$(security find-identity -v -p basic "$keychain")"
+    identity="$(sed -nE 's/.*"Developer ID Application: ([^"]+)"$/\1/p' <<< "$identities")"
+    if [[ "$identity" != *" ($APPLE_TEAM_ID)" || "$identity" == *$'\n'* ||
+      "$identities" != *"\"Developer ID Installer: $identity\""* ]]; then
+      echo "::error::Expected matching Developer ID Application and Installer identities for the configured Apple team." >&2
+      exit 1
+    fi
+    printf '%s\n' "$identity"
+    ;;
   cleanup)
     [[ -d "$signing_dir" ]] || exit 0
     cleanup_status=0
@@ -48,5 +59,5 @@ PY
     rm -rf -- "$signing_dir"
     exit "$cleanup_status"
     ;;
-  *) echo "Usage: bash apple-keychain.sh setup|cleanup" >&2; exit 2 ;;
+  *) echo "Usage: bash apple-keychain.sh setup|developer-id-identity|cleanup" >&2; exit 2 ;;
 esac
