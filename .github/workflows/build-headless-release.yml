@@ -142,15 +142,20 @@ jobs:
             paths: app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip
           - os: macos-15-intel
             label: macos-x64
-            tasks: :app:headlessRuntime:packageReleaseDmg
-            paths: app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+            tasks: :app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
           - os: macos-15
             label: macos-arm64
-            tasks: :app:headlessRuntime:packageReleaseDmg
-            paths: app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+            tasks: :app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg
+            paths: |
+              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
+              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
     env:
       ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
+      MACOS_RELEASE_DIR: app/headlessRuntime/build/compose/binaries/main-release
       ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release
       NODE_OPTIONS: --max-old-space-size=8192
@@ -189,12 +194,56 @@ jobs:
           echo "ORG_GRADLE_PROJECT_runtimeWebUiArchive=${archives[0]}" >> "$GITHUB_ENV"
 
       - name: Build runtime distribution
+        if: runner.os != 'macOS'
         shell: bash
         run: >-
           ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }}
           "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
           "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
+
+      - name: Import Developer ID certificates
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.MACOS_DIRECT_CERTIFICATES_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DIRECT_CERTIFICATES_PASSWORD }}
+        run: bash scripts/ci/apple-keychain.sh setup
+
+      - name: Build Developer ID signed runtime packages
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          identity="$(bash scripts/ci/apple-keychain.sh developer-id-identity)"
+          ./gradlew --no-daemon --max-workers=1 ${{ matrix.platform.tasks }} \
+            "-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" "-Pkotlin.daemon.jvmargs=-Xmx2g" --stacktrace \
+            -Pcompose.desktop.mac.sign=true "-Pcompose.desktop.mac.signing.identity=$identity" \
+            "-Pcompose.desktop.mac.signing.keychain=$APPLE_KEYCHAIN"
+          codesign --verify --deep --strict "$MACOS_RELEASE_DIR/app/FolderSpan-Runtime.app"
+          shopt -s nullglob
+          dmgs=("$MACOS_RELEASE_DIR"/dmg/*.dmg)
+          if (( ${#dmgs[@]} != 1 )); then
+            echo "::error::Expected exactly one macOS runtime DMG."
+            exit 1
+          fi
+          codesign --force --timestamp --identifier com.folderspan.runtime.dmg \
+            --sign "Developer ID Application: $identity" --keychain "$APPLE_KEYCHAIN" "${dmgs[0]}"
+
+      - name: Notarize and staple runtime DMG and PKG
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/ci/notarize-macos.sh "$MACOS_RELEASE_DIR"
+
+      - name: Clean up Developer ID keychain
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/ci/apple-keychain.sh cleanup
 
       - name: Package Windows ARM64 archive
         if: matrix.platform.label == 'windows-arm64'
@@ -208,6 +257,7 @@ jobs:
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-windows-arm64.zip" -Force
 
       - name: Verify single platform package
+        if: runner.os != 'macOS'
         shell: bash
         env:
           PACKAGE_PATH: ${{ matrix.platform.paths }}

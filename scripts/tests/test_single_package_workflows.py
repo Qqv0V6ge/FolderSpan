@@ -34,7 +34,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                 self.assertNotIn("packageReleaseDistributionForCurrentOS", text)
                 self.assertNotIn("Build Flatpak", text)
 
-    def test_each_platform_selects_one_matching_packaging_task_and_output(self):
+    def test_each_platform_selects_matching_packaging_tasks_and_outputs(self):
         entries = []
         for path in WORKFLOWS.glob("build-*.yml"):
             if path.name != "build-release.yml":
@@ -49,28 +49,33 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                 module = re.search(r":app:(desktopApp|headlessRuntime):", task).group(1)
                 mode = "Release" if "/main-release/" in output else ""
                 if label.startswith("linux-"):
-                    selected, extension = f"package{mode}TarGz", ".tar.gz"
+                    selected = [(f"package{mode}TarGz", ".tar.gz")]
                 elif label == "windows-x64":
-                    selected, extension = f"package{mode}Msi", ".msi"
+                    selected = [(f"package{mode}Msi", ".msi")]
                 elif label == "windows-arm64":
-                    selected, extension = f"create{mode}Distributable", ".zip"
+                    selected = [(f"create{mode}Distributable", ".zip")]
                 elif label.startswith("macos-"):
-                    selected, extension = f"package{mode}Dmg", ".dmg"
+                    selected = [(f"package{mode}Dmg", ".dmg")]
+                    if mode == "Release" and module == "headlessRuntime":
+                        selected.append(("packageReleasePkg", ".pkg"))
                 else:
-                    self.fail(f"未指定单包策略的平台：{label}")
-                self.assertEqual(task, f":app:{module}:{selected}")
-                self.assertTrue(output.startswith(f"app/{module}/build/compose/binaries/"))
-                self.assertTrue(output.endswith(extension))
-                self.assertEqual(len(output.splitlines()), 1)
+                    self.fail(f"未指定打包策略的平台：{label}")
+                self.assertEqual(task.split(), [f":app:{module}:{name}" for name, _ in selected])
+                outputs = output.splitlines()
+                self.assertEqual(len(outputs), len(selected))
+                for pattern, (_, extension) in zip(outputs, selected):
+                    self.assertTrue(pattern.startswith(f"app/{module}/build/compose/binaries/"))
+                    self.assertTrue(pattern.endswith(extension))
 
     @staticmethod
     def read_static_package_entries(path):
         for block in re.split(r"^          - os: ", path.read_text(), flags=re.M)[1:]:
-            if re.search(r"^            tasks: ", block, re.M):
-                yield {
-                    key: re.search(rf"^            {key}: (.+)$", block, re.M).group(1)
-                    for key in ("label", "paths", "tasks")
-                }
+            tasks = re.search(r"^            tasks: (.+)$", block, re.M)
+            if tasks:
+                label = re.search(r"^            label: (.+)$", block, re.M)
+                paths = re.search(r"^            paths: (.*)\n((?: {14}[^\n]+\n)*)", block, re.M)
+                output = textwrap.dedent(paths[2]).strip() if paths[1] == "|" else paths[1]
+                yield {"label": label[1], "paths": output, "tasks": tasks[1]}
 
     def test_previews_only_dispatch_manually_and_filter_every_selectable_target(self):
         platforms = ("linux", "windows", "macos")

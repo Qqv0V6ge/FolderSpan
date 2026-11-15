@@ -156,6 +156,22 @@ compose.desktop {
                 appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
             }
             modules("java.sql", "java.net.http", "java.security.jgss", "java.rmi", "java.management")
+
+            macOS {
+                val signingEnabled = providers.gradleProperty("compose.desktop.mac.sign")
+                    .map(String::toBoolean).orElse(false)
+                if (signingEnabled.get()) {
+                    bundleID = runtimePackageName
+                    val entitlements = rootProject.layout.projectDirectory.file("packaging/macos/developer-id-entitlements.plist")
+                    entitlementsFile.set(entitlements)
+                    runtimeEntitlementsFile.set(entitlements)
+                }
+                signing {
+                    sign.set(signingEnabled)
+                    identity.set(providers.gradleProperty("compose.desktop.mac.signing.identity").orNull)
+                    keychain.set(providers.gradleProperty("compose.desktop.mac.signing.keychain").orNull)
+                }
+            }
         }
         buildTypes {
             release {
