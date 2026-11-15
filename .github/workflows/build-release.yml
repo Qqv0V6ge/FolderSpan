@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro]
+        edition: [pro, no-pro]
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -107,24 +107,38 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
           echo "ANDROID_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
 
+      - name: Build signed release AAB
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          ./gradlew --no-daemon :app:androidApp:bundleRelease
+          -PandroidEnableAbiSplits=false
+          --stacktrace
+
+      - name: Stage release AAB
+        shell: bash
+        run: |
+          mkdir -p release-artifacts/android
+          cp app/androidApp/build/outputs/bundle/release/*.aab release-artifacts/android/
+
       - name: Build signed release APKs
         env:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon :app:androidApp:assembleRelease --stacktrace
+        run: ./gradlew --no-daemon :app:androidApp:clean :app:androidApp:assembleRelease --stacktrace
 
       - name: Stage release APKs
         shell: bash
-        run: |
-          mkdir -p release-artifacts/android
-          cp app/androidApp/build/outputs/apk/release/*.apk release-artifacts/android/
+        run: cp app/androidApp/build/outputs/apk/release/*.apk release-artifacts/android/
 
       - name: Upload Android release packages
         uses: actions/upload-artifact@v7
         with:
           name: release-android-${{ matrix.edition }}
-          path: release-artifacts/android/*.apk
+          path: release-artifacts/android/*
           if-no-files-found: error
           retention-days: 30
 
@@ -160,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro]
+        edition: [pro, no-pro]
         platform:
           - label: js
             target: js
@@ -214,20 +228,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [pro]
+        edition: [pro, no-pro]
         platform:
           - os: ubuntu-24.04
             label: linux-x64
-            tasks: :app:desktopApp:packageReleaseTarGz
-            paths: app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/deb/*.deb
+              app/desktopApp/build/compose/binaries/main-release/rpm/*.rpm
+              app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
+              app/desktopApp/build/compose/binaries/main-release/flatpak/*.flatpak
           - os: ubuntu-24.04-arm
             label: linux-arm64
-            tasks: :app:desktopApp:packageReleaseTarGz
-            paths: app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS :app:desktopApp:packageReleaseTarGz
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/deb/*.deb
+              app/desktopApp/build/compose/binaries/main-release/rpm/*.rpm
+              app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz
+              app/desktopApp/build/compose/binaries/main-release/flatpak/*.flatpak
           - os: windows-2025
             label: windows-x64
-            tasks: :app:desktopApp:packageReleaseMsi
-            paths: app/desktopApp/build/compose/binaries/main-release/msi/*.msi
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/msi/*.msi
+              app/desktopApp/build/compose/binaries/main-release/exe/*.exe
           - os: windows-11-arm
             label: windows-arm64
             java_distribution: microsoft
@@ -235,12 +259,16 @@ jobs:
             paths: app/desktopApp/build/compose/binaries/main-release/zip/*.zip
           - os: macos-15-intel
             label: macos-x64
-            tasks: :app:desktopApp:packageReleaseDmg
-            paths: app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+              app/desktopApp/build/compose/binaries/main-release/pkg/*.pkg
           - os: macos-15
             label: macos-arm64
-            tasks: :app:desktopApp:packageReleaseDmg
-            paths: app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+            tasks: :app:desktopApp:packageReleaseDistributionForCurrentOS
+            paths: |
+              app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+              app/desktopApp/build/compose/binaries/main-release/pkg/*.pkg
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -256,6 +284,31 @@ jobs:
           distribution: ${{ matrix.platform.java_distribution || 'temurin' }}
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          packages=(
+            appstream
+            desktop-file-utils
+            flatpak
+            flatpak-builder
+            fakeroot
+            rpm
+          )
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Install Flatpak SDK
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          flatpak remote-add --user --if-not-exists \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub \
+            org.freedesktop.Platform//25.08 \
+            org.freedesktop.Sdk//25.08
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
@@ -267,6 +320,46 @@ jobs:
           "-Pkotlin.daemon.jvmargs=-Xmx2g"
           --stacktrace
 
+      - name: Build Flatpak bundle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          release_date="$(date -u +%F)"
+          metainfo="packaging/flatpak/com.folderspan.FolderSpan.metainfo.xml"
+          manifest="packaging/flatpak/com.folderspan.FolderSpan.yml"
+          # The public metadata describes no-pro; retain Pro's previous license scope.
+          if [[ "$ORG_GRADLE_PROJECT_includeProMain" == "true" ]]; then
+            sed -i -E \
+              's#<project_license>[^<]+</project_license>#<project_license>LicenseRef-proprietary</project_license>#' \
+              "$metainfo"
+          fi
+          sed -i -E \
+            's#<release version="[^"]+" date="[^"]+" */>#<release version="'"$version"'" date="'"$release_date"'" />#' \
+            "$metainfo"
+
+          desktop-file-validate \
+            packaging/flatpak/com.folderspan.FolderSpan.desktop
+          appstreamcli validate --no-net "$metainfo"
+
+          flatpak_builder_dir="$RUNNER_TEMP/folderspan-flatpak-build"
+          flatpak_repo_dir="$RUNNER_TEMP/folderspan-flatpak-repo"
+          flatpak_output_dir="app/desktopApp/build/compose/binaries/main-release/flatpak"
+          mkdir -p "$flatpak_output_dir"
+
+          flatpak-builder --user --force-clean \
+            --repo="$flatpak_repo_dir" \
+            "$flatpak_builder_dir" \
+            "$manifest"
+
+          flatpak_arch="$(flatpak --default-arch)"
+          flatpak build-bundle \
+            --arch="$flatpak_arch" \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            "$flatpak_repo_dir" \
+            "$flatpak_output_dir/FolderSpan-${version}-${flatpak_arch}.flatpak" \
+            com.folderspan.FolderSpan
+
       - name: Package Windows ARM64 portable archive
         if: matrix.platform.label == 'windows-arm64'
         shell: pwsh
@@ -277,24 +370,95 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-windows-arm64.zip" -Force
 
-      - name: Verify single platform package
+      - name: Verify desktop package formats
         shell: bash
         env:
-          PACKAGE_PATH: ${{ matrix.platform.paths }}
+          PACKAGE_PATHS: ${{ matrix.platform.paths }}
         run: |
           shopt -s nullglob
-          # shellcheck disable=SC2206
-          packages=( $PACKAGE_PATH )
-          if (( ${#packages[@]} != 1 )) || [[ ! -f "${packages[0]}" ]]; then
-            echo "::error::Expected exactly one platform package; found ${#packages[@]}."
-            exit 1
-          fi
+          while IFS= read -r pattern; do
+            [[ -n "$pattern" ]] || continue
+            # shellcheck disable=SC2206
+            packages=( $pattern )
+            if (( ${#packages[@]} != 1 )) || [[ ! -s "${packages[0]}" ]]; then
+              echo "::error::Expected exactly one non-empty package matching $pattern."
+              exit 1
+            fi
+          done <<< "$PACKAGE_PATHS"
 
       - name: Upload Desktop packages
         uses: actions/upload-artifact@v7
         with:
           name: release-desktop-${{ matrix.platform.label }}-${{ matrix.edition }}
           path: ${{ matrix.platform.paths }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build ordinary-edition AppImage
+        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        shell: bash
+        run: bash scripts/ci/package-release-appimage.sh "${ORG_GRADLE_PROJECT_releaseVersion#v}"
+
+      - name: Prepare strict Snap from the ordinary-edition app image
+        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        shell: bash
+        run: |
+          project=build/release-snap
+          mkdir -p "$project/local/application"
+          cp -a app/desktopApp/build/compose/binaries/main-release/app/FolderSpan/. "$project/local/application/"
+          cp packaging/linux/folderspan.desktop "$project/local/"
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          sed -E \
+            -e "s/^version:.*/version: '$version'/" \
+            -e 's#^    source:.*#    source: local/application#' \
+            -e '/^    source-checksum:/d' \
+            -e '/^    build-packages:/,/^    stage-packages:/{ /^    stage-packages:/!d; }' \
+            packaging/snap/snapcraft.yaml > "$project/snapcraft.yaml"
+
+      - name: Build ordinary-edition strict Snap
+        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        uses: snapcore/action-build@v1
+        id: snap
+        with:
+          path: build/release-snap
+
+      - name: Stage Linux channel packages
+        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        shell: bash
+        env:
+          SNAP_PACKAGE: ${{ steps.snap.outputs.snap }}
+        run: |
+          version="${ORG_GRADLE_PROJECT_releaseVersion#v}"
+          cp "$SNAP_PACKAGE" "release-artifacts/linux-channel/folderspan-$version-amd64-candidate.snap"
+
+      - name: Upload Linux channel packages
+        if: matrix.platform.label == 'linux-x64' && matrix.edition == 'no-pro'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-linux-channel-no-pro
+          path: release-artifacts/linux-channel/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build ordinary-edition Chocolatey wrapper
+        if: matrix.platform.label == 'windows-x64' && matrix.edition == 'no-pro'
+        shell: pwsh
+        run: |
+          $version = $env:ORG_GRADLE_PROJECT_releaseVersion -replace '^v', ''
+          $msi = @(Get-ChildItem app/desktopApp/build/compose/binaries/main-release/msi/*.msi)
+          if ($msi.Count -ne 1) { throw 'Expected exactly one MSI.' }
+          python scripts/ci/prepare-release-channel-recipes.py chocolatey $version ($msi[0].FullName) build/release-chocolatey
+          if ($LASTEXITCODE -ne 0) { throw 'Preparing Chocolatey recipes failed.' }
+          New-Item -ItemType Directory -Force -Path release-artifacts/chocolatey | Out-Null
+          choco pack build/release-chocolatey/folderspan.nuspec --output-directory release-artifacts/chocolatey
+          if ($LASTEXITCODE -ne 0) { throw 'Chocolatey packaging failed.' }
+
+      - name: Upload Chocolatey package
+        if: matrix.platform.label == 'windows-x64' && matrix.edition == 'no-pro'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-chocolatey-no-pro
+          path: release-artifacts/chocolatey/*.nupkg
           if-no-files-found: error
           retention-days: 30
 
@@ -342,6 +506,20 @@ jobs:
           pattern: release-*
           path: artifacts
 
+      - name: Install MSI metadata reader
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes msitools
+
+      - name: Generate channel recipes from built packages
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p artifacts/release-channel-recipes
+          python3 scripts/ci/prepare-release-channel-recipes.py recipes \
+            "$RELEASE_VERSION" "$GITHUB_SHA" "$ORG_GRADLE_PROJECT_androidVersionCode" \
+            artifacts artifacts/release-channel-recipes
+
       - name: Prepare release assets and checksums
         shell: bash
         run: |
@@ -358,7 +536,14 @@ jobs:
             relative="${source#artifacts/}"
             artifact_name="${relative%%/*}"
             file_name="$(basename "$source")"
-            cp "$source" "release-assets/${artifact_name#release-}-$file_name"
+            case "$artifact_name" in
+              release-linux-channel-no-pro|release-chocolatey-no-pro|release-channel-recipes)
+                cp "$source" "release-assets/$file_name"
+                ;;
+              *)
+                cp "$source" "release-assets/${artifact_name#release-}-$file_name"
+                ;;
+            esac
             ((asset_count += 1))
           done < <(find artifacts -type f -print0)
 
@@ -379,12 +564,12 @@ jobs:
               echo "::error::Refusing to overwrite an already published release."
               exit 1
             fi
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            # An unpublished draft can be rebuilt from a newer commit before its tag exists.
             if ! git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" >/dev/null 2>&1 &&
               [[ "$target_commit" != "$GITHUB_SHA" ]]; then
-              echo "::error::Existing draft belongs to another commit. Choose a new version or rerun that commit."
-              exit 1
+              gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA"
             fi
-            gh release upload "$RELEASE_TAG" release-assets/* --clobber
           else
             gh release create "$RELEASE_TAG" release-assets/* \
               --draft --target "$GITHUB_SHA" \

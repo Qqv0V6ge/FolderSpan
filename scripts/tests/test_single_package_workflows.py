@@ -21,7 +21,9 @@ def select_preview(preview, target):
 
 class SinglePackageWorkflowsTest(unittest.TestCase):
     def test_build_and_quality_matrices_only_include_pro(self):
-        paths = list(WORKFLOWS.glob("build-*.yml")) + [WORKFLOWS / "shared-quality.yml"]
+        paths = [
+            path for path in WORKFLOWS.glob("build-*.yml") if path.name != "build-release.yml"
+        ] + [WORKFLOWS / "shared-quality.yml"]
         for path in paths:
             with self.subTest(workflow=path.name):
                 text = path.read_text()
@@ -35,11 +37,12 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
     def test_each_platform_selects_one_matching_packaging_task_and_output(self):
         entries = []
         for path in WORKFLOWS.glob("build-*.yml"):
-            entries.extend(self.read_static_package_entries(path))
+            if path.name != "build-release.yml":
+                entries.extend(self.read_static_package_entries(path))
         for preview in ("app", "headless"):
             entries.extend(select_preview(preview, "all")["native"])
 
-        self.assertEqual(len(entries), 24)
+        self.assertEqual(len(entries), 18)
         for entry in entries:
             label, output, task = entry["label"], entry["paths"], entry["tasks"]
             with self.subTest(platform=label, output=output):
@@ -123,14 +126,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                         with self.subTest(workflow=path.name, packages=count):
                             self.assertEqual(result.returncode == 0, count == 1, result.stdout + result.stderr)
                 guards += 1
-        self.assertEqual(guards, 4)
-
-    def test_android_release_only_builds_and_uploads_apk(self):
-        text = (WORKFLOWS / "build-release.yml").read_text()
-        self.assertIn(":app:androidApp:assembleRelease", text)
-        self.assertNotIn(":app:androidApp:bundleRelease", text)
-        self.assertIn("path: release-artifacts/android/*.apk", text)
-        self.assertIn("mkdir -p release-artifacts/android", text)
+        self.assertEqual(guards, 3)
 
     def test_apple_store_builds_use_pro(self):
         release = (WORKFLOWS / "build-release.yml").read_text()

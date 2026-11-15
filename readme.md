@@ -60,17 +60,19 @@ FolderSpan 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台
 
 ## 下载与平台支持
 
-GitHub Actions 的后续预览和发布仅构建 **Pro**。前往 [GitHub Releases](https://github.com/Qqv0V6ge/FolderSpan/releases/latest)，按操作系统和处理器架构选择 Pro 安装包；公开源码仍可按下文命令自行构建普通版。
+常规发布提供 **Pro** 和普通版（`no-pro`）的 Android、桌面和 Web 包，iOS 提供 Pro 签名 IPA。前往 [GitHub Releases](https://github.com/Qqv0V6ge/FolderSpan/releases/latest)，按设备和用途选择下载。
 
 | 平台 / 使用方式 | 状态与选择建议 |
 | --- | --- |
-| Android | 已提供 APK，要求 Android 8.0（API 26）或更高版本。不确定架构时选择 `universal` APK。 |
-| Windows | 自动打包为 x64 MSI 和 ARM64 ZIP；ARM64 包解压后运行。 |
-| macOS | 自动打包为 Apple Silicon 与 Intel DMG，按芯片类型选择。 |
-| Linux | 自动打包为 x64 与 ARM64 TAR.GZ，按处理器架构选择。 |
+| Android | 提供 APK 和应用商店用的签名 AAB，要求 Android 8.0（API 26）或更高版本。不确定架构时选择 `universal` APK。 |
+| Windows | x64 提供 MSI 和 EXE，ARM64 提供解压即用的 ZIP。普通版 x64 另提供 Chocolatey 包。 |
+| macOS | Apple Silicon 和 Intel 均提供 DMG 与 PKG。 |
+| Linux | x64 和 ARM64 均提供 DEB、RPM、TAR.GZ 和 Flatpak。普通版 x64 另提供 AppImage 和 strict Snap 候选包。 |
 | Headless Runtime | 在独立的 `FolderSpan Headless` Release 中提供 Windows、macOS 和 Linux 的无窗口运行包，适合通过浏览器管理服务器或常开设备。首次使用推荐内置 JS 界面的 `headless-runtime-…-js-pro-…` 包。 |
 | Web | 已提供 JS 和 Wasm 前端包。独立部署后需要连接 Headless Runtime，管理该 Runtime 所在机器的文件。 |
 | iOS | 常规预览与正式发布提供面向 App Store Connect 的签名 IPA。设备上的测试安装通过 TestFlight。 |
+
+常规发布还包含当期 WinGet、Scoop、Chocolatey、AUR、Nix 与 F-Droid 配方压缩包。F-Droid 配方处于待审状态，各渠道配方可供独立验证。
 
 Headless Runtime 独立构建和发布，请在 [Releases 列表](https://github.com/Qqv0V6ge/FolderSpan/releases)中查找标签为 `headless-v版本号` 的 Release；常规应用使用 `v版本号`，两者的安装包与校验文件分开存放。Headless Release 也提供同版本的 JS / Wasm 前端包。
 
