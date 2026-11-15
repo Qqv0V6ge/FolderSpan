@@ -74,11 +74,27 @@ elif args[0] == "import" and os.environ.get("FAIL_IMPORT"):
         self.assertEqual(self.run_script("apple-keychain.sh", "cleanup").returncode, 0)
         self.assertFalse((self.root / "folderspan-apple-signing").exists())
 
-    def notarize(self, status):
+    def notarize(self, status, *, app=False, with_pkg=True, signed=True):
         self.env["NOTARY_STATUS"] = status
         self.env["APPLE_SIGNING_DIR"] = str(self.root)
-        self.stub("codesign", "")
-        self.stub("pkgutil", "")
+        if signed:
+            self.stub("codesign", """
+import os, sys
+if sys.argv[1] == "--display":
+    print("Authority=Developer ID Application: Fixture", file=sys.stderr)
+    print("TeamIdentifier=" + os.environ["APPLE_TEAM_ID"], file=sys.stderr)
+    print("Timestamp=fixture", file=sys.stderr)
+""")
+        else:
+            self.stub("codesign", "")
+        self.stub("pkgutil", """
+import os
+print(" 1. Developer ID Installer: Fixture (" + os.environ["APPLE_TEAM_ID"] + ")")
+""")
+        self.stub("ditto", """
+import pathlib, sys
+pathlib.Path(sys.argv[-1]).touch()
+""")
         self.stub("xcrun", '''
 import json, os, sys
 with open(os.environ["CALL_LOG"], "a") as log:
@@ -86,25 +102,52 @@ with open(os.environ["CALL_LOG"], "a") as log:
 if sys.argv[1:3] == ["notarytool", "submit"]:
     print(json.dumps({"status": os.environ["NOTARY_STATUS"], "id": "fixture-id"}))
 ''')
-        packages = self.root / "packages"
-        (packages / "dmg").mkdir(parents=True)
-        (packages / "pkg").mkdir()
-        (packages / "dmg/FolderSpan.dmg").touch()
-        (packages / "pkg/FolderSpan.pkg").touch()
+        if app:
+            packages = self.root / "FolderSpan.app"
+            packages.mkdir()
+        else:
+            packages = self.root / "packages"
+            (packages / "dmg").mkdir(parents=True)
+            (packages / "dmg/FolderSpan.dmg").touch()
+            if with_pkg:
+                (packages / "pkg").mkdir()
+                (packages / "pkg/FolderSpan.pkg").touch()
         result = self.run_script("notarize-macos.sh", str(packages))
-        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, calls
 
     def test_accepted_notarization_staples_and_validates_both_formats(self):
         result, calls = self.notarize("Accepted")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(sum(call[:2] == ["stapler", "staple"] for call in calls), 2)
-        self.assertEqual(sum(call[:2] == ["stapler", "validate"] for call in calls), 2)
+        for command in (["notarytool", "submit"], ["stapler", "staple"], ["stapler", "validate"]):
+            self.assertEqual([Path(call[2]).suffix for call in calls if call[:2] == command], [".dmg", ".pkg"])
+
+    def test_notarizes_app_archive_and_staples_the_app_before_packaging(self):
+        result, calls = self.notarize("Accepted", app=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[0][:2], ["notarytool", "submit"])
+        self.assertEqual(Path(calls[0][2]).name, "FolderSpan.zip")
+        self.assertEqual(calls[1:],
+                         [["stapler", operation, str(self.root / "FolderSpan.app")]
+                          for operation in ("staple", "validate")])
+        self.assertFalse(Path(calls[0][2]).exists())
+
+    def test_missing_package_format_fails_before_submission(self):
+        result, calls = self.notarize("Accepted", with_pkg=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(calls)
+
+    def test_unsigned_dmgs_are_not_submitted(self):
+        result, calls = self.notarize("Accepted", signed=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Developer ID Application", result.stderr)
+        self.assertFalse(calls)
 
     def test_invalid_notarization_fails_even_if_notarytool_exits_zero(self):
         result, calls = self.notarize("Invalid")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Apple 公证失败", result.stderr)
+        self.assertEqual(calls[-1][:3], ["notarytool", "log", "fixture-id"])
         self.assertFalse(any(call[0] == "stapler" for call in calls))
 
 
