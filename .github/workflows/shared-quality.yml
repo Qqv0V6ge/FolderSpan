@@ -61,9 +61,9 @@ jobs:
         if: runner.os == 'macOS'
         run: swift test --package-path app/desktopApp/installer
 
-      - name: Check single-package workflow contract
+      - name: Check packaging workflow contracts
         if: runner.os == 'Linux'
-        run: python3 -m unittest discover -s scripts/tests -p 'test_single_package_workflows.py'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*workflows.py'
 
       - name: Run JVM tests on Linux and macOS
         if: runner.os != 'Windows'

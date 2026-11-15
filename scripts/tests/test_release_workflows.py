@@ -1,14 +1,19 @@
 import fnmatch
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
+from zipfile import ZipFile
 
 
-WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS = ROOT / ".github" / "workflows"
 
 
 def step_script(workflow, name):
@@ -18,6 +23,119 @@ def step_script(workflow, name):
 
 
 class ReleaseWorkflowsTest(unittest.TestCase):
+    def test_application_release_restores_both_editions_and_platform_formats(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        self.assertEqual(re.findall(r"^        edition: (.*)$", workflow, re.M), ["[pro, no-pro]"] * 3)
+        self.assertIn(":app:androidApp:bundleRelease", workflow)
+        self.assertIn("-PandroidEnableAbiSplits=false", workflow)
+        self.assertIn("outputs/bundle/release/*.aab release-artifacts/android/", workflow)
+        self.assertIn("outputs/apk/release/*.apk release-artifacts/android/", workflow)
+        self.assertIn("path: release-artifacts/android/*", workflow)
+        desktop = workflow.split("\n  desktop:\n", 1)[1].split("\n    env:", 1)[0]
+        expected = {
+            "linux-x64": {".deb", ".rpm", ".tar.gz", ".flatpak"},
+            "linux-arm64": {".deb", ".rpm", ".tar.gz", ".flatpak"},
+            "windows-x64": {".msi", ".exe"},
+            "windows-arm64": {".zip"},
+            "macos-x64": {".dmg", ".pkg"},
+            "macos-arm64": {".dmg", ".pkg"},
+        }
+        for label, formats in expected.items():
+            with self.subTest(platform=label):
+                entry = desktop.split(f"label: {label}\n", 1)[1].split("          - os: ", 1)[0]
+                self.assertEqual(set(re.findall(r"\*\.(\w+(?:\.gz)?)$", entry, re.M)),
+                                 {extension[1:] for extension in formats})
+        for extra in ("release-linux-channel-no-pro", "release-chocolatey-no-pro", "release-channel-recipes"):
+            self.assertIn(extra, workflow)
+
+    def test_desktop_release_requires_every_format(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        script = step_script(workflow, "Verify desktop package formats")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for expected_success in (False, True):
+                (root / "package.deb").write_bytes(b"deb")
+                if expected_success:
+                    (root / "package.rpm").write_bytes(b"rpm")
+                result = subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", script],
+                    env=dict(os.environ, PACKAGE_PATHS=f"{root}/*.deb\n{root}/*.rpm"),
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode == 0, expected_success, result.stderr + result.stdout)
+
+    def test_channel_recipes_use_the_current_build_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for platform, name in (
+                ("windows-x64", "FolderSpan-1.2.3.msi"),
+                ("windows-arm64", "FolderSpan-1.2.3-windows-arm64.zip"),
+                ("linux-x64", "com.folderspan-1.2.3.tar.gz"),
+            ):
+                target = root / f"release-desktop-{platform}-no-pro" / name
+                target.parent.mkdir()
+                target.write_bytes(platform.encode())
+            msiinfo = root / "msiinfo"
+            msiinfo.write_text("#!/bin/sh\nprintf 'ProductCode\\t{PRODUCT}\\nUpgradeCode\\t{UPGRADE}\\n'\n")
+            msiinfo.chmod(0o755)
+            commit = "a" * 40
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts/ci/prepare-release-channel-recipes.py"),
+                 "recipes", "1.2.3", commit, "42", str(root), str(root)],
+                env=dict(os.environ, PATH=f"{root}{os.pathsep}{os.environ['PATH']}"), check=True,
+            )
+            with ZipFile(root / "FolderSpan-1.2.3-channel-recipes.zip") as bundle:
+                self.assertTrue({"aur/.SRCINFO", "aur/folderspan.desktop", "nix/package.nix"} <= set(bundle.namelist()))
+                installer = bundle.read("winget/FolderSpan.FolderSpan.installer.yaml").decode()
+                self.assertIn("releases/download/v1.2.3/", installer)
+                self.assertIn(hashlib.sha256(b"windows-x64").hexdigest().upper(), installer)
+                self.assertIn("{PRODUCT}", installer)
+                self.assertIn("{UPGRADE}", installer)
+                scoop = json.loads(bundle.read("scoop/bucket/folderspan.json"))
+                self.assertEqual(scoop["architecture"]["arm64"]["hash"], hashlib.sha256(b"windows-arm64").hexdigest())
+                fdroid = bundle.read("fdroid/metadata/com.folderspan.yml").decode()
+                self.assertIn("Disabled:", fdroid)
+                self.assertIn(f"commit: {commit}", fdroid)
+                self.assertIn("androidVersionCode=42", fdroid)
+                for recipe in ("aur/PKGBUILD", "aur/.SRCINFO", "nix/package.nix"):
+                    text = bundle.read(recipe).decode()
+                    self.assertIn(hashlib.sha256(b"linux-x64").hexdigest(), text)
+                    self.assertNotIn("THIRD_PARTY_NOTICES-2026-10-27", text)
+                subprocess.run(["bash", "-n"], input=bundle.read("aur/PKGBUILD"), check=True)
+
+    def test_application_rebuild_retargets_only_an_untagged_draft(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        script = step_script(workflow, "Create or update draft GitHub Release")
+        stub = """\
+git() { [[ "$EXISTING_TAG" == true ]]; }
+gh() {
+  if [[ "$1 $2" == "release view" && "$5" == "isDraft,targetCommitish" ]]; then
+    printf '%s\\t%s\\n' "$IS_DRAFT" old-commit
+    return
+  fi
+  printf '%s\\n' "$*" >> "$GH_CALL_LOG"
+}
+"""
+        for is_draft, tag_exists in (("true", "false"), ("true", "true"), ("false", "true")):
+            with self.subTest(draft=is_draft, tag=tag_exists), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "release-assets").mkdir()
+                (root / "release-assets/package").write_bytes(b"package")
+                calls = root / "calls"
+                result = subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", stub + script], cwd=root,
+                    capture_output=True, text=True,
+                    env=dict(os.environ, RELEASE_TAG="v1.2.3", GITHUB_SHA="new-commit", IS_DRAFT=is_draft,
+                             EXISTING_TAG=tag_exists, GH_CALL_LOG=str(calls),
+                             GITHUB_STEP_SUMMARY=str(root / "summary")),
+                )
+                self.assertEqual(result.returncode == 0, is_draft == "true", result.stderr + result.stdout)
+                if is_draft == "true":
+                    self.assertIn("release upload v1.2.3 release-assets/package --clobber", calls.read_text())
+                    self.assertEqual("release edit v1.2.3 --target new-commit" in calls.read_text(), tag_exists == "false")
+                else:
+                    self.assertFalse(calls.exists())
+
     def test_application_and_headless_builds_are_separate(self):
         for kind in ("release", "preview"):
             with self.subTest(kind=kind):
