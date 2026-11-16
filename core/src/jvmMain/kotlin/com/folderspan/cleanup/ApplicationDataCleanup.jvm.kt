@@ -3,6 +3,9 @@ package com.folderspan.cleanup
 import com.folderspan.permission.DesktopLoginStartupManager
 import com.folderspan.runtime.FolderSpanInstanceLock
 import com.folderspan.settings.DESKTOP_SECURE_SETTINGS_DIRECTORY
+import com.folderspan.settings.FileAesGcmSecretVault
+import com.folderspan.utils.SettingsUtils
+import com.folderspan.utils.LOG_CAPTURE_FILE_NAME
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
@@ -19,7 +22,7 @@ private val APPLICATION_DIRECTORY_NAMES = listOf(
     "sync-tasks",
 )
 
-private val APPLICATION_CACHE_DIRECTORY_NAMES = listOf(
+private val APPLICATION_CACHE_ENTRY_NAMES = listOf(
     "scanner_server_cache",
     "device_logs",
     "file-editor-recovery",
@@ -30,6 +33,9 @@ private val APPLICATION_CACHE_DIRECTORY_NAMES = listOf(
     "sync-stage",
     "editor-content",
     "pro_http_cache",
+    "mcp-file-staging",
+    "content-transfers",
+    LOG_CAPTURE_FILE_NAME,
 )
 
 actual object ApplicationDataCleanup {
@@ -55,7 +61,7 @@ actual object ApplicationDataCleanup {
         }
         requireAvailableApplicationDataCleanupCategories(categories, availableCategories)
         cleaner.requestCleanup(
-            homeDirectory = defaultDesktopCleanupEnvironment().homeDirectory,
+            applicationDataDirectory = resolveDesktopApplicationDataDirectory(),
             categories = categories,
         )
     }
@@ -65,7 +71,6 @@ actual object ApplicationDataCleanup {
 }
 
 internal data class DesktopCleanupEnvironment(
-    val homeDirectory: Path,
     val applicationDataDirectory: Path,
     val cacheDirectory: Path,
     val preferences: Preferences,
@@ -74,11 +79,11 @@ internal data class DesktopCleanupEnvironment(
 
 internal class DesktopApplicationDataCleaner {
     fun requestCleanup(
-        homeDirectory: Path,
+        applicationDataDirectory: Path,
         categories: Set<ApplicationDataCleanupCategory>,
     ): Result<Unit> = runCatching {
         require(categories.isNotEmpty()) { "At least one application data category must be selected" }
-        val marker = cleanupRequestPath(homeDirectory)
+        val marker = cleanupRequestPath(applicationDataDirectory)
         marker.parent?.let(Files::createDirectories)
         Files.writeString(
             marker,
@@ -90,7 +95,7 @@ internal class DesktopApplicationDataCleaner {
     }
 
     fun completePendingCleanup(environment: DesktopCleanupEnvironment): Result<Boolean> = runCatching {
-        val marker = cleanupRequestPath(environment.homeDirectory)
+        val marker = cleanupRequestPath(environment.applicationDataDirectory)
         if (!Files.exists(marker)) return@runCatching false
 
         val categories = decodeApplicationDataCleanupRequest(Files.readString(marker))
@@ -107,9 +112,14 @@ internal class DesktopApplicationDataCleaner {
         }
         if (ApplicationDataCleanupCategory.PreferencesAndAccount in categories) {
             clearFolderSpanPreferences(environment.preferences)
-            deleteRecursively(
-                environment.applicationDataDirectory.resolve(DESKTOP_SECURE_SETTINGS_DIRECTORY),
-            )
+            val vaultDirectory = environment.applicationDataDirectory.resolve(DESKTOP_SECURE_SETTINGS_DIRECTORY)
+            if (Files.isDirectory(vaultDirectory)) {
+                // Remaining certificates and database credentials still need their installation keys.
+                val retainedKeys = setOf(SettingsUtils.KEY_DEVICE_ID, SettingsUtils.KEY_DEVICE_TLS_PKCS12_PASSWORD,
+                    SettingsUtils.KEY_CRYPTO_KEY, SettingsUtils.KEY_DATA_ENCRYPTION_KEY_SYNC)
+                val vault = FileAesGcmSecretVault(vaultDirectory)
+                vault.keys().filterNot(retainedKeys::contains).forEach(vault::remove)
+            }
         }
         if (ApplicationDataCleanupCategory.LoginStartup in categories) {
             runCatching(environment.removeLoginStartup)
@@ -132,7 +142,7 @@ internal class DesktopApplicationDataCleaner {
                 }
             }
             if (ApplicationDataCleanupCategory.CacheAndLogs in categories) {
-                APPLICATION_CACHE_DIRECTORY_NAMES.forEach { name ->
+                APPLICATION_CACHE_ENTRY_NAMES.forEach { name ->
                     add(environment.cacheDirectory.resolve(name))
                 }
                 add(environment.applicationDataDirectory.resolve("pro_http_cache"))
@@ -163,10 +173,8 @@ fun resolveDesktopApplicationDataDirectory(
 }.toAbsolutePath().normalize()
 
 private fun defaultDesktopCleanupEnvironment(): DesktopCleanupEnvironment {
-    val homeDirectory = Paths.get(System.getProperty("user.home")).toAbsolutePath().normalize()
     return DesktopCleanupEnvironment(
-        homeDirectory = homeDirectory,
-        applicationDataDirectory = resolveDesktopApplicationDataDirectory(homeDirectory),
+        applicationDataDirectory = resolveDesktopApplicationDataDirectory(),
         cacheDirectory = resolveDesktopApplicationDataDirectory().resolve("cache"),
         preferences = Preferences.userRoot(),
         removeLoginStartup = {
@@ -177,8 +185,8 @@ private fun defaultDesktopCleanupEnvironment(): DesktopCleanupEnvironment {
     )
 }
 
-private fun cleanupRequestPath(homeDirectory: Path): Path =
-    homeDirectory.toAbsolutePath().normalize().resolve(CLEANUP_REQUEST_FILE)
+private fun cleanupRequestPath(applicationDataDirectory: Path): Path =
+    applicationDataDirectory.toAbsolutePath().normalize().resolve(CLEANUP_REQUEST_FILE)
 
 private fun clearFolderSpanPreferences(preferences: Preferences) {
     preferences.keys()

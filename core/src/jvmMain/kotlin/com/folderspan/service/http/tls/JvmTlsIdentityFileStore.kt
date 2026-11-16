@@ -3,7 +3,7 @@ package com.folderspan.service.http.tls
 import strings.AppStrings
 
 import com.folderspan.createSettings
-import com.folderspan.utils.PathUtils
+import com.folderspan.cleanup.resolveDesktopApplicationDataDirectory
 import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.restrictOwnerOnlyPath
 import java.io.File
@@ -13,7 +13,6 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.*
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -28,19 +27,9 @@ internal object DeviceTlsIdentityFileStore {
     }
 
     private fun defaultStore(): JvmTlsIdentityFileStore {
-        val directory = File(resolveAppDataDirectory(), "tls-identity")
+        val directory = resolveDesktopApplicationDataDirectory().resolve("tls-identity").toFile()
         val deviceId = createSettings().getString(SettingsUtils.KEY_DEVICE_ID, "")
         return openJvmTlsIdentityFileStore(directory, deviceId)
-    }
-
-    private fun resolveAppDataDirectory(): File {
-        val osName = System.getProperty("os.name").orEmpty().lowercase(Locale.US)
-        val home = PathUtils.getHomePath()
-        return when {
-            osName.contains("mac") -> File(home, "Library/Application Support/FolderSpan")
-            osName.contains("win") -> File(System.getenv("APPDATA") ?: home, "FolderSpan")
-            else -> File(home, ".local/share/FolderSpan")
-        }
     }
 
 }
