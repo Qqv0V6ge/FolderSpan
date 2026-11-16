@@ -29,6 +29,8 @@ jobs:
     env:
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release
+      # Headless JVM tests use the runtime without a bundled browser UI.
+      ORG_GRADLE_PROJECT_runtimeWebUi: none
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
