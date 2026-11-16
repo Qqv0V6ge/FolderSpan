@@ -1,4 +1,7 @@
 # Keep rules for project-specific reflection/dynamic loading can be added here when needed.
+# AppScreenRoute.routeKey 使用运行时类名；合并或重命名页面会把不同目的地当作重复导航。
+-keep,allowshrinking class * implements com.folderspan.ui.navigation.AppScreenRoute
+
 # Bouncy Castle 按类名加载注册类，也会拼接外部类名来注册 RSA、X.509 和 PKCS#12 等实现。
 -keep class org.bouncycastle.jcajce.provider.** { *; }
 
