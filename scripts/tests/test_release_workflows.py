@@ -150,6 +150,46 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 if edition == "pro":
                     self.assertNotIn("Apache-2.0", content)
 
+    def test_application_checks_remote_release_tag_before_packaging(self):
+        workflow = (WORKFLOWS / "build-release.yml").read_text()
+        prepare, remaining = workflow.split("\n  quality:\n", 1)
+        self.assertIn("Verify remote tag before packaging", prepare)
+        self.assertIn("    needs: prepare\n", remaining)
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/v') || inputs.create_draft", prepare)
+        script = step_script(prepare, "Verify remote tag before packaging")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+            git("init", "--quiet")
+            git("-c", "user.name=Test", "-c", "user.email=test@example.test",
+                "commit", "--quiet", "--allow-empty", "-m", "Release")
+            current_sha = git("rev-parse", "HEAD")
+            git("tag", "v1.2.3")
+            git("-c", "user.name=Test", "-c", "user.email=test@example.test",
+                "tag", "-a", "v1.2.4", "-m", "Annotated release")
+            git("remote", "add", "origin", str(root))
+            for tag, sha, should_succeed in (
+                ("v1.2.5", current_sha, True),
+                ("v1.2.3", current_sha, True),
+                ("v1.2.4", current_sha, True),
+                ("v1.2.3", "other-commit", False),
+                ("v1.2.4", "other-commit", False),
+            ):
+                with self.subTest(tag=tag, sha=sha):
+                    result = subprocess.run(
+                        ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root,
+                        capture_output=True, text=True,
+                        env=dict(os.environ, RELEASE_TAG=tag, GITHUB_SHA=sha),
+                    )
+                    self.assertEqual(result.returncode == 0, should_succeed, result.stderr + result.stdout)
+                    if not should_succeed:
+                        self.assertIn(tag, result.stdout)
+                        self.assertIn(current_sha, result.stdout)
+                        self.assertIn(sha, result.stdout)
+
     def test_application_rebuild_retargets_only_an_untagged_draft(self):
         workflow = (WORKFLOWS / "build-release.yml").read_text()
         script = step_script(workflow, "Create or update draft GitHub Release")
