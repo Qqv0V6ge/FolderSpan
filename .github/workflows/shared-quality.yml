@@ -65,6 +65,10 @@ jobs:
         if: runner.os == 'Linux'
         run: python3 -m unittest discover -s scripts/tests -p 'test_*workflows.py'
 
+      - name: Check Flatpak launcher isolation
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_flatpak_launcher.py'
+
       - name: Run JVM tests on Linux and macOS
         if: runner.os != 'Windows'
         shell: bash

@@ -1,14 +1,25 @@
 package com.folderspan.service.http.tls
 
+import com.folderspan.cleanup.DesktopApplicationDataCleaner
+import com.folderspan.cleanup.DesktopCleanupEnvironment
+import com.folderspan.cleanup.ApplicationDataCleanupCategory
+import com.folderspan.cleanup.resolveDesktopApplicationDataDirectory
+import com.folderspan.createSettings
+import com.folderspan.utils.NativePathUtils
+import com.folderspan.utils.PrivateFileStorage
 import com.folderspan.utils.SettingsUtils
 import com.russhwolf.settings.MapSettings
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
+import java.net.URLClassLoader
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+import java.util.prefs.Preferences
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -25,6 +36,58 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalPathApi::class)
 class JvmTlsIdentityFileStoreTest {
+    @Test
+    fun flatpakIdentityIsIsolatedFromNativeIdentityAcrossRestarts() {
+        if (!System.getProperty("os.name").contains("Linux", ignoreCase = true)) return
+        val home = Files.createTempDirectory("fm-tls-flatpak-test")
+        try {
+            val classpath = buildList {
+                addAll(System.getProperty("java.class.path").split(File.pathSeparator))
+                generateSequence(javaClass.classLoader) { it.parent }.filterIsInstance<URLClassLoader>()
+                    .flatMap { it.urLs.asSequence() }.forEach { add(Path.of(it.toURI()).toString()) }
+            }.distinct().joinToString(File.pathSeparator)
+            val dataHome = home.resolve(".var/app/com.folderspan.FolderSpan/data")
+            val nativeRoot = home.resolve(".local/share/FolderSpan")
+            var nativeSnapshot: Map<String, List<Byte>>? = null
+            val actions = listOf("native", "flatpak", "native", "flatpak", "flatpak-cleanup", "flatpak-after-cleanup", "native")
+            for (action in actions) {
+                val installation = action.substringBefore('-')
+                val output = home.resolve("$installation.log").toFile()
+                val process = ProcessBuilder(
+                    Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                    "-Xmx128m", "-Duser.home=$home", "-Djava.util.prefs.userRoot=$home/$installation-prefs",
+                    "-cp", classpath, TlsIdentityStorageProbe::class.java.name, action,
+                ).apply {
+                    environment().remove("XDG_DATA_HOME")
+                    if (installation == "flatpak") environment()["XDG_DATA_HOME"] = dataHome.toString()
+                }.redirectErrorStream(true).redirectOutput(output).start()
+                try {
+                    assertTrue(process.waitFor(30, TimeUnit.SECONDS), "TLS storage probe timed out")
+                    assertEquals(0, process.exitValue(), output.readText())
+                } finally {
+                    if (process.isAlive) {
+                        process.destroyForcibly()
+                        process.waitFor()
+                    }
+                }
+                val snapshot = Files.walk(nativeRoot).use { files ->
+                    files.filter(Files::isRegularFile).toList().associate { file ->
+                        nativeRoot.relativize(file).toString() to MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)).toList()
+                    }
+                }
+                if (nativeSnapshot == null) nativeSnapshot = snapshot else assertEquals(nativeSnapshot, snapshot)
+            }
+            assertNotEquals(Files.readString(nativeRoot.resolve("test-fingerprint")),
+                Files.readString(dataHome.resolve("FolderSpan/test-fingerprint")))
+            for (root in listOf(home.resolve(".local/share/FolderSpan"), dataHome.resolve("FolderSpan"))) {
+                assertTrue(Files.exists(root.resolve("tls-identity/storage.salt")))
+                assertEquals(1, root.resolve("tls-identity").toFile().listFiles()!!.count { it.extension == "fmi" })
+            }
+        } finally {
+            home.deleteRecursively()
+        }
+    }
+
     @Test
     fun writesAndReadsIdentityThroughAtomicFileReplacement() {
         val directory = Files.createTempDirectory("fm-tls-store-test")
@@ -283,6 +346,36 @@ class JvmTlsIdentityFileStoreTest {
 
     private companion object {
         const val TEST_KEY_MATERIAL = "test-device-key-material"
+    }
+}
+
+internal object TlsIdentityStorageProbe {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        val action = args.single()
+        val root = resolveDesktopApplicationDataDirectory()
+        check(root.toString() == NativePathUtils.getApplicationDataPath())
+        check(root.toString() == PrivateFileStorage.getAppPath())
+        val cache = Path.of(NativePathUtils.getCachePath())
+        check(cache.startsWith(root))
+        val fingerprint = DeviceTlsIdentity.loadOrCreate().fingerprintSha256
+        DeviceTlsIdentity.createServerSslContext()
+        val settings = createSettings()
+        val fingerprintFile = root.resolve("test-fingerprint")
+        if (Files.exists(fingerprintFile)) {
+            check(fingerprint == Files.readString(fingerprintFile))
+            check(settings.getStringOrNull(SettingsUtils.KEY_CRYPTO_KEY) == "retained-credential-key")
+        } else {
+            Files.writeString(fingerprintFile, fingerprint)
+            settings.putString(SettingsUtils.KEY_CRYPTO_KEY, "retained-credential-key")
+        }
+        if (action == "flatpak-cleanup") {
+            settings.putString("auth.accessToken", "must-be-cleared")
+            val cleaner = DesktopApplicationDataCleaner()
+            cleaner.requestCleanup(root, setOf(ApplicationDataCleanupCategory.PreferencesAndAccount)).getOrThrow()
+            cleaner.completePendingCleanup(DesktopCleanupEnvironment(root, cache, Preferences.userRoot(), {})).getOrThrow()
+        }
+        if (action == "flatpak-after-cleanup") check(!settings.hasKey("auth.accessToken"))
     }
 }
 

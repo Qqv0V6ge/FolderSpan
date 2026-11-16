@@ -1,6 +1,8 @@
 package com.folderspan.cleanup
 
 import com.folderspan.runtime.FolderSpanInstanceLock
+import com.folderspan.settings.FileAesGcmSecretVault
+import com.folderspan.utils.SettingsUtils
 
 import java.nio.file.Files
 import java.nio.file.Path
@@ -90,7 +92,6 @@ class ApplicationDataCleanupJvmTest {
             preferences.put("unrelated.preference", "keep")
             var loginStartupRemoved = false
             val environment = DesktopCleanupEnvironment(
-                homeDirectory = home,
                 applicationDataDirectory = appData,
                 cacheDirectory = cache,
                 preferences = preferences,
@@ -99,7 +100,7 @@ class ApplicationDataCleanupJvmTest {
             val cleaner = DesktopApplicationDataCleaner()
 
             cleaner.requestCleanup(
-                homeDirectory = home,
+                applicationDataDirectory = appData,
                 categories = ApplicationDataCleanupCategory.all,
             ).getOrThrow()
             assertTrue(cleaner.completePendingCleanup(environment).getOrThrow())
@@ -125,11 +126,11 @@ class ApplicationDataCleanupJvmTest {
         val preferences = Preferences.userRoot().node("folderspan-cleanup-lock-${UUID.randomUUID()}")
         try {
             val appData = Files.createDirectories(root.resolve("app-data"))
-            val environment = DesktopCleanupEnvironment(root, appData, root.resolve("cache"), preferences, {})
+            val environment = DesktopCleanupEnvironment(appData, root.resolve("cache"), preferences, {})
             val cleaner = DesktopApplicationDataCleaner()
             FolderSpanInstanceLock.tryAcquire(appData)!!.use {
                 Files.writeString(appData.resolve("folderspan.db"), "database")
-                cleaner.requestCleanup(root, setOf(ApplicationDataCleanupCategory.ApplicationData)).getOrThrow()
+                cleaner.requestCleanup(appData, setOf(ApplicationDataCleanupCategory.ApplicationData)).getOrThrow()
                 assertTrue(cleaner.completePendingCleanup(environment).getOrThrow())
                 assertFalse(Files.exists(appData.resolve("folderspan.db")))
                 assertTrue(Files.exists(appData.resolve(FolderSpanInstanceLock.FILE_NAME)))
@@ -147,12 +148,15 @@ class ApplicationDataCleanupJvmTest {
         val root = Files.createTempDirectory("folderspan-selective-cleanup-test")
         val preferences = Preferences.userRoot().node("folderspan-selective-cleanup-test-${UUID.randomUUID()}")
         try {
-            val home = Files.createDirectories(root.resolve("home"))
             val appData = Files.createDirectories(root.resolve("app-data"))
             val cache = Files.createDirectories(root.resolve("cache"))
             Files.writeString(appData.resolve("folderspan.db"), "database")
-            Files.createDirectories(appData.resolve("secure-settings"))
-            Files.writeString(appData.resolve("secure-settings/values.v1"), "vault")
+            val vaultDirectory = appData.resolve("secure-settings")
+            val vault = FileAesGcmSecretVault(vaultDirectory)
+            vault.put("auth.accessToken", "token")
+            vault.put(SettingsUtils.KEY_DEVICE_ID, "retained-device")
+            vault.put(SettingsUtils.KEY_DEVICE_TLS_PKCS12_PASSWORD, "retained-password")
+            vault.put(SettingsUtils.KEY_CRYPTO_KEY, "retained-key")
             Files.createDirectories(appData.resolve("share-history"))
             Files.writeString(appData.resolve("share-history/item.json"), "history")
             Files.createDirectories(appData.resolve("sync-tasks"))
@@ -162,7 +166,6 @@ class ApplicationDataCleanupJvmTest {
             preferences.put("settings.deviceId", "device")
             var loginStartupRemoved = false
             val environment = DesktopCleanupEnvironment(
-                homeDirectory = home,
                 applicationDataDirectory = appData,
                 cacheDirectory = cache,
                 preferences = preferences,
@@ -171,7 +174,7 @@ class ApplicationDataCleanupJvmTest {
             val cleaner = DesktopApplicationDataCleaner()
 
             cleaner.requestCleanup(
-                homeDirectory = home,
+                applicationDataDirectory = appData,
                 categories = setOf(
                     ApplicationDataCleanupCategory.PreferencesAndAccount,
                     ApplicationDataCleanupCategory.TransferHistory,
@@ -180,7 +183,11 @@ class ApplicationDataCleanupJvmTest {
             assertTrue(cleaner.completePendingCleanup(environment).getOrThrow())
 
             assertTrue(Files.exists(appData.resolve("folderspan.db")))
-            assertFalse(Files.exists(appData.resolve("secure-settings")))
+            val reloadedVault = FileAesGcmSecretVault(vaultDirectory)
+            assertNull(reloadedVault.get("auth.accessToken"))
+            assertEquals("retained-device", reloadedVault.get(SettingsUtils.KEY_DEVICE_ID))
+            assertEquals("retained-password", reloadedVault.get(SettingsUtils.KEY_DEVICE_TLS_PKCS12_PASSWORD))
+            assertEquals("retained-key", reloadedVault.get(SettingsUtils.KEY_CRYPTO_KEY))
             assertFalse(Files.exists(appData.resolve("share-history")))
             assertFalse(Files.exists(appData.resolve("sync-tasks")))
             assertTrue(Files.exists(cache.resolve("editor-content/page.bin")))
@@ -197,13 +204,75 @@ class ApplicationDataCleanupJvmTest {
         val root = Files.createTempDirectory("folderspan-empty-cleanup-test")
         try {
             val result = DesktopApplicationDataCleaner().requestCleanup(
-                homeDirectory = root,
+                applicationDataDirectory = root,
                 categories = emptySet(),
             )
 
             assertTrue(result.isFailure)
             assertFalse(Files.exists(root.resolve(".folderspan-cleanup-pending")))
         } finally {
+            deleteRecursivelyForTest(root)
+        }
+    }
+
+    @Test
+    fun cacheCleanupRemovesStagingAndCapturedLogsWithoutDeletingIdentityOrCleanupReceipts() {
+        val root = Files.createTempDirectory("folderspan-cache-cleanup")
+        val preferences = Preferences.userRoot().node("folderspan-cleanup-test-${UUID.randomUUID()}")
+        try {
+            val cache = Files.createDirectories(root.resolve("cache"))
+            val identityFile = Files.createDirectories(root.resolve("tls-identity")).resolve("identity.fmi")
+            Files.writeString(identityFile, "keep-identity")
+            val receipt = Files.createDirectories(cache.resolve("task-cleanup")).resolve("receipt.pb64")
+            Files.writeString(receipt, "keep-receipt")
+            val stagingDirectories = listOf("mcp-file-staging", "content-transfers")
+            stagingDirectories.forEach { name ->
+                Files.writeString(Files.createDirectories(cache.resolve(name)).resolve("staged.tmp"), "staged")
+            }
+            val log = cache.resolve("folderspan-capture.log")
+            Files.writeString(log, "log")
+            val cleaner = DesktopApplicationDataCleaner()
+            cleaner.requestCleanup(root, setOf(ApplicationDataCleanupCategory.CacheAndLogs)).getOrThrow()
+
+            cleaner.completePendingCleanup(DesktopCleanupEnvironment(root, cache, preferences, {})).getOrThrow()
+
+            stagingDirectories.forEach { name -> assertFalse(Files.exists(cache.resolve(name))) }
+            assertFalse(Files.exists(log))
+            assertEquals("keep-identity", Files.readString(identityFile))
+            assertEquals("keep-receipt", Files.readString(receipt))
+        } finally {
+            preferences.removeNode()
+            deleteRecursivelyForTest(root)
+        }
+    }
+
+    @Test
+    fun cleanupRequestDoesNotCrossApplicationDataDirectories() {
+        val root = Files.createTempDirectory("folderspan-isolated-cleanup")
+        val preferences = Preferences.userRoot().node("folderspan-cleanup-test-${UUID.randomUUID()}")
+        try {
+            val nativeData = Files.createDirectories(root.resolve(".local/share/FolderSpan"))
+            val flatpakData = Files.createDirectories(root.resolve(".var/app/com.folderspan.FolderSpan/data/FolderSpan"))
+            val nativeHistory = Files.createDirectories(nativeData.resolve("share-history")).resolve("keep.txt")
+            Files.writeString(nativeHistory, "native history")
+            Files.createDirectories(flatpakData.resolve("share-history"))
+            val legacyMarker = root.resolve(".folderspan-cleanup-pending")
+            Files.writeString(legacyMarker, encodeApplicationDataCleanupRequest(ApplicationDataCleanupCategory.all))
+            val native = DesktopCleanupEnvironment(nativeData, nativeData.resolve("cache"), preferences, {})
+            val flatpak = native.copy(applicationDataDirectory = flatpakData, cacheDirectory = flatpakData.resolve("cache"))
+            val cleaner = DesktopApplicationDataCleaner()
+
+            cleaner.requestCleanup(flatpakData, setOf(ApplicationDataCleanupCategory.TransferHistory)).getOrThrow()
+
+            assertTrue(Files.exists(flatpakData.resolve(".folderspan-cleanup-pending")))
+            assertFalse(cleaner.completePendingCleanup(native).getOrThrow())
+            assertTrue(cleaner.completePendingCleanup(flatpak).getOrThrow())
+            assertFalse(Files.exists(flatpakData.resolve("share-history")))
+            assertFalse(Files.exists(flatpakData.resolve(".folderspan-cleanup-pending")))
+            assertEquals("native history", Files.readString(nativeHistory))
+            assertTrue(Files.exists(legacyMarker))
+        } finally {
+            preferences.removeNode()
             deleteRecursivelyForTest(root)
         }
     }

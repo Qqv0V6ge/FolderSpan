@@ -121,7 +121,13 @@ internal object DesktopLoginStartupManager {
         return when (detectOs(System.getProperty("os.name").orEmpty())) {
             DesktopLoginStartupOs.Windows -> WindowsLoginStartupBackend(runner)
             DesktopLoginStartupOs.MacOs -> MacLoginStartupBackend(homePath, runner)
-            DesktopLoginStartupOs.Linux -> LinuxLoginStartupBackend(homePath, runner)
+            DesktopLoginStartupOs.Linux -> {
+                val flatpak = !System.getenv("FLATPAK_ID").isNullOrBlank()
+                LinuxLoginStartupBackend(
+                    homePath, runner, flatpak,
+                    System.getenv(if (flatpak) "HOST_XDG_CONFIG_HOME" else "XDG_CONFIG_HOME"),
+                )
+            }
             null -> null
         }
     }
@@ -349,20 +355,27 @@ internal class MacLoginStartupBackend(
 
 internal class LinuxLoginStartupBackend(
     private val homePath: Path,
-    private val commandRunner: DesktopCommandRunner
+    private val commandRunner: DesktopCommandRunner,
+    private val flatpak: Boolean = false,
+    configHome: String? = null,
 ) : DesktopLoginStartupBackend {
+    private val configDirectory = configHome?.takeIf(String::isNotBlank)
+        ?.let(Paths::get)?.takeIf(Path::isAbsolute) ?: homePath.resolve(".config")
+    private val flatpakCommand = "flatpak run com.folderspan.FolderSpan"
+
     private val autostartPath: Path
-        get() = homePath
-            .resolve(".config")
+        get() = configDirectory
             .resolve("autostart")
-            .resolve("${DesktopLoginStartupManager.APP_ID}.desktop")
+            .resolve(if (flatpak) "com.folderspan.FolderSpan.desktop" else "${DesktopLoginStartupManager.APP_ID}.desktop")
 
     override fun status(executable: Path): PermissionStatus {
         val path = autostartPath
         if (!Files.exists(path)) return PermissionStatus.NotDetermined
         val content = runCatching { Files.readString(path) }.getOrNull() ?: return PermissionStatus.Unsupported
         val exec = desktopEntryValue(content, "Exec") ?: return PermissionStatus.NotDetermined
-        if (!DesktopLoginStartupManager.executableCommandMatches(exec, executable, unescapeBackslash = true)) {
+        val matches = if (flatpak) exec == flatpakCommand else
+            DesktopLoginStartupManager.executableCommandMatches(exec, executable, unescapeBackslash = true)
+        if (!matches) {
             return PermissionStatus.NotDetermined
         }
         return if (isDisabled(content)) PermissionStatus.Denied else PermissionStatus.Granted
@@ -393,7 +406,7 @@ internal class LinuxLoginStartupBackend(
             |Version=1.0
             |Name=${DesktopLoginStartupManager.DISPLAY_NAME}
             |Comment=Start ${DesktopLoginStartupManager.DISPLAY_NAME} at login
-            |Exec=${quoteDesktopExec(executable.toString())}
+            |Exec=${if (flatpak) flatpakCommand else quoteDesktopExec(executable.toString())}
             |Terminal=false
             |X-GNOME-Autostart-enabled=true
             |

@@ -121,6 +121,48 @@ class DesktopLoginStartupManagerTest {
         }
     }
 
+    @Test
+    fun flatpakAutostartDoesNotOverwriteOrRemoveNativeEntry() {
+        withTempDir { home ->
+            val nativeExecutable = Paths.get("/opt/folderspan/bin/FolderSpan")
+            val native = LinuxLoginStartupBackend(home, NoopCommandRunner)
+            assertTrue(native.enable(nativeExecutable))
+            val nativeEntry = home.resolve(".config/autostart/com.folderspan.desktop")
+            val original = Files.readString(nativeEntry)
+            val flatpak = LinuxLoginStartupBackend(home, NoopCommandRunner, flatpak = true)
+            val sandboxExecutable = Paths.get("/app/folderspan/bin/FolderSpan")
+
+            assertTrue(flatpak.enable(sandboxExecutable))
+            val entry = home.resolve(".config/autostart/com.folderspan.FolderSpan.desktop")
+            val content = Files.readString(entry)
+            assertEquals("flatpak run com.folderspan.FolderSpan", flatpak.desktopEntryValue(content, "Exec"))
+            assertEquals(PermissionStatus.Granted, flatpak.status(Paths.get("/app/new-version/bin/FolderSpan")))
+            Files.writeString(entry, content.replace("flatpak run com.folderspan.FolderSpan", sandboxExecutable.toString()))
+            assertEquals(PermissionStatus.NotDetermined, flatpak.status(sandboxExecutable))
+            assertTrue(flatpak.disable())
+            assertFalse(Files.exists(entry))
+            assertEquals(original, Files.readString(nativeEntry))
+            assertEquals(PermissionStatus.Granted, native.status(nativeExecutable))
+        }
+    }
+
+    @Test
+    fun linuxAutostartRespectsAbsoluteConfigHomeAndRejectsRelativePaths() {
+        withTempDir { home ->
+            val executable = Paths.get("/opt/folderspan/bin/FolderSpan")
+            val config = home.resolve("custom config")
+            val backend = LinuxLoginStartupBackend(home, NoopCommandRunner, configHome = config.toString())
+            assertTrue(backend.enable(executable))
+            assertTrue(Files.exists(config.resolve("autostart/com.folderspan.desktop")))
+            assertFalse(Files.exists(home.resolve(".config")))
+            assertTrue(backend.disable())
+
+            val fallback = LinuxLoginStartupBackend(home, NoopCommandRunner, configHome = "relative/config")
+            assertTrue(fallback.enable(executable))
+            assertTrue(Files.exists(home.resolve(".config/autostart/com.folderspan.desktop")))
+        }
+    }
+
     private fun withTempDir(block: (Path) -> Unit) {
         val path = Files.createTempDirectory("folderspan-startup-test")
         try {
