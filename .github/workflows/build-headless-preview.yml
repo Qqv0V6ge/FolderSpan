@@ -3,6 +3,11 @@ name: Build Headless Preview
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "目标版本（MAJOR.MINOR.PATCH，留空沿用最新发布版本）"
+        required: false
+        default: ""
+        type: string
       build_linux_x64:
         description: "打包 Linux x64"
         type: boolean
@@ -43,8 +48,6 @@ concurrency:
 env:
   JAVA_VERSION: "17"
   ORG_GRADLE_PROJECT_folderspanBuildType: release
-  # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
-  ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
 
 jobs:
   targets:
@@ -52,9 +55,24 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      apple_no_pro_build_number: ${{ steps.version.outputs.apple_no_pro_build_number }}
+      apple_build_number: ${{ steps.version.outputs.apple_build_number }}
+      windows_package_version: ${{ steps.version.outputs.windows_package_version }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
+      source_revision: ${{ steps.version.outputs.source_revision }}
+      version: ${{ steps.version.outputs.version }}
       native: ${{ steps.matrix.outputs.native }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve install versions
+        id: version
+        env:
+          BUILD_PRODUCT: headless
+          BUILD_CHANNEL: preview
+          BUILD_VERSION: ${{ inputs.version }}
+        run: python3 scripts/ci/resolve-install-versions.py >> "$GITHUB_OUTPUT"
       - name: Select package platforms
         id: matrix
         env:
@@ -80,7 +98,7 @@ jobs:
 
   web:
     name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
-    needs: quality
+    needs: [targets, quality]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -93,6 +111,7 @@ jobs:
           - label: wasm
             target: wasmJs
     env:
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.targets.outputs.version }}
       NODE_OPTIONS: --max-old-space-size=8192
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -145,6 +164,8 @@ jobs:
         web_ui: [none, js, wasm]
         platform: ${{ fromJSON(needs.targets.outputs.native) }}
     env:
+      ORG_GRADLE_PROJECT_windowsPackageVersion: ${{ needs.targets.outputs.windows_package_version }}
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.targets.outputs.version }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
       ORG_GRADLE_PROJECT_runtimeWebUi: ${{ matrix.web_ui }}
       ORG_GRADLE_PROJECT_folderspanBuildType: release

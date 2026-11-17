@@ -191,6 +191,12 @@ compose.desktop {
                 appResourcesRootDir.set(rootProject.layout.buildDirectory.dir("generated/desktop-license-resources"))
             }
             modules("java.sql", "java.net.http", "java.security.jgss", "java.rmi", "java.management")
+            windows {
+                val installVersion = providers.gradleProperty("windowsPackageVersion")
+                    .orElse(runtimePackageVersion).get()
+                msiPackageVersion = installVersion
+                exePackageVersion = installVersion
+            }
 
             macOS {
                 val signingEnabled = providers.gradleProperty("compose.desktop.mac.sign")

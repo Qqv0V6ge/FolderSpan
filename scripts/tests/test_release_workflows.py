@@ -80,7 +80,7 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 target.parent.mkdir()
                 target.write_bytes(content)
             msiinfo = root / "msiinfo"
-            msiinfo.write_text("#!/bin/sh\nprintf 'ProductCode\\t{PRODUCT}\\nUpgradeCode\\t{UPGRADE}\\n'\n")
+            msiinfo.write_text("#!/bin/sh\nprintf 'ProductCode\\t{PRODUCT}\\nUpgradeCode\\t{UPGRADE}\\nProductVersion\\t1.2.181\\n'\n")
             msiinfo.chmod(0o755)
             commit = "a" * 40
             subprocess.run(
@@ -95,6 +95,10 @@ class ReleaseWorkflowsTest(unittest.TestCase):
                 self.assertIn(hashlib.sha256(b"windows-x64").hexdigest().upper(), installer)
                 self.assertIn("{PRODUCT}", installer)
                 self.assertIn("{UPGRADE}", installer)
+                self.assertIn("DisplayVersion: 1.2.181", installer)
+                for name in ("FolderSpan.FolderSpan.yaml", "FolderSpan.FolderSpan.locale.en-US.yaml",
+                             "FolderSpan.FolderSpan.installer.yaml"):
+                    self.assertIn("PackageVersion: 1.2.181", bundle.read(f"winget/{name}").decode())
                 scoop = json.loads(bundle.read("scoop/bucket/folderspan.json"))
                 self.assertEqual(scoop["architecture"]["arm64"]["hash"], hashlib.sha256(b"windows-arm64").hexdigest())
                 fdroid = bundle.read("fdroid/metadata/com.folderspan.yml").decode()
@@ -262,7 +266,8 @@ gh() {
         self.assertIn("inputs.build_ios", preview)
         self.assertIn("version: ${{ needs.prepare.outputs.version }}", release)
         self.assertIn("edition: ${{ matrix.edition }}", release.split("\n  ios:\n", 1)[1].split("\n  web:\n", 1)[0])
-        self.assertIn("format('{0}.1', github.run_number)", release)
+        self.assertIn("needs.prepare.outputs.apple_build_number", release)
+        self.assertIn("needs.prepare.outputs.apple_no_pro_build_number", release)
         self.assertIn("prepare, quality, android, ios, web, desktop", release.split("\n  release:\n", 1)[1])
         self.assertIn("needs.ios.result == 'success'", release)
         self.assertIn("path: ${{ env.APPLE_PACKAGE }}", apple)
@@ -310,20 +315,32 @@ gh() {
 
     def test_headless_version_is_normalized_and_validated_before_packaging(self):
         workflow = (WORKFLOWS / "build-headless-release.yml").read_text()
-        script = step_script(workflow, "Validate version")
-        for version in ("headless-v1.2.3", "1.2.3", "v1.2.3", "headless-v1.2", "1.2.3-rc1", "bad"):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
-                output = Path(directory) / "output"
-                result = subprocess.run(
-                    ["bash", "-e", "-o", "pipefail", "-c", script], capture_output=True, text=True,
-                    env=dict(os.environ, ORG_GRADLE_PROJECT_releaseVersion=version, GITHUB_OUTPUT=str(output)),
-                )
-                if version in ("headless-v1.2.3", "1.2.3", "v1.2.3"):
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(output.read_text(), "tag=headless-v1.2.3\nversion=1.2.3\n")
-                else:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertFalse(output.exists())
+        self.assertIn("BUILD_PRODUCT: headless", workflow)
+        self.assertIn("python3 scripts/ci/resolve-install-versions.py", workflow)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=Version test", "-c", "user.email=version@example.test",
+                 "commit", "--quiet", "--allow-empty", "-m", "Source"], cwd=root, check=True,
+            )
+            subprocess.run(["git", "tag", "headless-v1.1.0"], cwd=root, check=True)
+            for version in ("headless-v1.2.3", "1.2.3", "v1.2.3", "headless-v1.2", "1.2.3-rc1", "bad"):
+                with self.subTest(version=version):
+                    result = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts/ci/resolve-install-versions.py")],
+                        cwd=root, capture_output=True, text=True,
+                        env=dict(os.environ, BUILD_VERSION=version, BUILD_CHANNEL="release", BUILD_PRODUCT="headless"),
+                    )
+                    if version in ("headless-v1.2.3", "1.2.3", "v1.2.3"):
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        output = dict(line.split("=", 1) for line in result.stdout.splitlines())
+                        self.assertEqual(output["tag"], "headless-v1.2.3")
+                        self.assertEqual(output["version"], "1.2.3")
+                        self.assertEqual(output["source_revision"], "1")
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertEqual(result.stdout, "")
         self.assertEqual(workflow.count(
             "      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}"), 2)
 

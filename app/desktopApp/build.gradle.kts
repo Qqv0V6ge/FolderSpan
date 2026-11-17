@@ -288,6 +288,10 @@ compose.desktop {
             }
 
             windows {
+                val installVersion = providers.gradleProperty("windowsPackageVersion")
+                    .orElse(desktopPackageVersion).get()
+                msiPackageVersion = installVersion
+                exePackageVersion = installVersion
                 iconFile.set(packagingResourcesDir.file("icon.ico"))
                 installationPath = """C:\Program Files\FolderSpan"""
                 shortcut = true
