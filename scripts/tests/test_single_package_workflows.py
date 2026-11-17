@@ -32,7 +32,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
         entries = []
         for path in WORKFLOWS.glob("build-*.yml"):
             if path.name != "build-release.yml":
-                entries.extend(self.read_static_package_entries(path))
+                entries.extend(dict(entry, workflow=path.name) for entry in self.read_static_package_entries(path))
 
         self.assertEqual(len(entries), 18)
         for entry in entries:
@@ -48,7 +48,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                     selected = [(f"create{mode}Distributable", ".zip")]
                 elif label.startswith("macos-"):
                     selected = [(f"package{mode}Dmg", ".dmg")]
-                    if mode == "Release" and module == "headlessRuntime":
+                    if module == "headlessRuntime" and entry["workflow"] == "build-headless-release.yml":
                         selected.append(("packageReleasePkg", ".pkg"))
                 else:
                     self.fail(f"未指定打包策略的平台：{label}")

@@ -42,6 +42,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_folderspanBuildType: release
   # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
   ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
 
@@ -61,12 +62,12 @@ jobs:
           PACKAGE_MATRIX: >-
             {
               "native": [
-                {"label": "linux-x64", "os": "ubuntu-24.04", "tasks": ":app:headlessRuntime:packageTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz"},
-                {"label": "linux-arm64", "os": "ubuntu-24.04-arm", "tasks": ":app:headlessRuntime:packageTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main/targz/*.tar.gz"},
-                {"label": "windows-x64", "os": "windows-2025", "tasks": ":app:headlessRuntime:packageMsi", "paths": "app/headlessRuntime/build/compose/binaries/main/msi/*.msi"},
-                {"label": "windows-arm64", "os": "windows-11-arm", "tasks": ":app:headlessRuntime:createDistributable", "paths": "app/headlessRuntime/build/compose/binaries/main/zip/*.zip", "java_distribution": "microsoft"},
-                {"label": "macos-x64", "os": "macos-15-intel", "tasks": ":app:headlessRuntime:packageDmg", "paths": "app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg"},
-                {"label": "macos-arm64", "os": "macos-15", "tasks": ":app:headlessRuntime:packageDmg", "paths": "app/headlessRuntime/build/compose/binaries/main/dmg/*.dmg"}
+                {"label": "linux-x64", "os": "ubuntu-24.04", "tasks": ":app:headlessRuntime:packageReleaseTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"label": "linux-arm64", "os": "ubuntu-24.04-arm", "tasks": ":app:headlessRuntime:packageReleaseTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"label": "windows-x64", "os": "windows-2025", "tasks": ":app:headlessRuntime:packageReleaseMsi", "paths": "app/headlessRuntime/build/compose/binaries/main-release/msi/*.msi"},
+                {"label": "windows-arm64", "os": "windows-11-arm", "tasks": ":app:headlessRuntime:createReleaseDistributable", "paths": "app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip", "java_distribution": "microsoft"},
+                {"label": "macos-x64", "os": "macos-15-intel", "tasks": ":app:headlessRuntime:packageReleaseDmg", "paths": "app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg"},
+                {"label": "macos-arm64", "os": "macos-15", "tasks": ":app:headlessRuntime:packageReleaseDmg", "paths": "app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg"}
               ]
             }
         run: python3 scripts/ci/select-build-targets.py >> "$GITHUB_OUTPUT"
@@ -81,7 +82,7 @@ jobs:
     name: Package Web preview (${{ matrix.platform.label }}, ${{ matrix.edition }})
     needs: quality
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -92,6 +93,7 @@ jobs:
           - label: wasm
             target: wasmJs
     env:
+      NODE_OPTIONS: --max-old-space-size=8192
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
@@ -109,17 +111,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build Web development distribution
+      - name: Build Web production distribution
         run: >-
-          ./gradlew --no-daemon
-          :app:webApp:${{ matrix.platform.target }}BrowserDevelopmentExecutableDistribution
+          ./gradlew --no-daemon --max-workers=1
+          :app:webApp:${{ matrix.platform.target }}BrowserDistribution
           --stacktrace
 
       - name: Create Web preview archive
         shell: bash
         run: |
           archive="$GITHUB_WORKSPACE/folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-${GITHUB_SHA:0:7}.zip"
-          cd app/webApp/build/dist/${{ matrix.platform.target }}/developmentExecutable
+          cd app/webApp/build/dist/${{ matrix.platform.target }}/productionExecutable
           zip -q -r "$archive" .
 
       - name: Upload Web preview
@@ -195,8 +197,8 @@ jobs:
         run: |
           $version = $env:ORG_GRADLE_PROJECT_releaseVersion
           $webUi = $env:ORG_GRADLE_PROJECT_runtimeWebUi
-          $appImage = 'app/headlessRuntime/build/compose/binaries/main/app/FolderSpan-Runtime'
-          $outputDir = 'app/headlessRuntime/build/compose/binaries/main/zip'
+          $appImage = 'app/headlessRuntime/build/compose/binaries/main-release/app/FolderSpan-Runtime'
+          $outputDir = 'app/headlessRuntime/build/compose/binaries/main-release/zip'
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-Runtime-$version-$($webUi)-preview-windows-arm64.zip" -Force
 
