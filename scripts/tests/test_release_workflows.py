@@ -12,6 +12,8 @@ import textwrap
 import unittest
 from zipfile import ZipFile
 
+from test_platform_selection_workflows import workflow_matrices
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -32,7 +34,7 @@ class ReleaseWorkflowsTest(unittest.TestCase):
         self.assertIn("outputs/bundle/release/*.aab release-artifacts/android/", workflow)
         self.assertIn("outputs/apk/release/*.apk release-artifacts/android/", workflow)
         self.assertIn("path: release-artifacts/android/*", workflow)
-        desktop = workflow.split("\n  desktop:\n", 1)[1].split("\n    env:", 1)[0]
+        desktop = {entry["label"]: entry for entry in workflow_matrices(WORKFLOWS / "build-release.yml")["native"]}
         expected = {
             "linux-x64": {".deb", ".rpm", ".tar.gz", ".flatpak"},
             "linux-arm64": {".deb", ".rpm", ".tar.gz", ".flatpak"},
@@ -43,8 +45,7 @@ class ReleaseWorkflowsTest(unittest.TestCase):
         }
         for label, formats in expected.items():
             with self.subTest(platform=label):
-                entry = desktop.split(f"label: {label}\n", 1)[1].split("          - os: ", 1)[0]
-                self.assertEqual(set(re.findall(r"\*\.(\w+(?:\.gz)?)$", entry, re.M)),
+                self.assertEqual(set(re.findall(r"\*\.(\w+(?:\.gz)?)$", desktop[label]["paths"], re.M)),
                                  {extension[1:] for extension in formats})
         for extra in ("release-linux-channel-${{ matrix.edition }}", "release-chocolatey-${{ matrix.edition }}",
                       "release-channel-recipes"):
@@ -258,11 +259,11 @@ gh() {
                 artifact_name = "preview-ios-pro" if kind == "preview" else "release-ios-${{ matrix.edition }}"
                 self.assertIn(f"ipa_artifact_name: {artifact_name}", ios)
                 self.assertNotIn("APPLE_APP_SPECIFIC_PASSWORD", ios)
-        self.assertIn("inputs.target == 'all' || inputs.target == 'ios'", preview)
+        self.assertIn("inputs.build_ios", preview)
         self.assertIn("version: ${{ needs.prepare.outputs.version }}", release)
         self.assertIn("edition: ${{ matrix.edition }}", release.split("\n  ios:\n", 1)[1].split("\n  web:\n", 1)[0])
         self.assertIn("format('{0}.1', github.run_number)", release)
-        self.assertIn("      - ios\n", release.split("\n  release:\n", 1)[1])
+        self.assertIn("prepare, quality, android, ios, web, desktop", release.split("\n  release:\n", 1)[1])
         self.assertIn("needs.ios.result == 'success'", release)
         self.assertIn("path: ${{ env.APPLE_PACKAGE }}", apple)
         self.assertIn("inputs.ipa_artifact_name == '' && inputs.upload_to_app_store", apple)
@@ -280,6 +281,7 @@ gh() {
                         (ios / f"FolderSpan-{index}.ipa").write_bytes(edition.encode())
                 result = subprocess.run(
                     ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, capture_output=True, text=True,
+                    env=dict(os.environ, BUILD_IOS="true"),
                 )
                 self.assertEqual(result.returncode == 0, (pro, ordinary) == (1, 1), result.stdout + result.stderr)
                 if (pro, ordinary) == (1, 1):
@@ -301,6 +303,7 @@ gh() {
                     target.write_bytes(edition.encode())
             result = subprocess.run(
                 ["bash", "-e", "-o", "pipefail", "-c", script], cwd=root, capture_output=True, text=True,
+                env=dict(os.environ, BUILD_IOS="true"),
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Duplicate release asset name", result.stdout)

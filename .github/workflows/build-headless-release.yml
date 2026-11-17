@@ -6,6 +6,36 @@ on:
       - "headless-v*"
   workflow_dispatch:
     inputs:
+      build_linux_x64:
+        description: "打包 Linux x64"
+        type: boolean
+        required: true
+        default: true
+      build_linux_arm64:
+        description: "打包 Linux ARM64"
+        type: boolean
+        required: true
+        default: true
+      build_windows_x64:
+        description: "打包 Windows x64"
+        type: boolean
+        required: true
+        default: true
+      build_windows_arm64:
+        description: "打包 Windows ARM64"
+        type: boolean
+        required: true
+        default: true
+      build_macos_x64:
+        description: "打包 macOS x64"
+        type: boolean
+        required: true
+        default: true
+      build_macos_arm64:
+        description: "打包 macOS ARM64"
+        type: boolean
+        required: true
+        default: true
       version:
         description: "发布版本（MAJOR.MINOR.PATCH）"
         required: true
@@ -35,6 +65,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      native: ${{ steps.matrix.outputs.native }}
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -50,6 +81,24 @@ jobs:
           fi
           echo "tag=headless-v$version" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+      - name: Select package platforms
+        id: matrix
+        env:
+          BUILD_INPUTS: ${{ toJSON(inputs) }}
+          PACKAGE_MATRIX: >-
+            {
+              "native": [
+                {"os": "ubuntu-24.04", "label": "linux-x64", "tasks": ":app:headlessRuntime:packageReleaseTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"os": "ubuntu-24.04-arm", "label": "linux-arm64", "tasks": ":app:headlessRuntime:packageReleaseTarGz", "paths": "app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"os": "windows-2025", "label": "windows-x64", "tasks": ":app:headlessRuntime:packageReleaseMsi", "paths": "app/headlessRuntime/build/compose/binaries/main-release/msi/*.msi"},
+                {"os": "windows-11-arm", "label": "windows-arm64", "java_distribution": "microsoft", "tasks": ":app:headlessRuntime:createReleaseDistributable", "paths": "app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip"},
+                {"os": "macos-15-intel", "label": "macos-x64", "tasks": ":app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg", "paths": "app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg\napp/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg\n"},
+                {"os": "macos-15", "label": "macos-arm64", "tasks": ":app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg", "paths": "app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg\napp/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg\n"}
+              ]
+            }
+        run: python3 scripts/ci/select-build-targets.py >> "$GITHUB_OUTPUT"
 
   quality:
     needs: prepare
@@ -115,6 +164,7 @@ jobs:
   headless-runtime:
     name: Package Headless Runtime (${{ matrix.platform.label }}, ${{ matrix.web_ui }}, ${{ matrix.edition }})
     needs: [prepare, quality, web]
+    if: needs.prepare.outputs.native != '[]'
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 120
     strategy:
@@ -122,36 +172,7 @@ jobs:
       matrix:
         edition: [pro]
         web_ui: [none, js, wasm]
-        platform:
-          - os: ubuntu-24.04
-            label: linux-x64
-            tasks: :app:headlessRuntime:packageReleaseTarGz
-            paths: app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            tasks: :app:headlessRuntime:packageReleaseTarGz
-            paths: app/headlessRuntime/build/compose/binaries/main-release/targz/*.tar.gz
-          - os: windows-2025
-            label: windows-x64
-            tasks: :app:headlessRuntime:packageReleaseMsi
-            paths: app/headlessRuntime/build/compose/binaries/main-release/msi/*.msi
-          - os: windows-11-arm
-            label: windows-arm64
-            java_distribution: microsoft
-            tasks: :app:headlessRuntime:createReleaseDistributable
-            paths: app/headlessRuntime/build/compose/binaries/main-release/zip/*.zip
-          - os: macos-15-intel
-            label: macos-x64
-            tasks: :app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
-          - os: macos-15
-            label: macos-arm64
-            tasks: :app:headlessRuntime:packageReleaseDmg :app:headlessRuntime:packageReleasePkg
-            paths: |
-              app/headlessRuntime/build/compose/binaries/main-release/dmg/*.dmg
-              app/headlessRuntime/build/compose/binaries/main-release/pkg/*.pkg
+        platform: ${{ fromJSON(needs.prepare.outputs.native) }}
     env:
       ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}

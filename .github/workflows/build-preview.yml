@@ -1,37 +1,63 @@
 name: Build Preview
 
-run-name: ${{ github.workflow }} · ${{ inputs.target }}
-
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "选择平台及架构（all 构建全部）"
+      build_android:
+        description: "打包 Android"
+        type: boolean
         required: true
-        default: all
-        type: choice
-        options:
-          - all
-          - linux
-          - linux-x64
-          - linux-arm64
-          - windows
-          - windows-x64
-          - windows-arm64
-          - macos
-          - macos-x64
-          - macos-arm64
-          - android
-          - ios
-          - web
-          - web-js
-          - web-wasm
-
+        default: true
+      build_ios:
+        description: "打包 iOS"
+        type: boolean
+        required: true
+        default: true
+      build_linux_x64:
+        description: "打包 Linux x64"
+        type: boolean
+        required: true
+        default: true
+      build_linux_arm64:
+        description: "打包 Linux ARM64"
+        type: boolean
+        required: true
+        default: true
+      build_windows_x64:
+        description: "打包 Windows x64"
+        type: boolean
+        required: true
+        default: true
+      build_windows_arm64:
+        description: "打包 Windows ARM64"
+        type: boolean
+        required: true
+        default: true
+      build_macos_x64:
+        description: "打包 macOS x64"
+        type: boolean
+        required: true
+        default: true
+      build_macos_arm64:
+        description: "打包 macOS ARM64"
+        type: boolean
+        required: true
+        default: true
+      build_web_js:
+        description: "打包 Web JavaScript"
+        type: boolean
+        required: true
+        default: true
+      build_web_wasm:
+        description: "打包 Web WebAssembly"
+        type: boolean
+        required: true
+        default: true
 permissions:
   contents: read
 
 concurrency:
-  group: build-preview-${{ github.workflow }}-${{ github.ref }}-${{ inputs.target }}
+  group: build-preview-${{ github.workflow }}-${{ github.ref }}-${{ inputs.build_android }}${{ inputs.build_ios }}${{ inputs.build_linux_x64 }}${{ inputs.build_linux_arm64 }}${{ inputs.build_windows_x64 }}${{ inputs.build_windows_arm64 }}${{ inputs.build_macos_x64 }}${{ inputs.build_macos_arm64 }}${{ inputs.build_web_js }}${{ inputs.build_web_wasm }}
   cancel-in-progress: true
 
 env:
@@ -42,18 +68,34 @@ env:
 
 jobs:
   targets:
-    name: Select preview targets
+    name: Select package platforms
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      native: ${{ steps.matrix.outputs.native }}
       web: ${{ steps.matrix.outputs.web }}
+      native: ${{ steps.matrix.outputs.native }}
     steps:
       - uses: actions/checkout@v6
-      - id: matrix
+      - name: Select package platforms
+        id: matrix
         env:
-          PREVIEW_TARGET: ${{ inputs.target }}
-        run: python3 scripts/ci/select-preview-targets.py app "$PREVIEW_TARGET" >> "$GITHUB_OUTPUT"
+          BUILD_INPUTS: ${{ toJSON(inputs) }}
+          PACKAGE_MATRIX: >-
+            {
+              "web": [
+                {"label": "js", "target": "js"},
+                {"label": "wasm", "target": "wasmJs"}
+              ],
+              "native": [
+                {"label": "linux-x64", "os": "ubuntu-24.04", "tasks": ":app:desktopApp:packageTarGz", "paths": "app/desktopApp/build/compose/binaries/main/targz/*.tar.gz"},
+                {"label": "linux-arm64", "os": "ubuntu-24.04-arm", "tasks": ":app:desktopApp:packageTarGz", "paths": "app/desktopApp/build/compose/binaries/main/targz/*.tar.gz"},
+                {"label": "windows-x64", "os": "windows-2025", "tasks": ":app:desktopApp:packageMsi", "paths": "app/desktopApp/build/compose/binaries/main/msi/*.msi"},
+                {"label": "windows-arm64", "os": "windows-11-arm", "tasks": ":app:desktopApp:createDistributable", "paths": "app/desktopApp/build/compose/binaries/main/zip/*.zip", "java_distribution": "microsoft"},
+                {"label": "macos-x64", "os": "macos-15-intel", "tasks": ":app:desktopApp:packageDmg", "paths": "app/desktopApp/build/compose/binaries/main/dmg/*.dmg"},
+                {"label": "macos-arm64", "os": "macos-15", "tasks": ":app:desktopApp:packageDmg", "paths": "app/desktopApp/build/compose/binaries/main/dmg/*.dmg"}
+              ]
+            }
+        run: python3 scripts/ci/select-build-targets.py >> "$GITHUB_OUTPUT"
 
   quality:
     needs: targets
@@ -64,7 +106,7 @@ jobs:
   android:
     name: Package Android preview (${{ matrix.edition }})
     needs: quality
-    if: inputs.target == 'all' || inputs.target == 'android'
+    if: (github.event_name != 'workflow_dispatch' || inputs.build_android)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -102,7 +144,7 @@ jobs:
 
   ios:
     needs: quality
-    if: inputs.target == 'all' || inputs.target == 'ios'
+    if: (github.event_name != 'workflow_dispatch' || inputs.build_ios)
     uses: ./.github/workflows/apple-store-pro.yml
     with:
       version: ${{ format('1.0.{0}', github.run_number) }}
