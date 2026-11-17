@@ -62,6 +62,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
+  ORG_GRADLE_PROJECT_folderspanBuildType: release
   # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
   ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
   ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
@@ -87,12 +88,12 @@ jobs:
                 {"label": "wasm", "target": "wasmJs"}
               ],
               "native": [
-                {"label": "linux-x64", "os": "ubuntu-24.04", "tasks": ":app:desktopApp:packageTarGz", "paths": "app/desktopApp/build/compose/binaries/main/targz/*.tar.gz"},
-                {"label": "linux-arm64", "os": "ubuntu-24.04-arm", "tasks": ":app:desktopApp:packageTarGz", "paths": "app/desktopApp/build/compose/binaries/main/targz/*.tar.gz"},
-                {"label": "windows-x64", "os": "windows-2025", "tasks": ":app:desktopApp:packageMsi", "paths": "app/desktopApp/build/compose/binaries/main/msi/*.msi"},
-                {"label": "windows-arm64", "os": "windows-11-arm", "tasks": ":app:desktopApp:createDistributable", "paths": "app/desktopApp/build/compose/binaries/main/zip/*.zip", "java_distribution": "microsoft"},
-                {"label": "macos-x64", "os": "macos-15-intel", "tasks": ":app:desktopApp:packageDmg", "paths": "app/desktopApp/build/compose/binaries/main/dmg/*.dmg"},
-                {"label": "macos-arm64", "os": "macos-15", "tasks": ":app:desktopApp:packageDmg", "paths": "app/desktopApp/build/compose/binaries/main/dmg/*.dmg"}
+                {"label": "linux-x64", "os": "ubuntu-24.04", "tasks": ":app:desktopApp:packageReleaseTarGz", "paths": "app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"label": "linux-arm64", "os": "ubuntu-24.04-arm", "tasks": ":app:desktopApp:packageReleaseTarGz", "paths": "app/desktopApp/build/compose/binaries/main-release/targz/*.tar.gz"},
+                {"label": "windows-x64", "os": "windows-2025", "tasks": ":app:desktopApp:packageReleaseMsi", "paths": "app/desktopApp/build/compose/binaries/main-release/msi/*.msi"},
+                {"label": "windows-arm64", "os": "windows-11-arm", "tasks": ":app:desktopApp:createReleaseDistributable", "paths": "app/desktopApp/build/compose/binaries/main-release/zip/*.zip", "java_distribution": "microsoft"},
+                {"label": "macos-x64", "os": "macos-15-intel", "tasks": ":app:desktopApp:packageReleaseDmg", "paths": "app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg"},
+                {"label": "macos-arm64", "os": "macos-15", "tasks": ":app:desktopApp:packageReleaseDmg", "paths": "app/desktopApp/build/compose/binaries/main-release/dmg/*.dmg"}
               ]
             }
         run: python3 scripts/ci/select-build-targets.py >> "$GITHUB_OUTPUT"
@@ -131,16 +132,51 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build debug APK
-        run: ./gradlew --no-daemon :app:androidApp:assembleDebug --stacktrace
+      - name: Validate and restore Android release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [[ -z "$ANDROID_KEYSTORE_BASE64" ]] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [[ -z "$ANDROID_STORE_PASSWORD" ]] && missing+=("ANDROID_STORE_PASSWORD")
+          [[ -z "$ANDROID_KEY_ALIAS" ]] && missing+=("ANDROID_KEY_ALIAS")
+          [[ -z "$ANDROID_KEY_PASSWORD" ]] && missing+=("ANDROID_KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing Android signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
+          keystore_path="$RUNNER_TEMP/folderspan-release.keystore"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          echo "ANDROID_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build signed preview APK
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:androidApp:assembleRelease --stacktrace
 
       - name: Upload Android preview
         uses: actions/upload-artifact@v7
         with:
           name: preview-android-${{ matrix.edition }}
-          path: app/androidApp/build/outputs/apk/debug/*.apk
+          path: app/androidApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Remove temporary Android keystore
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${ANDROID_STORE_FILE:-}" ]]; then
+            rm -f -- "$ANDROID_STORE_FILE"
+          fi
 
   ios:
     needs: quality
@@ -164,13 +200,14 @@ jobs:
     needs: [targets, quality]
     if: needs.targets.outputs.web != '[]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         edition: [pro]
         platform: ${{ fromJSON(needs.targets.outputs.web) }}
     env:
+      NODE_OPTIONS: --max-old-space-size=8192
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
@@ -188,17 +225,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build Web development distribution
+      - name: Build Web production distribution
         run: >-
-          ./gradlew --no-daemon
-          :app:webApp:${{ matrix.platform.target }}BrowserDevelopmentExecutableDistribution
+          ./gradlew --no-daemon --max-workers=1
+          :app:webApp:${{ matrix.platform.target }}BrowserDistribution
           --stacktrace
 
       - name: Create Web preview archive
         shell: bash
         run: |
           archive="$GITHUB_WORKSPACE/folderspan-web-${{ matrix.platform.label }}-${{ matrix.edition }}-preview-${GITHUB_SHA:0:7}.zip"
-          cd app/webApp/build/dist/${{ matrix.platform.target }}/developmentExecutable
+          cd app/webApp/build/dist/${{ matrix.platform.target }}/productionExecutable
           zip -q -r "$archive" .
 
       - name: Upload Web preview
@@ -238,7 +275,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build debug native installers
+      - name: Build production native installers
         shell: bash
         run: >-
           ./gradlew --no-daemon ${{ matrix.platform.tasks }}
@@ -251,8 +288,8 @@ jobs:
         shell: pwsh
         run: |
           $version = $env:ORG_GRADLE_PROJECT_releaseVersion
-          $appImage = 'app/desktopApp/build/compose/binaries/main/app/FolderSpan'
-          $outputDir = 'app/desktopApp/build/compose/binaries/main/zip'
+          $appImage = 'app/desktopApp/build/compose/binaries/main-release/app/FolderSpan'
+          $outputDir = 'app/desktopApp/build/compose/binaries/main-release/zip'
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           Compress-Archive -Path $appImage -DestinationPath "$outputDir/FolderSpan-$version-preview-windows-arm64.zip" -Force
 
