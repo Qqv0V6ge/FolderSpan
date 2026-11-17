@@ -1,5 +1,6 @@
 package com.folderspan.ui.navigation
 
+import com.folderspan.utils.SettingsUtils
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -35,6 +36,13 @@ fun AppNavigator.pushSafe(screen: AppScreenRoute) {
 
 fun AppNavigator.popUntilRoot(): Boolean = popToRoot()
 
+private fun AppRoute.canOpen(): Boolean {
+    val screen = (this as? AppRoute.Payload)?.let(AppRoutePayloadStore::resolve)
+    if (screen?.requiresSoftwareConsent != true || SettingsUtils.ensureSoftwareConsent()) return true
+    AppRoutePayloadStore.release(this)
+    return false
+}
+
 private fun AppRoute.isDuplicateOf(route: AppRoute): Boolean =
     this == route || (this is AppRoute.Payload && route is AppRoute.Payload && routeKey == route.routeKey)
 
@@ -52,6 +60,7 @@ class MutableAppNavigator(
         get() = mutableRoutes.size > 1
 
     override fun push(route: AppRoute) {
+        if (!route.canOpen()) return
         val current = currentRoute
         if (current?.isDuplicateOf(route) == true) {
             if (current != route) {
@@ -80,6 +89,7 @@ class MutableAppNavigator(
     }
 
     override fun replaceRoot(route: AppRoute) {
+        if (!route.canOpen()) return
         val removed = mutableRoutes.filterNot { it == route }
         mutableRoutes.clear()
         mutableRoutes.add(route)
@@ -100,6 +110,7 @@ class BackStackAppNavigator(
         get() = backStack.size > 1
 
     override fun push(route: AppRoute) {
+        if (!route.canOpen()) return
         val current = currentRoute
         if (current?.isDuplicateOf(route) == true) {
             if (current != route) {
@@ -128,6 +139,7 @@ class BackStackAppNavigator(
     }
 
     override fun replaceRoot(route: AppRoute) {
+        if (!route.canOpen()) return
         val removed = backStack.filterNot { it == route }
         backStack.clear()
         backStack.add(route)

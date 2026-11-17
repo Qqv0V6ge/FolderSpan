@@ -125,6 +125,8 @@ private enum class ShareReceivePathFilter {
 }
 
 class FileShareManageScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

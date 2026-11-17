@@ -9,6 +9,7 @@ import com.folderspan.utils.SettingsUtils
 import strings.AppStrings
 
 internal fun withdrawSoftwareConsent() {
+    SettingsUtils.setOnboardingCompleted(true)
     SettingsUtils.setWelcomeAgreementAccepted(false)
     SettingsUtils.putBoolean(SettingsUtils.KEY_LAST_SESSION_FOREGROUND, false)
     exitApp()

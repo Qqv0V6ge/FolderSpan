@@ -16,6 +16,8 @@ interface AppRoute : NavKey {
 }
 
 interface AppScreenRoute {
+    val requiresSoftwareConsent: Boolean get() = false
+
     val routeKey: String
         get() = this::class.simpleName ?: toString()
 

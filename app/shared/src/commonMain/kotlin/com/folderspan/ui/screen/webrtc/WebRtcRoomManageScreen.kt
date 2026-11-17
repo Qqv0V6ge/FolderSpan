@@ -55,6 +55,8 @@ internal fun webRtcRoomDeleteConfirmMessage(name: String): String =
 internal fun webRtcRoomBatchDeleteConfirmMessage(count: Int): String = AppStrings.ui_you_sure_you_want_delete_selected_arg0_rooms.format(arg0 = (count).toString())
 
 class WebRtcRoomManageScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

@@ -1,5 +1,6 @@
 package com.folderspan.ui.components.drawer
 
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.FileAccessPermission
 import strings.AppStrings
 
@@ -99,6 +100,7 @@ internal class ClipboardOpenState(
             ) {
                 ClipboardTextDispatch.Empty -> Unit
                 is ClipboardTextDispatch.DownloadUrl -> {
+                    if (!SettingsUtils.ensureSoftwareConsent()) return@launch
                     when (clipboardUrlAction(entryMode)) {
                         ClipboardUrlAction.AddToShare -> {
                             if (ClipboardUrlShareFiles.inspectAndAdd(dispatch.url, urlShareInspector)) {

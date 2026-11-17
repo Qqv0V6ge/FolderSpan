@@ -159,6 +159,7 @@ class MainActivity : ComponentActivity() {
                 pendingDynamicLauncherIcon = useDynamicLauncherIcon
             }
             App(
+                onSoftwareConsentGranted = { startBackgroundService() },
                 onFirstFrameRendered = {
                     reportFullyDrawn()
                     initializePlatformRuntime(launchIntent)
@@ -221,7 +222,6 @@ class MainActivity : ComponentActivity() {
         if (!platformRuntimeInitialized) {
             platformRuntimeInitialized = true
             setupDragAndDrop()
-            startBackgroundService()
         }
         prepareInitialScreen(initialIntent)
         handleEntryIntent(initialIntent)

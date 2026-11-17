@@ -32,6 +32,7 @@ import com.folderspan.service.session.DeviceSessionHostTransferKind
 import com.folderspan.service.session.DeviceSessionStreamOpen
 import com.folderspan.service.session.HostDeviceFileClient
 import com.folderspan.ui.state.main.*
+import com.folderspan.utils.ensureFileSoftwareConsent
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
 import com.folderspan.utils.LogKit
@@ -177,6 +178,8 @@ internal class FileRuntimeTaskExecutor(
         if (!taskState.hasPendingRuntimeEntries(latestTask.key)) return
         val meta = taskState.loadRuntimeMeta(latestTask.key)
             ?: buildFallbackRuntimeMeta(latestTask, taskState.countPendingRuntimeEntries(latestTask.key))
+        if (!ensureFileSoftwareConsent(meta.source.protocol, meta.source.protocolId) ||
+            meta.target?.let { ensureFileSoftwareConsent(it.protocol, it.protocolId) } == false) return
         val resumedTask = latestTask.withStatus(StatusEnum.LOADING)
         taskState.addOrUpdate(resumedTask)
         val currentTask = taskState.getTask(latestTask.key) ?: resumedTask
@@ -221,6 +224,7 @@ internal class FileRuntimeTaskExecutor(
         src: FileSimpleInfo,
         dest: FileSimpleInfo,
     ): Result<Boolean> {
+        if (!ensureFileSoftwareConsent(src.protocol, src.protocolId) || !ensureFileSoftwareConsent(dest.protocol, dest.protocolId)) return Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
         val meta = prepareCopyRuntime(task, src, dest)
         return executePendingTask(task, meta)
     }
@@ -230,6 +234,7 @@ internal class FileRuntimeTaskExecutor(
         src: FileSimpleInfo,
         dest: FileSimpleInfo,
     ): Result<Boolean> {
+        if (!ensureFileSoftwareConsent(src.protocol, src.protocolId) || !ensureFileSoftwareConsent(dest.protocol, dest.protocolId)) return Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
         val meta = prepareMoveRuntime(task, src, dest)
         return executePendingTask(task, meta)
     }
@@ -238,6 +243,7 @@ internal class FileRuntimeTaskExecutor(
         task: Task,
         target: FileSimpleInfo,
     ): Result<Boolean> {
+        if (!ensureFileSoftwareConsent(target.protocol, target.protocolId)) return Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
         val meta = prepareDeleteRuntime(task, target)
         return executePendingTask(task, meta)
     }
@@ -1795,6 +1801,7 @@ internal class FileRuntimeTaskExecutor(
         task: Task,
         entry: TaskRuntimeQueueEntry,
     ): Result<Boolean> {
+        if (!ensureFileSoftwareConsent(entry.src.protocol, entry.src.protocolId) || !ensureFileSoftwareConsent(entry.dest.protocol, entry.dest.protocolId)) return Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
         validateCopyDestination(task, entry.toSourceFileSimpleInfo())
         if (taskState.findTaskArtifact(task.key, entry.entryId) == null &&
             taskState.loadRuntimeTransferCheckpoint(task.key, entry.entryId)?.destPath == entry.destPath) {
@@ -2149,6 +2156,7 @@ internal class FileRuntimeTaskExecutor(
         task: Task,
         entry: TaskRuntimeQueueEntry,
     ): Result<Boolean> {
+        if (!ensureFileSoftwareConsent(entry.src.protocol, entry.src.protocolId)) return Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
         val retryEntry = entry.toDeleteRetryEntry(task.taskType)
         val result = retryDeleteEntry(task, retryEntry)
         if (result.isSuccess && result.getOrDefault(false)) {

@@ -54,6 +54,8 @@ internal fun resolveWebRtcRoomPeerItemClickAction(
 }
 
 class WebRtcRoomDevicesScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @Composable
     override fun Content() {
         val navigator = LocalAppNavigator.currentOrThrow

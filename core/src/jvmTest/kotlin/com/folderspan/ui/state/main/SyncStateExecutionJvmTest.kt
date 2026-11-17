@@ -2119,6 +2119,8 @@ class SyncStateExecutionJvmTest {
             }
         }
         val database = createMcpHttpTestDatabase(driver)
+        com.folderspan.utils.SettingsUtils.init(com.russhwolf.settings.MapSettings())
+        com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(true)
         val taskState = TaskState(TestTaskFailureResultStore(), TestTaskRuntimePersistenceStore(), TempTaskCleanupStore(root.resolve("cleanup").toString()))
         val store = Store()
         val sync = SyncState(store) { SyncDeviceIdentity("fixture", "Fixture") }

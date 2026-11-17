@@ -74,6 +74,8 @@ class SyncSftpAcceptanceTest : ChineseLocalizationTest() {
         val sync = SyncState(TempSyncTaskStore(root.resolve("sync-tasks").toString())) {
             SyncDeviceIdentity("sftp-acceptance", "SFTP acceptance")
         }
+        com.folderspan.utils.SettingsUtils.init(com.folderspan.test.createInMemorySettings())
+        com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(true)
         val networkState = NetworkState(database)
         stopKoin()
         val koin = startKoin { modules(module {

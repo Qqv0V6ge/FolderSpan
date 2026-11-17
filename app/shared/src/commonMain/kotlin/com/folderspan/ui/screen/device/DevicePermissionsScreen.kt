@@ -67,6 +67,8 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 class DevicePermissionScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @Composable
     override fun Content() {
         val navigator = LocalAppNavigator.currentOrThrow

@@ -18,7 +18,7 @@ fun MaterialBanner(
     title: String,
     message: String,
     onActionClick: () -> Unit,
-    onDismiss: () -> Unit,
+    onDismiss: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     iconTint: Color = MaterialTheme.colorScheme.primary,
@@ -74,8 +74,10 @@ fun MaterialBanner(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text(text = dismissLabel)
+                if (onDismiss != null) {
+                    TextButton(onClick = onDismiss) {
+                        Text(text = dismissLabel)
+                    }
                 }
                 TextButton(onClick = onActionClick) {
                     Text(text = actionLabel)

@@ -36,6 +36,8 @@ import org.koin.compose.koinInject
 import strings.AppStrings
 
 class SyncRunPreviewScreen(private val taskId: Long, private val pendingDeletionsOnly: Boolean = false) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     override val routeKey: String get() = "SyncRunPreview:$taskId:$pendingDeletionsOnly"
 
     @Composable

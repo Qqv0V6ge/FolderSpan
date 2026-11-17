@@ -54,6 +54,7 @@ internal class ShareSaveFixture(private val driver: SqlDriver = createShareSaveT
     }
     fun start() {
         SettingsUtils.init(MapSettings())
+        SettingsUtils.setWelcomeAgreementAccepted(true)
         DatabaseReady.markReady()
         database = shareSaveDatabase(driver)
         database.deviceRoleQueries.insertWithId(2L, "Share test", "Share test", 0L)

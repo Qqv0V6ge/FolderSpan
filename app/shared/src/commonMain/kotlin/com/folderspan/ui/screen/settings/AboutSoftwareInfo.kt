@@ -1,5 +1,6 @@
 package com.folderspan.ui.screen.settings
 
+import com.folderspan.utils.SettingsUtils
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -225,7 +227,14 @@ internal fun AboutSoftwareLinks(
             onOpenLink = onOpenLink,
             modifier = Modifier.fillMaxWidth(),
         )
-        SoftwareConsentWithdrawal()
+        val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
+        if (softwareConsent) SoftwareConsentWithdrawal()
+        else AboutSoftwareNavigationItem(
+            title = AppStrings.welcome_agree_unlock,
+            supportingText = AppStrings.welcome_unlock_description,
+            testTag = "unlock-software-features",
+            onClick = { SettingsUtils.ensureSoftwareConsent() },
+        )
         AboutSoftwareAutoCaptureLogsItem(
             checked = autoCaptureLogs,
             onCheckedChange = onAutoCaptureLogsChange,

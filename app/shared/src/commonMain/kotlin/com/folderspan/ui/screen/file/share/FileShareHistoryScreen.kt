@@ -30,6 +30,8 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 class FileShareHistoryScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

@@ -1,5 +1,6 @@
 package com.folderspan.ui.components.drawer
 
+import com.folderspan.utils.SettingsUtils
 import strings.AppStrings
 
 import androidx.compose.foundation.clickable
@@ -82,7 +83,8 @@ internal fun rememberAppDrawerShareUiState(): AppDrawerShareUiState {
     val currentDesk by fileState.deskType.collectAsState()
     val drawerState = koinInject<DrawerState>()
     val isExpandShare by drawerState.isExpandShare.collectAsState()
-    val shareSnapshot = deviceState.shares.toList()
+    val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
+    val shareSnapshot = deviceState.shares.filter { softwareConsent || it.protocol == ShareProtocol.System }
     val keyRegistry = remember { AppDrawerShareKeyRegistry() }
     val rows = remember(shareSnapshot) { keyRegistry.rows(shareSnapshot) }
 

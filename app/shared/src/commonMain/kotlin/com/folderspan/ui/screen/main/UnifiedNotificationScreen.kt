@@ -314,6 +314,11 @@ class NotificationScreen internal constructor(
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
+        val softwareConsent by com.folderspan.utils.SettingsUtils.welcomeAgreementAccepted.collectAsState()
+        if (!softwareConsent) {
+            LocalNotificationScreen().Content()
+            return
+        }
         val navigator = LocalAppNavigator.currentOrThrow
         val notificationState = koinInject<NotificationState>()
         val accountRuntime = koinInject<UserNotificationRuntime>()
@@ -1557,6 +1562,9 @@ data class NotificationDetailScreen(
     val accountNotification: AccountNotification? = null,
     val announcement: AnnouncementMessage? = null,
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean
+        get() = accountNotification != null || announcement != null
+
     init {
         require(listOfNotNull(notification, accountNotification, announcement).size == 1) {
             "NotificationDetailScreen requires exactly one of notification, accountNotification, or announcement"

@@ -99,10 +99,8 @@ fun main(args: Array<String>) {
         initKoin()
         val ready = CompletableDeferred<Unit>()
         val job = runtimeScope.launch(start = CoroutineStart.LAZY) {
-            SettingsUtils.welcomeAgreementAccepted.collectLatest { accepted ->
-                if (accepted) startFolderSpanRuntime(onStarted = { ready.complete(Unit) }) {
-                    runAppBusinessServices(GlobalContext.get())
-                } else ready.complete(Unit)
+            startFolderSpanRuntime(onStarted = { ready.complete(Unit) }) {
+                runAppBusinessServices(GlobalContext.get())
             }
         }
         runtimeJob = job
@@ -182,13 +180,13 @@ fun main(args: Array<String>) {
                 }
 
                 App(
+                    onSoftwareConsentGranted = { initializeDesktopNotifications() },
                     onFirstFrameRendered = {
-                        initializeDesktopNotifications()
                         platformRuntimeReady = true
                     },
                 )
 
-                if (platformRuntimeReady && softwareConsent) {
+                if (platformRuntimeReady) {
                     val fileState = remember(koin) { koin.get<FileState>() }
                     val homeState = remember(koin) { koin.get<HomeState>() }
 

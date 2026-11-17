@@ -15,6 +15,7 @@ data class WelcomeAgreementFeature(
     val title: String,
     val description: String,
     val icon: ImageVector,
+    val requiresSoftwareConsent: Boolean,
 )
 
 enum class WelcomeAgreementDocumentType {
@@ -40,28 +41,32 @@ enum class WelcomeAgreementContentPlacement {
 fun welcomeAgreementTitle(): String = AppStrings.ui_welcome_folderspan
 
 fun welcomeAgreementSubtitle(): String =
-    AppStrings.ui_tool_multi_device_file_management_lan_transfer_remote_storage
+    AppStrings.welcome_local_description
 
-val welcomeAgreementFeatures = listOf(
+val welcomeAgreementFeatures: List<WelcomeAgreementFeature> get() = listOf(
     WelcomeAgreementFeature(
         title = AppStrings.ui_local_file_management,
         description = AppStrings.ui_browse_copy_move_rename_delete_local_files_while_maintaining,
         icon = Icons.Default.FolderOpen,
+        requiresSoftwareConsent = false,
     ),
     WelcomeAgreementFeature(
         title = AppStrings.ui_quick_link_sharing,
         description = AppStrings.ui_publish_files_directories_temporary_access_links_other_devices_download,
         icon = Icons.Default.Link,
+        requiresSoftwareConsent = true,
     ),
     WelcomeAgreementFeature(
         title = AppStrings.ui_transmission_between_devices_same_network,
         description = AppStrings.ui_discover_connect_devices_same_lan_send_receive_files_after,
         icon = Icons.Default.Devices,
+        requiresSoftwareConsent = true,
     ),
     WelcomeAgreementFeature(
         title = AppStrings.ui_remote_connection_network_disk,
         description = AppStrings.ui_add_third_party_network_disks_server_locations_such_webdav,
         icon = Icons.Default.Cloud,
+        requiresSoftwareConsent = true,
     ),
 )
 

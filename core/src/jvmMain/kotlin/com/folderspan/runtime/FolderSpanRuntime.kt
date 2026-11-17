@@ -12,6 +12,8 @@ import com.folderspan.ui.state.main.TaskState
 import com.folderspan.ui.state.main.WebRtcRoomState
 import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.file.FileShareState
+import com.folderspan.utils.SettingsUtils
+import kotlinx.coroutines.flow.collectLatest
 import com.folderspan.utils.DatabaseReady
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.coroutineScope
@@ -55,40 +57,57 @@ suspend fun startFolderSpanRuntime(
     var mcpLifecycle: McpHttpServiceLifecycle? = null
     var optionalServices: Job? = null
     var sharing: Job? = null
+    var startupReported = false
+    fun reportStarted() {
+        if (startupReported) return
+        startupReported = true
+        onStarted()
+    }
     try {
         koin.get<FolderSpanDatabase>()
         DatabaseReady.await()
         tasks = koin.get<TaskState>()
-        sync = koin.get<SyncState>()
-        devices = koin.get<DeviceState>()
         files = koin.get<FileState>()
-        check(koin.get<NetworkState>().loadPersisted()) { "Network configuration failed to load" }
-        check(koin.get<WebRtcRoomState>().loadPersisted()) { "WebRTC configuration failed to load" }
-        optionalServices = launch(start = CoroutineStart.UNDISPATCHED) {
-            RuntimeServiceFailures.observe("account-services", runOptionalServices)
+        SettingsUtils.welcomeAgreementAccepted.collectLatest { accepted ->
+            if (!accepted) {
+                reportStarted()
+                return@collectLatest
+            }
+            try {
+                sync = koin.get<SyncState>()
+                devices = koin.get<DeviceState>()
+                check(koin.get<NetworkState>().loadPersisted()) { "Network configuration failed to load" }
+                check(koin.get<WebRtcRoomState>().loadPersisted()) { "WebRTC configuration failed to load" }
+                optionalServices = launch(start = CoroutineStart.UNDISPATCHED) {
+                    RuntimeServiceFailures.observe("account-services", runOptionalServices)
+                }
+                devices.start()
+                sync.start()
+                mcpLifecycle = McpHttpServiceLifecycle(
+                    koin.get<McpHttpServiceInterface>(), koin.get<McpServerSettingsStore>()::read,
+                )
+                RuntimeServiceFailures.observe("mcp") { mcpLifecycle.enterForeground() }
+                sharing = launch {
+                    RuntimeServiceFailures.observe("sharing") { startBackgroundShareServices(koin.get<FileShareState>()) }
+                }
+                reportStarted()
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    RuntimeServiceFailures.observe("mcp-stop") { mcpLifecycle?.enterBackground() }
+                    RuntimeServiceFailures.observe("sharing-stop") { sharing?.cancelAndJoin() }
+                    RuntimeServiceFailures.observe("account-services-stop") { optionalServices?.cancelAndJoin() }
+                    RuntimeServiceFailures.observe("sync-stop") { sync?.stop() }
+                    RuntimeServiceFailures.observe("devices-stop") { devices?.stop() }
+                }
+            }
         }
-        devices.start()
-        sync.start()
-        mcpLifecycle = McpHttpServiceLifecycle(
-            koin.get<McpHttpServiceInterface>(), koin.get<McpServerSettingsStore>()::read,
-        )
-        RuntimeServiceFailures.observe("mcp") { mcpLifecycle.enterForeground() }
-        sharing = launch {
-            RuntimeServiceFailures.observe("sharing") { startBackgroundShareServices(koin.get<FileShareState>()) }
-        }
-        onStarted()
-        awaitCancellation()
     } finally {
         try {
             withContext(NonCancellable + Dispatchers.IO) {
                 // Every cleanup gets a chance, even if another service fails to stop.
-                RuntimeServiceFailures.observe("mcp-stop") { mcpLifecycle?.enterBackground() }
-                RuntimeServiceFailures.observe("sharing-stop") { sharing?.cancelAndJoin() }
-                RuntimeServiceFailures.observe("account-services-stop") { optionalServices?.cancelAndJoin() }
-                RuntimeServiceFailures.observe("sync-stop") { sync?.stop() }
                 RuntimeServiceFailures.observe("tasks-stop") { tasks?.stop() }
                 RuntimeServiceFailures.observe("files-stop") { files?.mainScope?.coroutineContext?.get(Job)?.cancelAndJoin() }
-                RuntimeServiceFailures.observe("devices-stop") { devices?.stop() }
             }
         } finally {
             runtimeMutex.unlock()

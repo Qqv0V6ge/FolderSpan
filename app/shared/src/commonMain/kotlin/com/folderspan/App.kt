@@ -1,5 +1,6 @@
 package com.folderspan
 
+import com.folderspan.ui.screen.onboarding.SoftwareConsentDialogHost
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +56,6 @@ private const val SYSTEM_SHARE_RESUME_REFRESH_MAX_ATTEMPTS = 10
 
 private data class AppRuntimeDependencies(
     val deviceState: DeviceState,
-    val fileState: FileState,
     val notificationState: NotificationState,
     val fileShareState: FileShareState,
     val settings: Settings,
@@ -68,7 +68,6 @@ private suspend fun loadAppRuntimeDependencies(koin: Koin): AppRuntimeDependenci
     withContext(Dispatchers.Default) {
         AppRuntimeDependencies(
             deviceState = koin.get(),
-            fileState = koin.get(),
             notificationState = koin.get(),
             fileShareState = koin.get(),
             settings = koin.get(),
@@ -164,7 +163,7 @@ internal fun shouldRetrySystemShareResumeRefresh(previousPaths: Set<String>, cur
 }
 
 internal fun shouldShowWelcomeAgreement(): Boolean =
-    !SettingsUtils.isWelcomeAgreementAccepted()
+    !SettingsUtils.isWelcomeAgreementAccepted() && !SettingsUtils.isOnboardingCompleted()
 
 internal fun shouldShowStandaloneOnboarding(): Boolean =
     SettingsUtils.isWelcomeAgreementAccepted() && !SettingsUtils.isOnboardingCompleted()
@@ -173,18 +172,24 @@ internal fun shouldShowStandaloneOnboarding(): Boolean =
 fun App(
     overlayContent: @Composable () -> Unit = {},
     onFirstFrameRendered: () -> Unit = {},
+    onSoftwareConsentGranted: () -> Unit = {},
 ) {
     val mainState = koinInject<MainState>()
     val crashState = koinInject<CrashState>()
     val crashInfo by crashState.crashInfo.collectAsState()
     val restartToken by crashState.restartToken.collectAsState()
     val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
-    val showWelcomeAgreement = !softwareConsent
+    var welcomeSkipped by remember { mutableStateOf(SettingsUtils.isOnboardingCompleted()) }
+    val showWelcomeAgreement = !softwareConsent && !welcomeSkipped
     var showStandaloneOnboarding by remember { mutableStateOf(shouldShowStandaloneOnboarding()) }
-    val runtimeReady = rememberAppRuntimeReady(onFirstFrameRendered, softwareConsent)
+    val runtimeReady = rememberAppRuntimeReady(onFirstFrameRendered)
     val koin = getKoin()
     var runtimeDependencies by remember(koin) { mutableStateOf<AppRuntimeDependencies?>(null) }
 
+    val currentOnSoftwareConsentGranted by rememberUpdatedState(onSoftwareConsentGranted)
+    LaunchedEffect(runtimeReady, softwareConsent) {
+        if (runtimeReady && softwareConsent) currentOnSoftwareConsentGranted()
+    }
     LaunchedEffect(runtimeReady, koin, softwareConsent) {
         if (softwareConsent && runtimeReady && runtimeDependencies == null) {
             runtimeDependencies = loadAppRuntimeDependencies(koin)
@@ -230,6 +235,11 @@ fun App(
                             when {
                                 showWelcomeAgreement -> {
                                     WelcomeAgreementScreen(
+                                        onLocalContinue = {
+                                            SettingsUtils.setOnboardingCompleted(true)
+                                            welcomeSkipped = true
+                                            showStandaloneOnboarding = false
+                                        },
                                         onAccepted = {
                                             showStandaloneOnboarding = shouldShowStandaloneOnboarding()
                                         }
@@ -246,12 +256,14 @@ fun App(
 
                                 else -> {
                                     MainScreen(windowSizeClass, homeNavigatorContent)
+                                    LocalFileRuntimeEffects()
                                     SftpHostKeyDialogHost()
                                     DeviceIdentityTrustDialogHost()
                                     TaskCleanupFailureDialogContainer()
                                 }
                             }
                                 overlayContent()
+                                SoftwareConsentDialogHost()
                             }
                         }
                     }
@@ -268,13 +280,11 @@ fun App(
 @Composable
 internal fun rememberAppRuntimeReady(
     onFirstFrameRendered: () -> Unit,
-    softwareConsent: Boolean = true,
 ): Boolean {
     var runtimeReady by remember { mutableStateOf(false) }
     val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
 
-    LaunchedEffect(softwareConsent) {
-        if (!softwareConsent) return@LaunchedEffect
+    LaunchedEffect(Unit) {
         withFrameNanos { }
         withFrameNanos { }
         currentOnFirstFrameRendered()
@@ -285,13 +295,53 @@ internal fun rememberAppRuntimeReady(
 }
 
 @Composable
+private fun LocalFileRuntimeEffects() {
+    val mainState = koinInject<MainState>()
+    val fileState = koinInject<FileState>()
+    val isFileLoading by fileState.isLoading.collectAsState()
+    val isExternalShareHandling by fileState.isExternalShareHandling.collectAsState()
+    val scope = rememberCoroutineScope()
+    var ignoreFirstResume by remember { mutableStateOf(true) }
+    var pendingResumeRefreshJob by remember { mutableStateOf<Job?>(null) }
+    OnAppResumeEffect {
+        val isFirstResume = ignoreFirstResume
+        ignoreFirstResume = false
+        if (isExternalShareHandling) {
+            pendingResumeRefreshJob?.cancel()
+            return@OnAppResumeEffect
+        }
+        if (!shouldRefreshFileScreenOnResume(isFirstResume, mainState.currentRoute, isFileLoading)) return@OnAppResumeEffect
+        pendingResumeRefreshJob?.cancel()
+        val resumeDesk = fileState.deskType.value
+        val resumePath = fileState.path.value
+        val initialVisiblePaths = fileState.fileAndFolder.map { it.path }.toSet()
+        val isSystemShareDesk = resumeDesk is Share && resumeDesk.protocol == ShareProtocol.System
+        pendingResumeRefreshJob = scope.launch {
+            if (!isSystemShareDesk) {
+                fileState.updateFileAndFolder()
+                return@launch
+            }
+            repeat(SYSTEM_SHARE_RESUME_REFRESH_MAX_ATTEMPTS) { attempt ->
+                if (!shouldRefreshFileScreenOnResume(false, mainState.currentRoute, fileState.isLoading.value) ||
+                    fileState.deskType.value != resumeDesk || fileState.path.value != resumePath) return@launch
+                fileState.updateFileAndFolder()
+                val currentVisiblePaths = fileState.fileAndFolder.map { it.path }.toSet()
+                if (!shouldRetrySystemShareResumeRefresh(initialVisiblePaths, currentVisiblePaths) ||
+                    attempt == SYSTEM_SHARE_RESUME_REFRESH_MAX_ATTEMPTS - 1) return@launch
+                delay(SYSTEM_SHARE_RESUME_REFRESH_RETRY_INTERVAL_MS.milliseconds)
+            }
+        }
+    }
+    DisposableEffect(Unit) { onDispose { pendingResumeRefreshJob?.cancel() } }
+}
+
+@Composable
 private fun AppRuntimeEffects(
     mainState: MainState,
     dependencies: AppRuntimeDependencies,
 ) {
     val koin = getKoin()
     val deviceState = dependencies.deviceState
-    val fileState = dependencies.fileState
     val notificationState = dependencies.notificationState
     val fileShareState = dependencies.fileShareState
     val settings = dependencies.settings
@@ -300,10 +350,7 @@ private fun AppRuntimeEffects(
     val scope = rememberCoroutineScope()
     val triggeredDeviceDiscovery = PlatformType.usesTriggeredDeviceDiscovery()
     val loadingDevices by deviceState.loadingDevices.collectAsState()
-    val isFileLoading by fileState.isLoading.collectAsState()
-    val isExternalShareHandling by fileState.isExternalShareHandling.collectAsState()
     var ignoreFirstResume by remember { mutableStateOf(true) }
-    var pendingResumeRefreshJob by remember { mutableStateOf<Job?>(null) }
     val mcpServiceLifecycle = remember(mcpHttpService, mcpSettingsStore) {
         McpHttpServiceLifecycle(mcpHttpService, mcpSettingsStore::read)
     }
@@ -332,47 +379,6 @@ private fun AppRuntimeEffects(
         val isFirstResume = ignoreFirstResume
         if (ignoreFirstResume) {
             ignoreFirstResume = false
-        }
-
-        if (isExternalShareHandling) {
-            pendingResumeRefreshJob?.cancel()
-            return@OnAppResumeEffect
-        }
-
-        val currentRoute = mainState.currentRoute
-        if (shouldRefreshFileScreenOnResume(isFirstResume, currentRoute, isFileLoading)) {
-            pendingResumeRefreshJob?.cancel()
-            val resumeDesk = fileState.deskType.value
-            val resumePath = fileState.path.value
-            val initialVisiblePaths = fileState.fileAndFolder.map { item -> item.path }.toSet()
-            val isSystemShareDesk = resumeDesk is Share && resumeDesk.protocol == ShareProtocol.System
-
-            pendingResumeRefreshJob = scope.launch {
-                if (!isSystemShareDesk) {
-                    fileState.updateFileAndFolder()
-                    return@launch
-                }
-
-                repeat(SYSTEM_SHARE_RESUME_REFRESH_MAX_ATTEMPTS) { attempt ->
-                    val latestRoute = mainState.currentRoute
-                    if (!shouldRefreshFileScreenOnResume(false, latestRoute, fileState.isLoading.value)) {
-                        return@launch
-                    }
-                    if (fileState.deskType.value != resumeDesk || fileState.path.value != resumePath) {
-                        return@launch
-                    }
-
-                    fileState.updateFileAndFolder()
-
-                    val currentVisiblePaths = fileState.fileAndFolder.map { item -> item.path }.toSet()
-                    val isLastAttempt = attempt == SYSTEM_SHARE_RESUME_REFRESH_MAX_ATTEMPTS - 1
-                    if (!shouldRetrySystemShareResumeRefresh(initialVisiblePaths, currentVisiblePaths) || isLastAttempt) {
-                        return@launch
-                    }
-
-                    delay(SYSTEM_SHARE_RESUME_REFRESH_RETRY_INTERVAL_MS.milliseconds)
-                }
-            }
         }
 
         if (!triggeredDeviceDiscovery || isFirstResume || loadingDevices) return@OnAppResumeEffect

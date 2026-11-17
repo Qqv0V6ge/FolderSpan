@@ -44,6 +44,8 @@ private const val GENERATED_FILE_SHARE_ACCESS_KEY_LENGTH = 32
  * 设置 -> 文件共享（二级页面）
  */
 class FileShareSettingsScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

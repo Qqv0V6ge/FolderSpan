@@ -41,6 +41,8 @@ import org.koin.compose.koinInject
 class WebRtcRoomEditScreen(
     private val room: WebRtcRoomProfile? = null
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     private val isEdit: Boolean = room != null
 
     @OptIn(ExperimentalMaterial3Api::class)

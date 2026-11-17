@@ -31,6 +31,8 @@ import com.folderspan.data.main.DiskMenuPermission
 import com.folderspan.extensions.fileOperationKey
 import com.folderspan.extensions.getFilterByExtension
 import com.folderspan.extensions.parsePath
+import com.folderspan.ui.components.banner.MaterialBanner
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.ui.components.showLatestSnackbar
 import com.folderspan.ui.components.appbar.AppBarPathContainer
 import com.folderspan.ui.components.dialog.*
@@ -60,6 +62,7 @@ object HomeScreen : AppScreenRoute {
     @Composable
     override fun Content() {
         val scope = rememberCoroutineScope()
+        val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
 
         val mainState = koinInject<MainState>()
         val editPath by mainState.isEditPath.collectAsState()
@@ -139,6 +142,11 @@ object HomeScreen : AppScreenRoute {
             }
         ) { item ->
             Column(Modifier.padding(item)) {
+                HomeSoftwareConsentBanner(
+                    softwareConsent = softwareConsent,
+                    onUnlock = { SettingsUtils.ensureSoftwareConsent() },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
                 FileScreen(snackbarHostState)
             }
         }
@@ -810,5 +818,21 @@ internal fun HomeBottomBarContent(
                 Icon(Icons.Filled.Add, AppStrings.ui_create_new_action)
             }
         }
+    )
+}
+
+@Composable
+internal fun HomeSoftwareConsentBanner(
+    softwareConsent: Boolean,
+    onUnlock: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (softwareConsent) return
+    MaterialBanner(
+        title = AppStrings.home_unlock_features_title,
+        message = AppStrings.home_unlock_features_message,
+        actionLabel = AppStrings.home_unlock_features_action,
+        onActionClick = onUnlock,
+        modifier = modifier,
     )
 }

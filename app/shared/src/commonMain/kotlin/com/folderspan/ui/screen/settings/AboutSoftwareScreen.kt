@@ -1,5 +1,6 @@
 package com.folderspan.ui.screen.settings
 
+import com.folderspan.utils.SettingsUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -109,8 +110,10 @@ class AboutSoftwareScreen : AppScreenRoute {
                 snapshot = displayedSnapshot,
                 channel = channel,
                 onCheck = {
+                    if (SettingsUtils.ensureSoftwareConsent()) {
                     pageCheckStarted = true
                     scope.launch { appUpdateRuntime.check(notify = false) }
+                    }
                 },
                 onChannelChange = { next ->
                     pageCheckStarted = false

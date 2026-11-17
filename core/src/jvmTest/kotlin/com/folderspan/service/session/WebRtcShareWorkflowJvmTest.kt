@@ -258,6 +258,7 @@ object WebRtcShareWorkflowEndpoint {
             }
             settings.putInt(SettingsUtils.KEY_FILE_SHARE_PORT, port)
             SettingsUtils.init(settings)
+            SettingsUtils.setWelcomeAgreementAccepted(true)
             FolderSpanDatabase.Schema.create(driver)
             DatabaseReady.markReady()
             val database = shareSaveDatabase(driver)

@@ -5,8 +5,8 @@ import com.folderspan.cleanup.ApplicationDataCleanup
 import com.folderspan.di.initKoin
 import com.folderspan.service.http.server.startBackgroundShareServices
 import com.folderspan.ui.state.file.FileShareState
-import com.folderspan.utils.LogKit
 import com.folderspan.utils.SettingsUtils
+import com.folderspan.utils.LogKit
 import com.folderspan.utils.installAppLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +26,7 @@ fun MainViewController() = run {
         .onFailure { error -> LogKit.e(AppStrings.ui_clear_folderspan_local_data_failed, error) }
     initKoin()
     ComposeUIViewController {
-        App(onFirstFrameRendered = ::startBackgroundShareServicesOnce)
+        App(onSoftwareConsentGranted = ::startBackgroundShareServicesOnce)
     }
 }
 

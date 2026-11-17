@@ -14,6 +14,7 @@ import com.folderspan.service.network.storageConnectionBinding
 import com.folderspan.service.mcp.file.FileEndpointRef
 import com.folderspan.ui.state.main.DeviceState
 import com.folderspan.ui.state.main.NetworkState
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
 import com.folderspan.utils.PathUtils
@@ -177,7 +178,7 @@ class CopyDestinationDiscovery(val runtimeId: String, parentScope: CoroutineScop
         val local = Local()
         val desks = listOf<DiskBase>(local) + deviceState.devices.toList() +
             deviceState.shares.filter { it.protocol == ShareProtocol.Remote } + networkState.entries.map { it.network }
-        return desks.distinctBy { desk -> if (desk is Local) "local" else binding(if (desk is Share) desk.session ?: desk else desk) }.map { desk ->
+        return desks.filter { it is Local || SettingsUtils.welcomeAgreementAccepted.value }.distinctBy { desk -> if (desk is Local) "local" else binding(if (desk is Share) desk.session ?: desk else desk) }.map { desk ->
             val ref = when (desk) {
                 is Local -> FileEndpointRef(FileProtocol.Local)
                 is Device -> FileEndpointRef(FileProtocol.Device, desk.id)

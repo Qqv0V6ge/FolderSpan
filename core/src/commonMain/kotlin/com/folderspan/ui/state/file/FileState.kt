@@ -13,6 +13,8 @@ import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.network.NetworkAccess
 import com.folderspan.data.main.network.Network
 import com.folderspan.service.data.ConnectType
+import com.folderspan.data.main.share.Share
+import com.folderspan.data.main.share.ShareProtocol
 import com.folderspan.data.main.share.SYSTEM_SHARE_DESK_ID
 import com.folderspan.data.main.share.buildSystemShareDesk
 import com.folderspan.db.FolderSpanDatabase
@@ -23,6 +25,8 @@ import com.folderspan.service.operation.TraversalScanProgress
 import com.folderspan.service.mcp.file.FileEndpointRef
 import com.folderspan.ui.state.main.*
 import com.folderspan.ui.theme.toColorScheme
+import com.folderspan.utils.ensureFileSoftwareConsent
+import com.folderspan.utils.SettingsUtils
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
@@ -519,12 +523,11 @@ class FileState : KoinComponent {
         type: DiskBase,
         isRefresh: Boolean = true,
         pathOverride: String? = null,
-    ) = deskSwitcher.updateDesk(
-        protocol = protocol,
-        type = type,
-        isRefresh = isRefresh,
-        pathOverride = pathOverride,
-    )
+    ) {
+        val isSystemShare = type is Share && type.protocol == ShareProtocol.System
+        if (type !is Local && !isSystemShare && !SettingsUtils.ensureSoftwareConsent()) return
+        deskSwitcher.updateDesk(protocol, type, isRefresh, pathOverride)
+    }
 
     // 加载状态
     private val _isLoading: MutableStateFlow<Boolean> = MutableStateFlow(false)
@@ -738,7 +741,10 @@ class FileState : KoinComponent {
         task: Task,
         srcFileSimpleInfo: FileSimpleInfo,
         destFileSimpleInfo: FileSimpleInfo,
-    ): Result<Boolean> = copyCoordinator.copyTo(
+    ): Result<Boolean> = if (!ensureFileSoftwareConsent(srcFileSimpleInfo.protocol, srcFileSimpleInfo.protocolId) ||
+        !ensureFileSoftwareConsent(destFileSimpleInfo.protocol, destFileSimpleInfo.protocolId)) {
+        Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
+    } else copyCoordinator.copyTo(
         task = task,
         srcFileSimpleInfo = srcFileSimpleInfo,
         destFileSimpleInfo = destFileSimpleInfo,
@@ -754,7 +760,10 @@ class FileState : KoinComponent {
         dest: FileSimpleInfo,
         sourceDesk: DiskBase,
         targetDesk: DiskBase,
-    ): Result<Boolean> = copyCoordinator.runCopyAcrossEndpoints(
+    ): Result<Boolean> = if (!ensureFileSoftwareConsent(src.protocol, src.protocolId) ||
+        !ensureFileSoftwareConsent(dest.protocol, dest.protocolId)) {
+        Result.failure(IllegalStateException(AppStrings.welcome_feature_requires_consent))
+    } else copyCoordinator.runCopyAcrossEndpoints(
         task = task,
         src = src,
         dest = dest,
