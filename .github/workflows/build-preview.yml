@@ -3,6 +3,11 @@ name: Build Preview
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "目标版本（MAJOR.MINOR.PATCH，留空沿用最新发布版本）"
+        required: false
+        default: ""
+        type: string
       build_android:
         description: "打包 Android"
         type: boolean
@@ -63,9 +68,6 @@ concurrency:
 env:
   JAVA_VERSION: "17"
   ORG_GRADLE_PROJECT_folderspanBuildType: release
-  # Preview numbering only: JDK 17 macOS jpackage rejects an app-version with major 0.
-  ORG_GRADLE_PROJECT_releaseVersion: 1.0.${{ github.run_number }}
-  ORG_GRADLE_PROJECT_androidVersionCode: ${{ github.run_number }}
 
 jobs:
   targets:
@@ -73,10 +75,25 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      apple_no_pro_build_number: ${{ steps.version.outputs.apple_no_pro_build_number }}
+      apple_build_number: ${{ steps.version.outputs.apple_build_number }}
+      windows_package_version: ${{ steps.version.outputs.windows_package_version }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
+      source_revision: ${{ steps.version.outputs.source_revision }}
+      version: ${{ steps.version.outputs.version }}
       web: ${{ steps.matrix.outputs.web }}
       native: ${{ steps.matrix.outputs.native }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve install versions
+        id: version
+        env:
+          BUILD_PRODUCT: app
+          BUILD_CHANNEL: preview
+          BUILD_VERSION: ${{ inputs.version }}
+        run: python3 scripts/ci/resolve-install-versions.py >> "$GITHUB_OUTPUT"
       - name: Select package platforms
         id: matrix
         env:
@@ -106,7 +123,7 @@ jobs:
 
   android:
     name: Package Android preview (${{ matrix.edition }})
-    needs: quality
+    needs: [targets, quality]
     if: (github.event_name != 'workflow_dispatch' || inputs.build_android)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -115,6 +132,8 @@ jobs:
       matrix:
         edition: [pro]
     env:
+      ORG_GRADLE_PROJECT_androidVersionCode: ${{ needs.targets.outputs.android_version_code }}
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.targets.outputs.version }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository
@@ -179,12 +198,12 @@ jobs:
           fi
 
   ios:
-    needs: quality
+    needs: [targets, quality]
     if: (github.event_name != 'workflow_dispatch' || inputs.build_ios)
     uses: ./.github/workflows/apple-store-pro.yml
     with:
-      version: ${{ format('1.0.{0}', github.run_number) }}
-      build_number: ${{ format('{0}', github.run_number) }}
+      version: ${{ needs.targets.outputs.version }}
+      build_number: ${{ needs.targets.outputs.apple_build_number }}
       ipa_artifact_name: preview-ios-pro
       ipa_retention_days: 14
     secrets:
@@ -207,6 +226,7 @@ jobs:
         edition: [pro]
         platform: ${{ fromJSON(needs.targets.outputs.web) }}
     env:
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.targets.outputs.version }}
       NODE_OPTIONS: --max-old-space-size=8192
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
@@ -258,6 +278,8 @@ jobs:
         edition: [pro]
         platform: ${{ fromJSON(needs.targets.outputs.native) }}
     env:
+      ORG_GRADLE_PROJECT_windowsPackageVersion: ${{ needs.targets.outputs.windows_package_version }}
+      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.targets.outputs.version }}
       ORG_GRADLE_PROJECT_includeProMain: ${{ matrix.edition == 'pro' }}
     steps:
       - name: Check out repository

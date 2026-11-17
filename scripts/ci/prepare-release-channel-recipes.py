@@ -73,12 +73,17 @@ def recipe_bundle(version, commit, version_code, artifacts, output):
     linux_hash = digest(linux_tar)
     properties = subprocess.check_output(["msiinfo", "export", str(msi), "Property"], text=True)
     msi_properties = dict(line.split("\t", 1) for line in properties.splitlines() if "\t" in line)
+    install_version = msi_properties["ProductVersion"]
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", install_version):
+        raise ValueError("MSI ProductVersion must be a numeric install version.")
 
     def winget(_source, text):
-        return (text.replace(OLD_MSI_URL, asset_url(version, "windows-x64", msi))
-                .replace(OLD_VERSION, version).replace(OLD_MSI_HASH, msi_hash)
-                .replace("{55AD7B2E-FEC5-3687-8B9E-741855B61C98}", msi_properties["ProductCode"])
-                .replace("{ADD48935-D0F8-3AAE-8594-602D7756ADCC}", msi_properties["UpgradeCode"]))
+        text = (text.replace(OLD_MSI_URL, asset_url(version, "windows-x64", msi))
+                    .replace(OLD_VERSION, version).replace(OLD_MSI_HASH, msi_hash)
+                    .replace("{55AD7B2E-FEC5-3687-8B9E-741855B61C98}", msi_properties["ProductCode"])
+                    .replace("{ADD48935-D0F8-3AAE-8594-602D7756ADCC}", msi_properties["UpgradeCode"]))
+        return re.sub(r"(?m)^([ ]*(?:PackageVersion|DisplayVersion):)[ ]*.*$",
+                      lambda match: f"{match[1]} {install_version}", text)
 
     def scoop(_source, text):
         manifest = json.loads(text)
