@@ -1,5 +1,8 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.exception.AuthenticationException
+import com.folderspan.exception.AuthorityException
+import com.folderspan.service.session.DeviceSessionClosedException
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.device.DeviceType
@@ -8,6 +11,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class FileListDeviceFallbackTest {
+    @Test
+    fun closedAndUnauthenticatedSessionsFallBackButPermissionDenialsDoNot() {
+        val device = device("closed-session")
+        for (error in listOf(DeviceSessionClosedException(), AuthenticationException(), IllegalStateException("wrapped", DeviceSessionClosedException()))) {
+            assertTrue(shouldFallbackToLocalAfterFileListFailure(device, device, error))
+        }
+        assertFalse(shouldFallbackToLocalAfterFileListFailure(device, device, AuthorityException()))
+    }
+
     @Test
     fun activeDeviceConnectionFailureFallsBackToLocal() {
         val device = device("device-1")

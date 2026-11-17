@@ -134,7 +134,7 @@ class FileState : KoinComponent {
             rememberPathForDesk = { desk, path -> rememberPathForDesk(desk, path) },
             rememberedPathForDesk = { desk -> rememberedPathForDesk(desk) },
             cancelListRequestsForDesk = { desk -> cancelListRequestsForDesk(desk) },
-            getRootPaths = { getRootPaths() },
+            getRootPaths = { loadRootPaths() },
             updatePath = { path -> updatePath(path) },
             updateFileAndFolder = { updateFileAndFolder() },
         )
@@ -677,19 +677,21 @@ class FileState : KoinComponent {
     }
 
     // 获取当前桌面的根路径列表
-    suspend fun getRootPaths(): List<PathInfo> {
+    suspend fun getRootPaths(): List<PathInfo> = loadRootPaths().getOrDefault(emptyList())
+
+    private suspend fun loadRootPaths(): Result<List<PathInfo>> {
         val desk = _deskType.value
         val roots = try {
-            entryReader.getRootPaths(desk)
+            Result.success(entryReader.getRootPaths(desk))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             if (_deskType.value == desk) {
                 _exception.value = error
             }
-            emptyList()
+            Result.failure(error)
         }
-        if (_deskType.value == desk) _rootPaths.value = roots
+        if (_deskType.value == desk) _rootPaths.value = roots.getOrDefault(emptyList())
         return roots
     }
 

@@ -1,6 +1,7 @@
 package com.folderspan.service.http.client
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.exception.EmptyDataException
 import com.folderspan.service.data.SerializableResult
 import com.folderspan.service.data.toResult
@@ -57,7 +58,7 @@ internal fun httpStatusException(
     val resolvedMessage = message.ifBlank { "HTTP ${status.value} ${status.description}" }
     return when (status) {
         HttpStatusCode.BadRequest -> IllegalArgumentException(resolvedMessage)
-        HttpStatusCode.Unauthorized -> AuthorityException(
+        HttpStatusCode.Unauthorized -> AuthenticationException(
             message = message.ifBlank { AppStrings.ui_auth_token_invalid }
         )
 
@@ -75,6 +76,9 @@ internal fun httpExceptionFromBody(
         ProtoBufCodec.decode<SerializableResult>(bodyBytes)
     }.getOrNull()
     if (decoded != null && decoded.looksLikeHttpResult() && !decoded.isSuccess) {
+        if (status == HttpStatusCode.Unauthorized) {
+            return httpStatusException(status, decoded.errorMessage.orEmpty())
+        }
         val exception = decoded.toResult<Boolean>().exceptionOrNull()
         if (exception is Exception) {
             return exception

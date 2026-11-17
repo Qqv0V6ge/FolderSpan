@@ -3,11 +3,18 @@ package com.folderspan.ui.state.main
 import com.folderspan.data.StatusEnum
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.test.ChineseLocalizationTest
 import strings.AppStrings
 import kotlin.test.*
 
 class TaskFailureSupportTest : ChineseLocalizationTest() {
+    @Test
+    fun authenticationFailureIsNotPresentedAsPermissionDenial() {
+        assertEquals(AppStrings.ui_unauthorized, AuthenticationException(AppStrings.ui_unauthorized).toTaskFailureMessage("fallback"))
+        assertEquals(AppStrings.ui_unauthorized, AppStrings.ui_unauthorized.toExplicitPermissionFailureMessage())
+    }
+
     @Test
     fun resolveTaskFailureMessageIgnoresTransientProgressMessages() {
         val taskState = TaskState(TestTaskFailureResultStore(), TestTaskRuntimePersistenceStore())

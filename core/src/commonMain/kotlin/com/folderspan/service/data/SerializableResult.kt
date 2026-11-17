@@ -1,6 +1,7 @@
 package com.folderspan.service.data
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.exception.EmptyDataException
 import com.folderspan.exception.ParameterErrorException
 import com.folderspan.exception.TimeoutException
@@ -38,7 +39,14 @@ data class SerializableResult(
             return SerializableResult(
                 isSuccess = false,
                 errorMessage = exception.message ?: "Unknown error",
-                errorType = exception::class.simpleName
+                errorType = when (exception) {
+                    is AuthenticationException -> "AuthenticationException"
+                    is AuthorityException -> "AuthorityException"
+                    is EmptyDataException -> "EmptyDataException"
+                    is ParameterErrorException -> "ParameterErrorException"
+                    is TimeoutException -> "TimeoutException"
+                    else -> exception::class.simpleName
+                },
             )
         }
     }
@@ -49,10 +57,7 @@ inline fun <reified T> Result<T>.toSerializableResult(): SerializableResult {
         SerializableResult.success(getOrThrow())
     } else {
         val exception = exceptionOrNull()
-        SerializableResult.failure(
-            errorMessage = exception?.message ?: "Unknown error",
-            errorType = exception?.let { error -> error::class.simpleName }
-        )
+        if (exception == null) SerializableResult.failure("Unknown error") else SerializableResult.failure(exception)
     }
 }
 
@@ -75,6 +80,7 @@ internal fun recreateException(errorType: String?, errorMessage: String): Except
     return when (errorType) {
         "EmptyDataException" -> EmptyDataException(errorMessage)
         "AuthorityException" -> AuthorityException(errorMessage)
+        "AuthenticationException" -> AuthenticationException(errorMessage)
         "ParameterErrorException" -> ParameterErrorException(errorMessage)
         "TimeoutException" -> TimeoutException(errorMessage)
         else -> Exception(errorMessage)

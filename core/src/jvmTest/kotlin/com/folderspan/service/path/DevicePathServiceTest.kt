@@ -45,6 +45,49 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class DevicePathServiceTest {
     @Test
+    fun cancellingSharePreservesOrdinaryDeviceSessions() {
+        val certificates = DeviceCertificateState(createInMemoryDatabase())
+        certificates.addDeviceSessionTokenAndPermission("peer", "normal", 1L)
+        certificates.addDeviceSessionTokenAndPermission("peer", "share", 1L)
+        certificates.setDeviceSharePathScope("share", DeviceSharePathScope(listOf(DeviceSharePathGrant("/shared", true))))
+        certificates.removeDeviceShareTokens("peer")
+        assertTrue(certificates.isTokenValid("normal"))
+        assertFalse(certificates.isTokenValid("share"))
+        certificates.removeDeviceToken("peer")
+        assertFalse(certificates.isTokenValid("normal"))
+    }
+
+    @Test
+    fun parallelSessionsKeepIndependentTokensAndDeviceWideRevocation() = runBlocking {
+        val certificates = DeviceCertificateState(createInMemoryDatabase())
+        certificates.addDeviceSessionTokenAndPermission("peer", "tls", 1L)
+        certificates.addDeviceSessionTokenAndPermission("peer", "webrtc", 1L)
+        assertTrue(certificates.isTokenValid("tls"))
+        assertTrue(certificates.isTokenValid("webrtc"))
+        certificates.setDevicePermission("peer", 2L)
+        assertTrue(certificates.checkPermission(FileAccessPermission.Denied, "tls", "/test", "write"))
+        assertTrue(certificates.checkPermission(FileAccessPermission.Denied, "webrtc", "/test", "write"))
+        certificates.removeToken("tls")
+        assertFalse(certificates.isTokenValid("tls"))
+        assertTrue(certificates.isTokenValid("webrtc"))
+        certificates.removeDeviceToken("peer")
+        assertFalse(certificates.isTokenValid("webrtc"))
+    }
+
+    @Test
+    fun legacyTokenReplacementStillRevokesAllEarlierSessions() {
+        val certificates = DeviceCertificateState(createInMemoryDatabase())
+        certificates.addDeviceSessionTokenAndPermission("peer", "tls", 1L)
+        certificates.addDeviceSessionTokenAndPermission("peer", "webrtc", 1L)
+        certificates.setDeviceTokenAndPermission("peer", "replacement", 1L)
+        assertFalse(certificates.isTokenValid("tls"))
+        assertFalse(certificates.isTokenValid("webrtc"))
+        assertTrue(certificates.isTokenValid("replacement"))
+        certificates.removeDevicePermission("peer")
+        assertFalse(certificates.isTokenValid("replacement"))
+    }
+
+    @Test
     fun deviceShareScopeUsesSingleVirtualRootAndHidesPhysicalPaths() = runBlocking {
         val database = createInMemoryDatabase()
         val certificateState = DeviceCertificateState(database)

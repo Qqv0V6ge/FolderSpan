@@ -1,6 +1,7 @@
 package com.folderspan.service.session
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.extensions.randomString
 import com.folderspan.getSocketDevice
 import com.folderspan.routes.RawHttpApiDispatcher
@@ -1003,7 +1004,7 @@ internal class DeviceSessionServer(
         job.start()
     }
 
-    private fun requireToken(): String = boundToken ?: throw AuthorityException(AppStrings.ui_unauthorized)
+    private fun requireToken(): String = boundToken ?: throw AuthenticationException(AppStrings.ui_unauthorized)
 
     private fun ok(request: DeviceSessionControlRequest, payload: ByteArray): DeviceSessionControlResponse {
         return DeviceSessionControlResponse(
@@ -1042,6 +1043,7 @@ internal class DeviceSessionServer(
 
     private fun rpcStatus(error: Throwable): Int {
         return when (error) {
+            is AuthenticationException -> DEVICE_SESSION_RPC_UNAUTHORIZED
             is AuthorityException -> DEVICE_SESSION_RPC_FORBIDDEN
             is IllegalArgumentException -> DEVICE_SESSION_RPC_BAD_REQUEST
             else -> DEVICE_SESSION_RPC_INTERNAL

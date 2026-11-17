@@ -4,6 +4,7 @@ import strings.AppStrings
 
 import com.folderspan.createSettings
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.exception.EmptyDataException
 import com.folderspan.exception.ParameterErrorException
 import com.folderspan.service.data.SerializableResult
@@ -43,11 +44,17 @@ class HttpClientExceptionMapperTest {
     }
 
     @Test
-    fun unauthorizedMapsToAuthorityException() {
+    fun unauthorizedMapsToAuthenticationException() {
         val exception = httpStatusException(HttpStatusCode.Unauthorized, AppStrings.ui_auth_token_invalid)
 
-        assertIs<AuthorityException>(exception)
+        assertIs<AuthenticationException>(exception)
         assertEquals(AppStrings.ui_auth_token_invalid, exception.message)
+    }
+
+    @Test
+    fun legacyUnauthorizedBodyKeepsAuthenticationFailure() {
+        val body = ProtoBufCodec.encode(SerializableResult.failure(AuthorityException(AppStrings.ui_auth_token_invalid)))
+        assertIs<AuthenticationException>(httpExceptionFromBody(HttpStatusCode.Unauthorized, body))
     }
 
     @Test

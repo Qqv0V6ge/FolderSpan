@@ -1,6 +1,7 @@
 package com.folderspan.service.session
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.service.message.DeviceMessagePersistenceException
 import com.folderspan.service.message.DeviceMessageTransferError
 import com.folderspan.service.message.DeviceMessageTransferException
@@ -28,6 +29,7 @@ internal enum class DeviceSessionEndpointRole(
 }
 
 internal fun deviceSessionRpcStatus(error: Throwable): Int = when (error) {
+    is AuthenticationException -> DEVICE_SESSION_RPC_UNAUTHORIZED
     is AuthorityException -> DEVICE_SESSION_RPC_FORBIDDEN
     is DeviceMessageValidationException, is IllegalArgumentException -> DEVICE_SESSION_RPC_BAD_REQUEST
     is DeviceMessagePersistenceException -> DEVICE_SESSION_RPC_INTERNAL

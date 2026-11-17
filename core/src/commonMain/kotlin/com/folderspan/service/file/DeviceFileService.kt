@@ -5,6 +5,7 @@ import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.extensions.parentPath
 import com.folderspan.service.data.*
 import com.folderspan.service.http.client.HttpRouteClientManager.Companion.MAX_LENGTH
@@ -512,9 +513,9 @@ class DeviceFileService(
     }
 
     private fun ensureAuthorized(authToken: String): Result<Unit> {
-        if (authToken.isBlank()) return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+        if (authToken.isBlank()) return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         if (!deviceCertificateState.isTokenValid(authToken)) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         return Result.success(Unit)
     }

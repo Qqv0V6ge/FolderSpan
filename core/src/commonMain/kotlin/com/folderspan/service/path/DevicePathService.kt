@@ -8,6 +8,7 @@ import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.exception.EmptyDataException
 import com.folderspan.extensions.getFileAndFolder
 import com.folderspan.service.data.CreateDirectoryRequest
@@ -66,7 +67,7 @@ class DevicePathService internal constructor(
     suspend fun list(authToken: String, request: ListRequest): Result<DevicePathEntries> {
         val authResult = ensureAuthorized(authToken)
         if (authResult.isFailure) {
-            return Result.failure(authResult.exceptionOrNull() ?: AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(authResult.exceptionOrNull() ?: AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         val shareScope = deviceCertificateState.getDeviceSharePathScope(authToken)
         if (shareScope != null) {
@@ -122,7 +123,7 @@ class DevicePathService internal constructor(
     suspend fun rootPaths(authToken: String): Result<List<PathInfo>> {
         val authResult = ensureAuthorized(authToken)
         if (authResult.isFailure) {
-            return Result.failure(authResult.exceptionOrNull() ?: AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(authResult.exceptionOrNull() ?: AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         val sharedRootPaths = deviceCertificateState.deviceShareRootPaths(authToken)
         if (sharedRootPaths != null) {
@@ -274,7 +275,7 @@ class DevicePathService internal constructor(
     ): Result<Boolean> {
         val authResult = ensureAuthorized(authToken)
         if (authResult.isFailure) {
-            return Result.failure(authResult.exceptionOrNull() ?: AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(authResult.exceptionOrNull() ?: AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         SensitiveFileAccessPolicy.deniedException(path)?.let { error ->
             return Result.failure(error)
@@ -304,10 +305,10 @@ class DevicePathService internal constructor(
 
     private fun ensureAuthorized(authToken: String): Result<Unit> {
         if (authToken.isBlank()) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         if (!deviceCertificateState.isTokenValid(authToken)) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         return Result.success(Unit)
     }
