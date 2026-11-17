@@ -38,6 +38,8 @@ import org.koin.compose.koinInject
  * 设置 -> 快捷分享（二级页面）
  */
 class EasyFileShareSettingsScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

@@ -364,6 +364,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     private val _isDeviceAdd: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val isDeviceAdd: StateFlow<Boolean> = _isDeviceAdd
     fun updateDeviceAdd(value: Boolean) {
+        if (value && !SettingsUtils.ensureSoftwareConsent()) return
         _isDeviceAdd.value = value
     }
 
@@ -658,6 +659,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     private var started = false
 
     suspend fun start() = withContext(Dispatchers.Main) {
+        if (!SettingsUtils.isWelcomeAgreementAccepted()) return@withContext
         check(mainScope.isActive) { "Device services have stopped" }
         if (started) return@withContext
         started = true
@@ -714,6 +716,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     suspend fun scanner(address: List<String>, port: Int, resumeIfPaused: Boolean = false) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         if (!PlatformType.usesTriggeredDeviceDiscovery()) return
         if (resumeIfPaused) {
             _scannerPaused.value = false
@@ -840,10 +843,12 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     fun connectWebRtcRoom(config: WebRtcConfig) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         webRtcController.connect(config)
     }
 
     fun connectWebRtcRoom(room: WebRtcRoomProfile) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         val config = room.toWebRtcConfigResult().getOrElse { error ->
             webRtcController.setConnectionError(error.message ?: AppStrings.ui_webrtc_room_connection_parameters_not_available)
             return
@@ -857,6 +862,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     fun connectWebRtcPeer(remoteId: String) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         webRtcController.requestPeerConnection(remoteId)
     }
 
@@ -932,6 +938,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
 
     // 手动指定发现地址，设备保存和连接策略与自动发现共用同一流程。
     suspend fun connectDeviceByAddress(ip: String, port: Int): SocketDevice? {
+        if (!SettingsUtils.ensureSoftwareConsent()) return null
         LogKit.i(AppStrings.ui_manual_ip_session_connection_host_arg0_port_arg1.format(arg0 = ip, arg1 = port.toString()))
         val socketDevice = resolveManualSessionDevice(
             host = ip,
@@ -1186,6 +1193,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     fun connectInBackground(connectDevice: SocketDevice) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         mainScope.launch {
             try {
                 connect(connectDevice)
@@ -1216,6 +1224,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         connectDevice: SocketDevice,
         accountDeviceAuthorization: Boolean = false,
     ) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         LogKit.i(
             AppStrings.ui_device_connection_id_arg0_transport_arg1.format(arg0 = (connectDevice.id), arg1 = (connectDevice.transportType).toString()) +
                 "host=${connectDevice.host}:${connectDevice.httpsPort} accountAuth=$accountDeviceAuthorization"
@@ -2336,6 +2345,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         action: DeviceShareRequestAction = DeviceShareRequestAction.View,
         savePath: String? = null
     ) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         mainScope.launch(Dispatchers.Default) {
             if (action == DeviceShareRequestAction.Reject || action == DeviceShareRequestAction.AutoReject) return@launch
             val shouldSave = action == DeviceShareRequestAction.Save || action == DeviceShareRequestAction.AutoSave

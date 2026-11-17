@@ -15,6 +15,8 @@ import kotlin.test.assertIs
 class AppDrawerMenuTest {
     @Test
     fun globalMenuShowsFeedbackAndMovesToolsOut() = runComposeUiTest {
+        com.folderspan.utils.SettingsUtils.init(com.folderspan.test.createInMemorySettings())
+        com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(true)
         val navigator = MutableAppNavigator(AppRoute.Home)
         var clipboardRequests = 0
         setContent {

@@ -52,6 +52,8 @@ private val NetworkEntryIdSetSaver = listSaver<Set<Long>, Long>(
 )
 
 class NetworkManageScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

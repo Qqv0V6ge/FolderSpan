@@ -1,5 +1,7 @@
 package com.folderspan.ui.screen.onboarding
 
+import com.folderspan.data.main.device.DeviceType
+import com.folderspan.PlatformType
 import strings.AppStrings
 
 import androidx.compose.foundation.Image
@@ -31,6 +33,7 @@ import com.seiko.imageloader.rememberImagePainter
 
 class WelcomeAgreementScreen(
     private val onAccepted: () -> Unit,
+    private val onLocalContinue: () -> Unit,
 ) : AppScreenRoute {
     @Composable
     override fun Content() {
@@ -60,6 +63,7 @@ class WelcomeAgreementScreen(
                     agreementAccepted = agreementAccepted,
                     onAgreementAcceptedChange = { item -> agreementAccepted = item },
                     onDocumentRequested = { item -> selectedDocumentType = item },
+                    onLocalContinue = onLocalContinue,
                     onContinue = {
                         if (canContinueWelcomeAgreement(agreementAccepted)) {
                             SettingsUtils.setWelcomeAgreementAccepted(true)
@@ -83,7 +87,7 @@ class WelcomeAgreementScreen(
 }
 
 @Composable
-private fun WelcomeAgreementContent(
+internal fun WelcomeAgreementContent(
     layout: WelcomeAgreementContentLayout,
     onDocumentRequested: (WelcomeAgreementDocumentType) -> Unit,
     modifier: Modifier = Modifier,
@@ -128,9 +132,13 @@ private fun WelcomeAgreementContent(
                         horizontalArrangement = Arrangement.spacedBy(32.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        WelcomeAgreementHero(
-                            modifier = Modifier.weight(0.9f)
-                        )
+                        Column(
+                            modifier = Modifier.weight(0.9f),
+                            verticalArrangement = Arrangement.spacedBy(22.dp),
+                        ) {
+                            WelcomeAgreementHero()
+                            WelcomeAgreementPolicySummary()
+                        }
                         WelcomeAgreementDetails(
                             onDocumentRequested = onDocumentRequested,
                             modifier = Modifier.weight(1.1f)
@@ -149,6 +157,7 @@ private fun WelcomeAgreementContent(
                             onDocumentRequested = onDocumentRequested,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        WelcomeAgreementPolicySummary()
                     }
                 }
             }
@@ -160,38 +169,33 @@ private fun WelcomeAgreementContent(
 private fun WelcomeAgreementHero(
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    Surface(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     ) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                FolderSpanLogo(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                )
-                Text(
-                    text = welcomeAgreementTitle(),
-                    style = MaterialTheme.typography.displaySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = welcomeAgreementSubtitle(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
-                )
-            }
+            FolderSpanLogo(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            )
+            Text(
+                text = welcomeAgreementTitle(),
+                style = MaterialTheme.typography.displaySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = welcomeAgreementSubtitle(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
+            )
         }
-        WelcomeAgreementPolicySummary()
     }
 }
 
@@ -266,6 +270,9 @@ private fun WelcomeAgreementDetails(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (PlatformType == DeviceType.JS) {
+            Text(AppStrings.welcome_web_execution_notice, style = MaterialTheme.typography.bodyMedium)
+        }
         welcomeAgreementFeatures.forEach { feature ->
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -301,6 +308,11 @@ private fun WelcomeAgreementDetails(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
+                            text = if (feature.requiresSoftwareConsent) AppStrings.welcome_feature_requires_consent else AppStrings.welcome_feature_available,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
                             text = feature.description,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -325,11 +337,12 @@ private fun WelcomeAgreementDetails(
 }
 
 @Composable
-private fun WelcomeAgreementBottomBar(
+internal fun WelcomeAgreementBottomBar(
     agreementAccepted: Boolean,
     onAgreementAcceptedChange: (Boolean) -> Unit,
     onDocumentRequested: (WelcomeAgreementDocumentType) -> Unit,
     onContinue: () -> Unit,
+    onLocalContinue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -341,7 +354,7 @@ private fun WelcomeAgreementBottomBar(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            val useRow = maxWidth > 640.dp
+            val useRow = maxWidth > 900.dp
             if (useRow) {
                 Row(
                     modifier = Modifier
@@ -357,11 +370,14 @@ private fun WelcomeAgreementBottomBar(
                         onDocumentRequested = onDocumentRequested,
                         modifier = Modifier.weight(1f)
                     )
+                    OutlinedButton(onClick = onLocalContinue) {
+                        Text(AppStrings.welcome_local_continue)
+                    }
                     Button(
                         onClick = onContinue,
                         enabled = canContinueWelcomeAgreement(agreementAccepted)
                     ) {
-                        Text(AppStrings.ui_agree_continue)
+                        Text(AppStrings.welcome_agree_unlock)
                         Spacer(Modifier.width(8.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -383,12 +399,15 @@ private fun WelcomeAgreementBottomBar(
                         onDocumentRequested = onDocumentRequested,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedButton(onClick = onLocalContinue, modifier = Modifier.fillMaxWidth()) {
+                        Text(AppStrings.welcome_local_continue)
+                    }
                     Button(
                         onClick = onContinue,
                         enabled = canContinueWelcomeAgreement(agreementAccepted),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(AppStrings.ui_agree_continue)
+                        Text(AppStrings.welcome_agree_unlock)
                         Spacer(Modifier.width(8.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -403,7 +422,7 @@ private fun WelcomeAgreementBottomBar(
 }
 
 @Composable
-private fun AgreementConsent(
+internal fun AgreementConsent(
     agreementAccepted: Boolean,
     onAgreementAcceptedChange: (Boolean) -> Unit,
     onDocumentRequested: (WelcomeAgreementDocumentType) -> Unit,

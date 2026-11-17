@@ -11,6 +11,18 @@ import kotlinx.coroutines.flow.asStateFlow
 object SettingsUtils {
     private val softwareConsent = MutableStateFlow(false)
     val welcomeAgreementAccepted = softwareConsent.asStateFlow()
+    private val consentRequested = MutableStateFlow(false)
+    val softwareConsentRequested = consentRequested.asStateFlow()
+
+    fun ensureSoftwareConsent(): Boolean {
+        if (softwareConsent.value) return true
+        consentRequested.value = true
+        return false
+    }
+
+    fun dismissSoftwareConsentRequest() {
+        consentRequested.value = false
+    }
     const val KEY_DEVICE_ID = "settings.deviceId"
     const val KEY_FILE_SHARE_ENABLED = "settings.fileShare.enabled"
     const val KEY_FILE_SHARE_PORT = "settings.fileShare.port"
@@ -276,6 +288,7 @@ object SettingsUtils {
     fun setWelcomeAgreementAccepted(accepted: Boolean) {
         settings.putBoolean(KEY_WELCOME_AGREEMENT_ACCEPTED, accepted)
         softwareConsent.value = accepted
+        if (accepted) dismissSoftwareConsentRequest()
     }
 
     /**

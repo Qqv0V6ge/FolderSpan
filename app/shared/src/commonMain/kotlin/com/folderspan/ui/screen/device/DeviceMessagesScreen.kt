@@ -94,6 +94,8 @@ internal fun shouldCollapseDeviceMessageBody(body: String): Boolean =
     body.length > DEVICE_MESSAGE_COLLAPSED_CHARACTER_COUNT
 
 class DeviceMessagesScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
@@ -255,6 +257,8 @@ data class DeviceMessageScreen(
     val deviceName: String,
     val initialEndpoint: DeviceMessageEndpointIdentity? = null,
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     override val routeKey: String = "DeviceMessageScreen:$peerDeviceId"
 
     @OptIn(ExperimentalMaterial3Api::class)

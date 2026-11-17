@@ -17,6 +17,8 @@ class WelcomeAgreementScreenTest : ChineseLocalizationTest() {
             listOf(AppStrings.ui_local_file_management, AppStrings.ui_quick_link_sharing, AppStrings.ui_transmission_between_devices_same_network, AppStrings.ui_remote_connection_network_disk),
             welcomeAgreementFeatures.map { item -> item.title }
         )
+        assertFalse(welcomeAgreementFeatures.first().requiresSoftwareConsent)
+        assertTrue(welcomeAgreementFeatures.drop(1).all { it.requiresSoftwareConsent })
         assertTrue(
             welcomeAgreementFeatures.any { item ->
                 item.description.contains("WebDAV") &&

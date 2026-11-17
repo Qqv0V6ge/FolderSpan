@@ -145,6 +145,7 @@ class NetworkState(private val database: FolderSpanDatabase) {
     }
 
     fun connectEntry(entry: NetworkEntry) {
+        if (!SettingsUtils.ensureSoftwareConsent()) return
         if (connectedEntries.any { item -> item.network == entry.network }) return
         connectedEntries.add(entry)
     }
@@ -155,6 +156,7 @@ class NetworkState(private val database: FolderSpanDatabase) {
     fun snapshotConnectedEntryIds(): Set<Long> = connectedEntries.mapTo(mutableSetOf()) { item -> item.id }
 
     suspend fun connectValidated(entryId: Long): Result<NetworkEntry> = runCatching {
+        check(SettingsUtils.ensureSoftwareConsent()) { AppStrings.welcome_feature_requires_consent }
 
         loadPersisted()
         val entry = entries.firstOrNull { item -> item.id == entryId }

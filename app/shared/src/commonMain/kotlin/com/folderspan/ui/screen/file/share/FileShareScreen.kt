@@ -87,6 +87,8 @@ import kotlinx.coroutines.*
 import org.koin.compose.koinInject
 
 object FileShareScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

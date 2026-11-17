@@ -147,6 +147,28 @@ class CopyDestinationMixedJvmTest {
         }
     }
 
+    @Test fun localFilesCopyWithoutConsentAndSavedRemoteTargetsAreNotProbed() = runBlocking {
+        fixture(softwareConsent = false) {
+            com.folderspan.utils.SettingsUtils.dismissSoftwareConsentRequest()
+            val source = FileUtils.getFile(FileAccessPermission.Allowed, root.resolve("input.txt").toString()).getOrThrow()
+            val request = state.createCopyDestinationRequest(listOf(source))
+            try {
+                assertEquals(listOf(FileProtocol.Local), request.discovery.loads.value.map { it.endpoint.endpoint.protocol })
+                val target = root.resolve("local/copied.txt")
+                val task = Task(taskType = TaskType.Copy, key = 87654, status = StatusEnum.LOADING)
+                tasks.addOrUpdate(task)
+                assertTrue(state.copyTo(task, source, FileSimpleInfo.pathFileSimpleInfo(target.toString())).getOrThrow())
+                assertEquals("local content", Files.readString(target))
+                assertFalse(com.folderspan.utils.SettingsUtils.softwareConsentRequested.value)
+                val denied = state.copyTo(Task(taskType = TaskType.Copy, status = StatusEnum.LOADING), source,
+                    FileSimpleInfo.pathFileSimpleInfo("/backup/denied.txt").copy(protocol = FileProtocol.Network, protocolId = "network"))
+                assertTrue(denied.isFailure)
+                assertTrue(provider.contents.isEmpty())
+                assertTrue(com.folderspan.utils.SettingsUtils.softwareConsentRequested.value)
+            } finally { request.close() }
+        }
+    }
+
     @Test fun discoveryObservesDeviceAndNetworkChangesUntilClosed() = runBlocking {
         fixture {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -530,10 +552,12 @@ class CopyDestinationMixedJvmTest {
         }
     }
 
-    private suspend fun fixture(supportsWriteCheck: Boolean = true, revokeBeforeWrite: Boolean = false, block: suspend Fixture.() -> Unit) {
+    private suspend fun fixture(supportsWriteCheck: Boolean = true, revokeBeforeWrite: Boolean = false, softwareConsent: Boolean = true, block: suspend Fixture.() -> Unit) {
         val root = Files.createTempDirectory("copy-mixed").toRealPath()
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         val database = createMcpHttpTestDatabase(driver)
+        com.folderspan.utils.SettingsUtils.init(com.russhwolf.settings.MapSettings())
+        com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(softwareConsent)
         DataEncryptionKey.init(createSettings())
         database.grantTestAdministratorAccess()
         val certificate = DeviceCertificateState(database)

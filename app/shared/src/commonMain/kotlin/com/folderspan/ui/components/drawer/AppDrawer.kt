@@ -86,6 +86,7 @@ fun AppDrawerContainer() {
             dragExpandNetwork = false
         }
     }
+    val softwareConsent by SettingsUtils.welcomeAgreementAccepted.collectAsState()
     val mainState = koinInject<MainState>()
     val taskState = koinInject<TaskState>()
     val drawerState = koinInject<MainDrawerState>()
@@ -128,15 +129,15 @@ fun AppDrawerContainer() {
     val isShowWebRtc by drawerState.isShowWebRtc.collectAsState()
     val isShowNetwork by drawerState.isShowNetwork.collectAsState()
     val isShowSync by drawerState.isShowSync.collectAsState()
-    val accountHeader = rememberProAccountHeader()
+    val accountHeader = if (softwareConsent) rememberProAccountHeader() else AppDrawerAccountHeader(title = AppStrings.app_name)
     val showSignInPrompt = rememberAppDrawerSignInPrompt(enabled = PRO_AVAILABLE && !isProAuthenticated())
     val bookmarkUiState = rememberAppDrawerBookmarkUiState()
-    val deviceUiState = if (isShowDevice) rememberAppDrawerDeviceUiState() else null
-    val webRtcUiState = if (isShowWebRtc) rememberAppDrawerWebRtcUiState() else null
+    val deviceUiState = if (softwareConsent && isShowDevice) rememberAppDrawerDeviceUiState() else null
+    val webRtcUiState = if (softwareConsent && isShowWebRtc) rememberAppDrawerWebRtcUiState() else null
     val shareUiState = rememberAppDrawerShareUiState()
-    val fileShareUiState = rememberAppDrawerFileShareUiState()
-    val networkUiState = if (isShowNetwork) rememberAppDrawerNetworkUiState() else null
-    val syncUiState = if (isShowSync) rememberAppDrawerSyncUiState() else null
+    val fileShareUiState = if (softwareConsent) rememberAppDrawerFileShareUiState() else null
+    val networkUiState = if (softwareConsent && isShowNetwork) rememberAppDrawerNetworkUiState() else null
+    val syncUiState = if (softwareConsent && isShowSync) rememberAppDrawerSyncUiState() else null
 
     val scope = rememberCoroutineScope()
     val tasks = remember(taskState.revision) { taskState.tasks.toList() }
@@ -148,7 +149,7 @@ fun AppDrawerContainer() {
         }
     }
     val revision = notificationState.revision
-    val accountUnreadCount = proNotificationUnreadCount()
+    val accountUnreadCount = if (softwareConsent) proNotificationUnreadCount() else 0
     val localUnreadCount = remember(revision) {
         notificationState.notifications.count { item -> !item.isRead && item.shouldShowInBell() }
     }
@@ -294,7 +295,10 @@ fun AppDrawerContainer() {
                 key = "drawer_file_share_group",
                 contentType = "drawer_file_share_group",
             ) {
-                AppDrawerFileShare(fileShareUiState)
+                if (fileShareUiState != null) AppDrawerFileShare(fileShareUiState)
+                else TextButton(onClick = { SettingsUtils.ensureSoftwareConsent() }) {
+                    Text(AppStrings.welcome_agree_unlock)
+                }
             }
             appDrawerShare(shareUiState)
             if (isShowNetwork) {

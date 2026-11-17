@@ -48,6 +48,8 @@ import org.koin.compose.koinInject
 class SyncRunDetailScreen(
     private val taskId: Long,
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     override val routeKey: String get() = "SyncRunDetail:$taskId"
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable

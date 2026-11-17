@@ -14,6 +14,7 @@ import com.folderspan.extensions.replaceLast
 import com.folderspan.ui.state.file.FileOperationState
 import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.settings.SettingsState
+import com.folderspan.utils.ensureFileSoftwareConsent
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.FileUtils
 import com.folderspan.utils.LogKit
@@ -151,6 +152,7 @@ class HomeState : KoinComponent {
     }
 
     fun openFile(file: FileSimpleInfo) {
+        if (!ensureFileSoftwareConsent(file.protocol, file.protocolId)) return
         if (file.isDirectory) return
         if (
             fileState.deskType.value is Local ||

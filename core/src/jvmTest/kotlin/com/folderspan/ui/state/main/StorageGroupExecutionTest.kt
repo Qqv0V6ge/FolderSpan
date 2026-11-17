@@ -141,6 +141,8 @@ class StorageGroupExecutionTest {
         val root = Files.createTempDirectory("storage-group-test")
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         val database = createMcpHttpTestDatabase(driver)
+        com.folderspan.utils.SettingsUtils.init(com.russhwolf.settings.MapSettings())
+        com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(true)
         val networkState = NetworkState(database)
         val taskState = TaskState(TestTaskFailureResultStore(), TestTaskRuntimePersistenceStore(), TempTaskCleanupStore(root.resolve("cleanup").toString()))
         val store = Store()

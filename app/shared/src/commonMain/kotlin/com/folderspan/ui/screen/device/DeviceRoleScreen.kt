@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 class DeviceRoleScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
@@ -196,6 +198,8 @@ class EditRoleScreen(
     private val role: DeviceRole? = null,
     private val onSave: (DeviceRole) -> Unit
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     private val isEdit = role != null
     private val permissionIds = mutableStateListOf<Long>()
     private val oldPermissionIds = mutableStateListOf<Long>()

@@ -86,6 +86,15 @@ class HomeNavigatorTest {
     }
 
     @Test
+    fun appRootRemembersLocalOnlyChoiceWithoutRecordingConsent() {
+        SettingsUtils.init(createInMemorySettings())
+        SettingsUtils.setOnboardingCompleted(true)
+        assertFalse(SettingsUtils.isWelcomeAgreementAccepted())
+        assertFalse(shouldShowWelcomeAgreement())
+        assertFalse(shouldShowStandaloneOnboarding())
+    }
+
+    @Test
     fun appRootShowsStandaloneOnboardingAfterAgreementWhenGuideHasNotCompleted() {
         SettingsUtils.init(
             createInMemorySettings(SettingsUtils.KEY_WELCOME_AGREEMENT_ACCEPTED to true)

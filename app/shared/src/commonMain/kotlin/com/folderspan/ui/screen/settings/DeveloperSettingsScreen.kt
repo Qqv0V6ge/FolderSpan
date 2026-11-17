@@ -23,6 +23,8 @@ import com.folderspan.ui.navigation.currentOrThrow
  * 设置 -> 开发者设置（二级页面）
  */
 class DeveloperSettingsScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

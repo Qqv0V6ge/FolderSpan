@@ -56,6 +56,8 @@ class SyncEditScreen(
     private val taskId: Long? = null,
     private val takeOwnership: Boolean = false,
 ) : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

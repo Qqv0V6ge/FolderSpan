@@ -112,6 +112,8 @@ internal fun AppUpdateHistorySnapshot.toPageAppendState(): PageAppendState = whe
 }
 
 class AppUpdateHistoryScreen : AppScreenRoute {
+    override val requiresSoftwareConsent: Boolean get() = true
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {

@@ -95,6 +95,16 @@ class RuntimeLifecycleJvmTest {
                     Files.deleteIfExists(directory.resolve("stopped"))
                     Files.deleteIfExists(directory.resolve("stop-request"))
                     Files.deleteIfExists(directory.resolve("target/payload.txt"))
+                    val local = start("local", "local-$round")
+                    awaitFile(directory.resolve("ready"), local)
+                    assertTrue(!Files.exists(directory.resolve("target/payload.txt")))
+                    Files.writeString(directory.resolve("stop-request"), "stop")
+                    assertTrue(local.waitFor(20, TimeUnit.SECONDS))
+                    assertEquals(0, local.exitValue())
+                    assertTrue(Files.exists(directory.resolve("stopped")))
+                    Files.deleteIfExists(directory.resolve("ready"))
+                    Files.deleteIfExists(directory.resolve("stopped"))
+                    Files.deleteIfExists(directory.resolve("stop-request"))
                     val runtime = start("run", "runtime-$round")
                     awaitFile(directory.resolve("ready"), runtime)
                     awaitFile(directory.resolve("target/payload.txt"), runtime)
@@ -187,13 +197,20 @@ object RuntimeLifecycleProbe {
         val lock = acquireRuntimeLockOrNull() ?: exitProcess(23)
         val exitCode = try {
             initKoin()
+            com.folderspan.utils.SettingsUtils.setWelcomeAgreementAccepted(args[0] != "local")
             runBlocking {
                 val job = launch(Dispatchers.Default, start = CoroutineStart.LAZY) {
                     try {
                         startFolderSpanRuntime(onStarted = {
-                            check(RuntimeServiceFailures.state.value["account-services"] == "service_failed")
                             val koin = GlobalContext.get()
-                            check(koin.get<NetworkState>().entries.single().network.name == "Saved fixture")
+                            if (args[0] == "local") {
+                                check(RuntimeServiceFailures.state.value.isEmpty())
+                                check(koin.get<NetworkState>().entries.isEmpty())
+                                check(!koin.get<com.folderspan.ui.state.file.FileShareState>().httpServer.isRunning())
+                            } else {
+                                check(RuntimeServiceFailures.state.value["account-services"] == "service_failed")
+                                check(koin.get<NetworkState>().entries.single().network.name == "Saved fixture")
+                            }
                             check(koin.get<TaskState>().getTask(9191)?.status == StatusEnum.FAILURE)
                             check(TempTaskRuntimePersistenceStore().loadTransferCheckpoint(9191, "retained")?.completedChunks == 4)
                             Files.writeString(root.resolve("ready"), "ready")
@@ -204,7 +221,7 @@ object RuntimeLifecycleProbe {
                 }
                 val hook = installRuntimeShutdownHook(job, lock)
                 try {
-                    if (System.getProperty("os.name").startsWith("Windows")) {
+                    if (args[0] == "local" || System.getProperty("os.name").startsWith("Windows")) {
                         launch(Dispatchers.IO) {
                             while (!Files.exists(root.resolve("stop-request"))) delay(50)
                             exitProcess(0)
