@@ -1,6 +1,7 @@
 package com.folderspan.service.bookmark
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.service.data.CreateBookmarkRequest
 import com.folderspan.service.data.DeleteBookmarkRequest
 import com.folderspan.service.data.ReorderBookmarksRequest
@@ -19,7 +20,7 @@ class DeviceBookmarkService(
     suspend fun getBookmarks(authToken: String): Result<List<DrawerBookmark>> {
         val authResult = ensureAuthorized(authToken)
         if (authResult.isFailure) {
-            return Result.failure(authResult.exceptionOrNull() ?: AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(authResult.exceptionOrNull() ?: AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         val denied = deviceCertificateState.checkPermission(
             FileAccessPermission.Allowed,
@@ -90,7 +91,7 @@ class DeviceBookmarkService(
     ): Result<Boolean> {
         val authResult = ensureAuthorized(authToken)
         if (authResult.isFailure) {
-            return Result.failure(authResult.exceptionOrNull() ?: AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(authResult.exceptionOrNull() ?: AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         val denied = deviceCertificateState.checkPermission(
             FileAccessPermission.Allowed,
@@ -114,10 +115,10 @@ class DeviceBookmarkService(
 
     private fun ensureAuthorized(authToken: String): Result<Unit> {
         if (authToken.isBlank()) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         if (!deviceCertificateState.isTokenValid(authToken)) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         return Result.success(Unit)
     }

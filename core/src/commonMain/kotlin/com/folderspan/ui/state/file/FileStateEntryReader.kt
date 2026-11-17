@@ -98,7 +98,7 @@ internal class FileStateEntryReader(
     suspend fun getRootPaths(desk: DiskBase = currentDesk()): List<PathInfo> = withContext(Dispatchers.Default) {
         when (desk) {
             is Local -> PathUtils.getRootPaths(FileAccessPermission.Allowed).getOrDefault(emptyList())
-            is Device -> desk.paths.getRootPaths().getOrDefault(emptyList())
+            is Device -> desk.paths.getRootPaths().getOrThrow()
             is Share -> listOf(PathInfo("/", 0L, 0L))
             is NetworkAccess -> desk.getRootPaths()
             else -> emptyList()

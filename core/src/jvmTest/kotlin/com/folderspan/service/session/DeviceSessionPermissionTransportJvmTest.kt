@@ -13,6 +13,7 @@ import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.db.*
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.routes.RawHttpApiDispatcher
 import com.folderspan.routes.RawHttpRequest
 import com.folderspan.service.data.CreateFileRequest
@@ -57,6 +58,21 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DeviceSessionPermissionTransportJvmTest {
+    @Test fun authenticationAndPermissionFailuresRemainDistinctOnBothCarriers() = runBlocking {
+        for (carrier in PermissionTestCarrier.entries) {
+            for (status in listOf(DEVICE_SESSION_RPC_UNAUTHORIZED, DEVICE_SESSION_RPC_FORBIDDEN)) {
+                withPermissionSession(carrier, DeviceSessionRequestHandler { request ->
+                    DeviceSessionControlResponse(request.requestId, status, errorMessage = "denied")
+                }) { peer ->
+                    val result = peer.rpcResult<ListRequest, DevicePathEntries>(DEVICE_SESSION_RPC_LIST_PATH, ListRequest("/"))
+                    if (status == DEVICE_SESSION_RPC_UNAUTHORIZED) assertIs<AuthenticationException>(result.exceptionOrNull())
+                    else assertIs<AuthorityException>(result.exceptionOrNull())
+                    assertEquals("denied", result.exceptionOrNull()?.message)
+                }
+            }
+        }
+    }
+
     @Test
     fun publicHttpDispatcherRejectsRetiredFileAndPathEndpoints() = runBlocking {
         val dispatcher = RawHttpApiDispatcher(settings = MapSettings())

@@ -1,6 +1,7 @@
 package com.folderspan.service.file
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.extensions.parentPath
 import com.folderspan.service.data.CopyPathControlAction
 import com.folderspan.service.data.CopyPathControlRequest
@@ -159,9 +160,9 @@ class DeviceFileCopyService(
     }
 
     private fun ensureAuthorized(authToken: String): Result<Unit> {
-        if (authToken.isBlank()) return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+        if (authToken.isBlank()) return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         if (!deviceCertificateState.isTokenValid(authToken)) {
-            return Result.failure(AuthorityException(AppStrings.ui_auth_token_invalid))
+            return Result.failure(AuthenticationException(AppStrings.ui_auth_token_invalid))
         }
         return Result.success(Unit)
     }

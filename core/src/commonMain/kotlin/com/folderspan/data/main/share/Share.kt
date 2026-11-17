@@ -8,7 +8,8 @@ import com.folderspan.data.main.DiskMenuPermission
 import com.folderspan.data.main.Local
 import com.folderspan.data.main.device.Device
 import com.folderspan.data.main.device.DeviceType
-import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
+import com.folderspan.extensions.isConnectionException
 import com.folderspan.exception.TimeoutException
 import com.folderspan.service.network.isUnsafeRemoteListEntry
 import com.folderspan.ui.state.file.FileState
@@ -44,6 +45,16 @@ fun buildSystemShareDesk(): Share {
     )
 }
 
+internal fun shouldDisconnectShareSession(error: Throwable?): Boolean {
+    return when (error) {
+        is AuthenticationException -> true
+        is TimeoutException -> true
+        is HttpRequestTimeoutException -> true
+        is IOException -> true
+        else -> error?.isConnectionException() == true
+    }
+}
+
 data class Share(
     val id: String,
     override val name: String,
@@ -75,18 +86,8 @@ data class Share(
 
     private fun handleError() {
         deviceState.shares.remove(this)
-        fileState.updateDesk(FileProtocol.Local, Local())
+        if (fileState.deskType.value === this) fileState.updateDesk(FileProtocol.Local, Local())
         LogKit.e(AppStrings.ui_shared_session_exception_reverted_to_local_disk)
-    }
-
-    private fun shouldDisconnect(error: Throwable?): Boolean {
-        return when (error) {
-            is AuthorityException -> true
-            is TimeoutException -> true
-            is HttpRequestTimeoutException -> true
-            is IOException -> true
-            else -> false
-        }
     }
 
     suspend fun getFileList(
@@ -107,7 +108,7 @@ data class Share(
                     val message = AppStrings.ui_shared_list_returned_failure_arg0.format(
                         arg0 = (error?.message).toString()
                     )
-                    if (shouldDisconnect(error)) {
+                    if (shouldDisconnectShareSession(error)) {
                         LogKit.e(message, error)
                         handleError()
                     } else {
@@ -120,7 +121,7 @@ data class Share(
             Result.failure(e)
         } catch (e: Exception) {
             LogKit.e(AppStrings.ui_request_exception_for_shared_list, e)
-            if (shouldDisconnect(e)) {
+            if (shouldDisconnectShareSession(e)) {
                 handleError()
             }
             Result.failure(e)
@@ -143,7 +144,7 @@ data class Share(
                     val message = AppStrings.ui_shared_list_returned_failure_arg0.format(
                         arg0 = (error?.message).toString()
                     )
-                    if (shouldDisconnect(error)) {
+                    if (shouldDisconnectShareSession(error)) {
                         LogKit.e(message, error)
                         handleError()
                     } else {
@@ -156,7 +157,7 @@ data class Share(
             Result.failure(error)
         } catch (error: Exception) {
             LogKit.e(AppStrings.ui_request_exception_for_shared_list, error)
-            if (shouldDisconnect(error)) handleError()
+            if (shouldDisconnectShareSession(error)) handleError()
             Result.failure(error)
         }
     }
@@ -195,7 +196,7 @@ data class Share(
             )
             if (result.isFailure) {
                 val error = result.exceptionOrNull()
-                if (shouldDisconnect(error)) {
+                if (shouldDisconnectShareSession(error)) {
                     LogKit.e(AppStrings.ui_shared_copy_failed_arg0.format(arg0 = (error?.message).toString()), error)
                     handleError()
                 } else {
@@ -205,7 +206,7 @@ data class Share(
             result
         } catch (e: Exception) {
             LogKit.e(AppStrings.ui_share_replication_request_exception, e)
-            if (shouldDisconnect(e)) {
+            if (shouldDisconnectShareSession(e)) {
                 handleError()
             }
             Result.failure(e)
@@ -222,7 +223,7 @@ data class Share(
                 .readBytes(path, startOffset, endOffset)
             if (result.isFailure) {
                 val error = result.exceptionOrNull()
-                if (shouldDisconnect(error)) {
+                if (shouldDisconnectShareSession(error)) {
                     LogKit.e(AppStrings.ui_shared_read_range_failed_arg0.format(arg0 = (error?.message).toString()), error)
                     handleError()
                 } else {
@@ -232,7 +233,7 @@ data class Share(
             result
         } catch (e: Exception) {
             LogKit.e(AppStrings.ui_shared_read_range_request_exception, e)
-            if (shouldDisconnect(e)) {
+            if (shouldDisconnectShareSession(e)) {
                 handleError()
             }
             Result.failure(e)
@@ -251,7 +252,7 @@ data class Share(
             results.collect { result ->
                 if (result.isFailure) {
                     val error = result.exceptionOrNull()
-                    if (shouldDisconnect(error)) {
+                    if (shouldDisconnectShareSession(error)) {
                         LogKit.e(AppStrings.ui_shared_traversal_failed_arg0.format(arg0 = (error?.message).toString()), error)
                         handleError()
                     } else {
@@ -264,7 +265,7 @@ data class Share(
             throw e
         } catch (e: Exception) {
             LogKit.e(AppStrings.ui_shared_traversal_request_exception, e)
-            if (shouldDisconnect(e)) {
+            if (shouldDisconnectShareSession(e)) {
                 handleError()
             }
             emit(Result.failure(e))

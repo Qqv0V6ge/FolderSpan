@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 import strings.AppStrings
 
+class AuthenticationException(message: String = AppStrings.ui_auth_token_invalid) : IllegalStateException(message)
+
+open class ConnectionClosedException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 class TimeoutException(

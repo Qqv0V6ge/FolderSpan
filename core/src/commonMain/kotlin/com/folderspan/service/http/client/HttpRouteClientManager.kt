@@ -35,6 +35,7 @@ import strings.AppStrings
 
 internal enum class HttpRouteDisconnectReason {
     Unauthorized,
+    ConnectionLost,
     Explicit,
 }
 

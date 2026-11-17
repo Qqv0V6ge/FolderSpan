@@ -1,5 +1,8 @@
 package com.folderspan.data.main.share
 
+import com.folderspan.exception.AuthenticationException
+import com.folderspan.exception.AuthorityException
+import com.folderspan.service.session.DeviceSessionClosedException
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.main.device.DeviceType
@@ -11,6 +14,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ShareSessionTest {
+    @Test
+    fun onlyTerminalSessionErrorsDisconnectSharing() {
+        assertFalse(shouldDisconnectShareSession(AuthorityException("directory is forbidden")))
+        assertTrue(shouldDisconnectShareSession(AuthenticationException()))
+        assertTrue(shouldDisconnectShareSession(DeviceSessionClosedException()))
+        assertTrue(shouldDisconnectShareSession(IllegalStateException("wrapped", DeviceSessionClosedException())))
+    }
+
     @Test
     fun sessionShareOnlyExposesListAndReadCapabilities() = runTest {
         var listedPath = ""

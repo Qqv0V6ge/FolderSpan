@@ -305,7 +305,11 @@ class DeviceSessionClientManager(
                 deviceState.markHttpDeviceSeen(connectDevice.id)
             }
             active = true
-            sessionRuntime.sessionJob.invokeOnCompletion { active = false }
+            sessionRuntime.sessionJob.invokeOnCompletion {
+                val wasActive = active
+                active = false
+                if (wasActive) scope.launch { handleCancelConnect() }
+            }
             LogKit.i(AppStrings.ui_device_session_is_bound_id_arg0.format(arg0 = (connectDevice.id)))
             return true
         } catch (error: Throwable) {
@@ -429,10 +433,9 @@ class DeviceSessionClientManager(
     }
 
     private suspend fun handleCancelConnect() {
-        LogKit.w(AppStrings.ui_device_session_authentication_is_invalid_cleaning_connections)
         active = false
         try {
-            cancelConnectCallback?.invoke(HttpRouteDisconnectReason.Unauthorized)
+            cancelConnectCallback?.invoke(HttpRouteDisconnectReason.ConnectionLost)
         } finally {
             deviceMessageClient = null
             if (registerInDeviceState) cleanupConnectedDevice(ConnectType.UnConnect)
@@ -470,15 +473,21 @@ class DeviceSessionClientManager(
             token = token,
             sessionClient = manager,
         )
-        val index = deviceState.socketDevices.indexOfFirst { item -> item.id == connectDevice.id }
+        val index = deviceState.socketDevices.indexOfFirst { item ->
+            item.id == connectDevice.id && item.transportType == DeviceTransportType.Session
+        }
+        val previousManager = deviceState.socketDevices.getOrNull(index)?.sessionClient
+        if (manager == null && previousManager?.isActive == true) return
         if (index >= 0) {
             deviceState.socketDevices[index] = socketDevice
         } else {
             deviceState.socketDevices.add(socketDevice)
         }
-        if (socketDevice.connectType == ConnectType.Connect) {
+        if (socketDevice.connectType == ConnectType.Connect && manager != null) {
+            deviceState.devices.removeAll { it.id == socketDevice.id }
             deviceState.devices.add(socketDevice.toDevice())
         }
+        if (previousManager != null && previousManager !== manager) previousManager.disconnect(notifyCancel = false)
     }
 }
 

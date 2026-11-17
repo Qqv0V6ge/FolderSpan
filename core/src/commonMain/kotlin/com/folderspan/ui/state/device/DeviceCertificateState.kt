@@ -21,8 +21,8 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
     private data class AuthState(
         // Map<连接的token, 角色id>
         val permissions: Map<String, Long> = emptyMap(),
-        // Map<设备ID, 连接token>
-        val deviceTokens: Map<String, String> = emptyMap(),
+        // 同一设备的 TLS / WebRTC 会话分别授权，设备撤销仍覆盖全部会话。
+        val deviceTokens: Map<String, Set<String>> = emptyMap(),
         // Map<token, 设备ID>，避免并发遍历 map
         val tokenDeviceIds: Map<String, String> = emptyMap(),
         // Map<token, 鉴权指纹>
@@ -43,9 +43,9 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
      */
     fun setDevicePermission(deviceId: String, roleId: Long) {
         authState.update { state ->
-            val token = state.deviceTokens[deviceId] ?: return@update state
+            val tokens = state.deviceTokens[deviceId] ?: return@update state
             state.copy(
-                permissions = state.permissions + (token to roleId)
+                permissions = state.permissions + tokens.associateWith { roleId }
             )
         }
     }
@@ -78,12 +78,28 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
         token: String,
         roleId: Long,
         fingerprint: DeviceTokenFingerprint? = null
+    ) = registerDeviceToken(deviceId, token, roleId, fingerprint, replaceExisting = true)
+
+    internal fun addDeviceSessionTokenAndPermission(
+        deviceId: String,
+        token: String,
+        roleId: Long,
+        fingerprint: DeviceTokenFingerprint? = null,
+    ) = registerDeviceToken(deviceId, token, roleId, fingerprint, replaceExisting = false)
+
+    private fun registerDeviceToken(
+        deviceId: String,
+        token: String,
+        roleId: Long,
+        fingerprint: DeviceTokenFingerprint?,
+        replaceExisting: Boolean,
     ) {
         authState.update { state ->
             var nextState = state
-            val previousToken = state.deviceTokens[deviceId]
-            if (previousToken != null && previousToken != token) {
-                nextState = removeTokenFromState(nextState, previousToken)
+            if (replaceExisting) {
+                state.deviceTokens[deviceId].orEmpty().filter { it != token }.forEach { previous ->
+                    nextState = removeTokenFromState(nextState, previous)
+                }
             }
             val existingDeviceForToken = nextState.tokenDeviceIds[token]
             if (existingDeviceForToken != null && existingDeviceForToken != deviceId) {
@@ -91,7 +107,7 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
             }
 
             nextState.copy(
-                deviceTokens = nextState.deviceTokens + (deviceId to token),
+                deviceTokens = nextState.deviceTokens + (deviceId to (nextState.deviceTokens[deviceId].orEmpty() + token)),
                 tokenDeviceIds = nextState.tokenDeviceIds + (token to deviceId),
                 permissions = nextState.permissions + (token to roleId),
                 tokenFingerprints = updatedFingerprintMap(
@@ -110,11 +126,11 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
      */
     fun removeDevicePermission(deviceId: String) {
         authState.update { state ->
-            val token = state.deviceTokens[deviceId] ?: return@update state
+            val tokens = state.deviceTokens[deviceId] ?: return@update state
             state.copy(
-                permissions = state.permissions - token,
-                tokenFingerprints = state.tokenFingerprints - token,
-                deviceSharePathScopes = state.deviceSharePathScopes - token,
+                permissions = state.permissions - tokens,
+                tokenFingerprints = state.tokenFingerprints - tokens,
+                deviceSharePathScopes = state.deviceSharePathScopes - tokens,
             )
         }
     }
@@ -125,17 +141,19 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
      */
     fun removeDeviceToken(deviceId: String) {
         authState.update { state ->
-            val token = state.deviceTokens[deviceId]
-            var nextState = state.copy(
-                deviceTokens = state.deviceTokens - deviceId
-            )
-            if (token != null) {
-                nextState = nextState.copy(
-                    permissions = nextState.permissions - token,
-                    tokenDeviceIds = nextState.tokenDeviceIds - token,
-                    tokenFingerprints = nextState.tokenFingerprints - token,
-                    deviceSharePathScopes = nextState.deviceSharePathScopes - token,
-                )
+            var nextState = state
+            state.deviceTokens[deviceId].orEmpty().forEach { token ->
+                nextState = removeTokenFromState(nextState, token)
+            }
+            nextState
+        }
+    }
+
+    internal fun removeDeviceShareTokens(deviceId: String) {
+        authState.update { state ->
+            var nextState = state
+            state.deviceTokens[deviceId].orEmpty().filter { it in state.deviceSharePathScopes }.forEach { token ->
+                nextState = removeTokenFromState(nextState, token)
             }
             nextState
         }
@@ -440,9 +458,14 @@ class DeviceCertificateState(private val database: FolderSpanDatabase) {
         token: String
     ): AuthState {
         val deviceId = state.tokenDeviceIds[token]
+        val remainingTokens = deviceId?.let { state.deviceTokens[it] }.orEmpty() - token
         return state.copy(
             permissions = state.permissions - token,
-            deviceTokens = if (deviceId == null) state.deviceTokens else state.deviceTokens - deviceId,
+            deviceTokens = when {
+                deviceId == null -> state.deviceTokens
+                remainingTokens.isEmpty() -> state.deviceTokens - deviceId
+                else -> state.deviceTokens + (deviceId to remainingTokens)
+            },
             tokenDeviceIds = state.tokenDeviceIds - token,
             tokenFingerprints = state.tokenFingerprints - token,
             deviceSharePathScopes = state.deviceSharePathScopes - token,

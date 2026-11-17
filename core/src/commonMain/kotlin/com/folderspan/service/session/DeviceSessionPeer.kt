@@ -1,6 +1,7 @@
 package com.folderspan.service.session
 
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.service.data.SerializableResult
 import com.folderspan.service.data.toResult
 import com.folderspan.service.http.archive.FolderSpanArchiveReadRequest
@@ -104,7 +105,7 @@ internal class DeviceSessionPeer(
     suspend inline fun <reified Req, reified Res> rpcValue(method: String, request: Req): Res {
         val response = rpc(method, ProtoBufCodec.encode(request))
         if (!response.isSuccess) {
-            throw DeviceSessionRpcException(response.status, response.errorMessage.ifBlank { method })
+            throw rpcFailure(response)
         }
         return ProtoBufCodec.decode(response.payload)
     }
@@ -575,7 +576,8 @@ internal class DeviceSessionPeer(
 
     private fun rpcFailure(response: DeviceSessionControlResponse): Throwable {
         return when (response.status) {
-            DEVICE_SESSION_RPC_UNAUTHORIZED, DEVICE_SESSION_RPC_FORBIDDEN ->
+            DEVICE_SESSION_RPC_UNAUTHORIZED -> AuthenticationException(response.errorMessage.ifBlank { AppStrings.ui_auth_token_invalid })
+            DEVICE_SESSION_RPC_FORBIDDEN ->
                 AuthorityException(response.errorMessage.ifBlank { AppStrings.ui_unauthorized })
             else -> DeviceSessionRpcException(response.status, response.errorMessage)
         }

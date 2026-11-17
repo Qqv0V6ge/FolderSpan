@@ -457,7 +457,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             remoteDeviceLastSeen[deviceId] = connectedAt
         }
         withContext(Dispatchers.Main) {
-            deviceCertificateState.setDeviceTokenAndPermission(deviceId, token, roleId, fingerprint)
+            deviceCertificateState.addDeviceSessionTokenAndPermission(deviceId, token, roleId, fingerprint)
             remoteDeviceConnections[deviceId] = connectedAt
         }
     }
@@ -564,6 +564,8 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
 
     // 管理每台设备的心跳任务
     private val heartbeatJobs = mutableMapOf<String, Job>()
+    private val sessionConnectionAttempts = mutableMapOf<String, Deferred<Unit>>()
+    private val sessionConnectionManagers = mutableMapOf<String, DeviceSessionClientManager>()
 
     private val presenceMonitor = DevicePresenceMonitor(
         scope = mainScope,
@@ -908,8 +910,10 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     fun disconnectSocketDevice(device: SocketDevice): Boolean {
         return when (device.transportType) {
             DeviceTransportType.Session -> {
-                val disconnected = device.sessionClient?.disconnect() == true ||
-                    device.httpClient?.disconnect() == true
+                val attempt = sessionConnectionAttempts.remove(device.id)
+                attempt?.cancel()
+                val manager = sessionConnectionManagers[device.id] ?: device.sessionClient
+                val disconnected = manager?.disconnect() == true || device.httpClient?.disconnect() == true || attempt != null
                 if (disconnected || device.connectType == ConnectType.Loading) {
                     updateSocketDeviceConnectType(device, ConnectType.UnConnect)
                 }
@@ -1004,7 +1008,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         )
         val shouldAutoConnect = savedPolicy?.connectionType == DeviceConnectType.AUTO_CONNECT ||
             accountDecision == AccountDeviceLanDecision.AutoConnect
-        if (shouldAutoConnect && beginAccountAutoConnect(device.id, nowEpochMillis)) {
+        if (shouldAutoConnect && !isConnectedOrConnecting(device.id) && beginAccountAutoConnect(device.id, nowEpochMillis)) {
             LogKit.i(AppStrings.ui_device_auto_connected_id_arg0_policy_arg1_account_arg2.format(arg0 = (device.id), arg1 = (savedPolicy?.connectionType).toString(), arg2 = (accountDecision).toString()))
             device.connectType = ConnectType.Loading
             try {
@@ -1150,7 +1154,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
 
             val shouldAutoConnect = savedPolicy?.connectionType == DeviceConnectType.AUTO_CONNECT ||
                 accountDecision == AccountDeviceLanDecision.AutoConnect
-            if (shouldAutoConnect && beginAccountAutoConnect(device.id, nowEpochMillis)) {
+            if (shouldAutoConnect && !isConnectedOrConnecting(device.id) && beginAccountAutoConnect(device.id, nowEpochMillis)) {
                 device.connectType = ConnectType.Loading
                 try {
                     connect(
@@ -1379,48 +1383,86 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         allowChangedTrustedCertificate: Boolean = false,
         accountDeviceAuthorization: Boolean = false,
     ) {
-        val fileState = inject<FileState>().value
-        val connection = mainScope.async(Dispatchers.Default) {
-            val sessionClientManager = DeviceSessionClientManager()
-            LogKit.i(AppStrings.ui_create_device_session_client_id_arg0.format(arg0 = (connectDevice.id)))
-            sessionClientManager.onCancelConnect { reason ->
-                val connectType = when (reason) {
-                    HttpRouteDisconnectReason.Unauthorized -> Fail
-                    HttpRouteDisconnectReason.Explicit -> ConnectType.UnConnect
+        val connection = withContext(Dispatchers.Main) {
+            if (!allowChangedTrustedCertificate && socketDevices.any {
+                    it.id == connectDevice.id && it.transportType == DeviceTransportType.Session && it.sessionClient?.isActive == true
+                }) return@withContext null
+            sessionConnectionAttempts[connectDevice.id]?.takeIf { it.isActive } ?: mainScope.async(
+                Dispatchers.Default, start = CoroutineStart.LAZY,
+            ) {
+                establishHttpDeviceConnection(connectDevice, allowChangedTrustedCertificate, accountDeviceAuthorization)
+            }.also { attempt ->
+                sessionConnectionAttempts[connectDevice.id] = attempt
+                attempt.invokeOnCompletion {
+                    mainScope.launch {
+                        if (sessionConnectionAttempts[connectDevice.id] === attempt) sessionConnectionAttempts.remove(connectDevice.id)
+                    }
                 }
+                attempt.start()
+            }
+        } ?: return
+        connection.await()
+    }
+
+    private suspend fun establishHttpDeviceConnection(
+        connectDevice: SocketDevice,
+        allowChangedTrustedCertificate: Boolean,
+        accountDeviceAuthorization: Boolean,
+    ) {
+        val fileState = inject<FileState>().value
+        val sessionClientManager = DeviceSessionClientManager()
+        withContext(Dispatchers.Main) { sessionConnectionManagers[connectDevice.id] = sessionClientManager }
+        LogKit.i(AppStrings.ui_create_device_session_client_id_arg0.format(arg0 = (connectDevice.id)))
+        sessionClientManager.onCancelConnect { reason ->
+            val connectType = when (reason) {
+                HttpRouteDisconnectReason.Unauthorized, HttpRouteDisconnectReason.ConnectionLost -> Fail
+                HttpRouteDisconnectReason.Explicit -> ConnectType.UnConnect
+            }
+            clearHttpDeviceConnection(
+                deviceId = connectDevice.id,
+                expectedManager = sessionClientManager,
+                fileState = fileState,
+                connectType = connectType,
+            )
+        }
+
+        try {
+            val connected = sessionClientManager.connect(
+                connectDevice = connectDevice,
+                allowChangedTrustedCertificate = allowChangedTrustedCertificate,
+                accountDeviceAuthorization = accountDeviceAuthorization,
+            )
+            if (!connected) {
+                withContext(Dispatchers.Main) {
+                    if (sessionConnectionManagers[connectDevice.id] === sessionClientManager) sessionConnectionManagers.remove(connectDevice.id)
+                }
+                sessionClientManager.stop()
+                return
+            }
+            startSessionHeartbeat(connectDevice.id, sessionClientManager, fileState)
+        } catch (error: Throwable) {
+            if (error !is CancellationException) {
+                LogKit.e(
+                    AppStrings.ui_http_device_connection_failed_id_arg0_host_arg1_arg2.format(arg0 = connectDevice.id, arg1 = connectDevice.host, arg2 = (connectDevice.httpsPort).toString()) +
+                        "message=${error.message}",
+                    error
+                )
+                recordHttpDeviceConnectionFailure(connectDevice, error)
                 clearHttpDeviceConnection(
                     deviceId = connectDevice.id,
+                    expectedManager = sessionClientManager,
                     fileState = fileState,
-                    connectType = connectType,
+                    connectType = Fail,
                 )
             }
-
-            try {
-                val connected = sessionClientManager.connect(
-                    connectDevice = connectDevice,
-                    allowChangedTrustedCertificate = allowChangedTrustedCertificate,
-                    accountDeviceAuthorization = accountDeviceAuthorization,
-                )
-                if (!connected) return@async
-                startSessionHeartbeat(connectDevice.id, sessionClientManager, fileState)
-            } catch (error: Throwable) {
-                if (error !is CancellationException) {
-                    LogKit.e(
-                        AppStrings.ui_http_device_connection_failed_id_arg0_host_arg1_arg2.format(arg0 = connectDevice.id, arg1 = connectDevice.host, arg2 = (connectDevice.httpsPort).toString()) +
-                            "message=${error.message}",
-                        error
-                    )
-                    recordHttpDeviceConnectionFailure(connectDevice, error)
-                    clearHttpDeviceConnection(
-                        deviceId = connectDevice.id,
-                        fileState = fileState,
-                        connectType = Fail,
-                    )
+            withContext(NonCancellable) {
+                sessionClientManager.stop()
+                withContext(Dispatchers.Main) {
+                    if (sessionConnectionManagers[connectDevice.id] === sessionClientManager) sessionConnectionManagers.remove(connectDevice.id)
                 }
-                throw error
             }
+            throw error
         }
-        connection.await()
     }
 
     private suspend fun recordHttpDeviceConnectionFailure(
@@ -1434,15 +1476,17 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
 
     private suspend fun clearHttpDeviceConnection(
         deviceId: String,
+        expectedManager: DeviceSessionClientManager,
         fileState: FileState,
         connectType: ConnectType,
         cancelHeartbeat: Boolean = true,
     ) {
         withContext(Dispatchers.Main) {
-            // 401、显式断开或心跳失败时，移除该设备的连接状态
+            if (sessionConnectionManagers[deviceId] !== expectedManager) return@withContext
+            sessionConnectionManagers.remove(deviceId)
             val updatedDevices = socketDevices.map { item ->
-                if (item.id == deviceId) {
-                    item.withCopy(connectType = connectType, httpClient = null, sessionClient = null)
+                if (item.id == deviceId && item.transportType == DeviceTransportType.Session) {
+                    item.withCopy(connectType = connectType, token = "", httpClient = null, sessionClient = null)
                 } else {
                     item
                 }
@@ -1493,9 +1537,11 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         fileState: FileState,
     ) {
         withContext(Dispatchers.Main) {
+            if (sessionConnectionManagers[deviceId] !== sessionClientManager) return@withContext
             heartbeatJobs[deviceId]?.cancel()
             LogKit.i(AppStrings.ui_device_session_heartbeat_start_id_arg0.format(arg0 = (deviceId)))
-            heartbeatJobs[deviceId] = mainScope.launch {
+            val heartbeat = mainScope.launch(start = CoroutineStart.LAZY) {
+                val heartbeatJob = currentCoroutineContext().job
                 try {
                     sessionClientManager.deviceRouteClient.heartbeat()
                 } catch (error: CancellationException) {
@@ -1504,14 +1550,17 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                     LogKit.e(AppStrings.ui_http_device_heartbeat_failed_disconnected_id_arg0_message_arg1.format(arg0 = deviceId, arg1 = (error.message).toString()), error)
                     clearHttpDeviceConnection(
                         deviceId = deviceId,
+                        expectedManager = sessionClientManager,
                         fileState = fileState,
                         connectType = Fail,
                         cancelHeartbeat = false,
                     )
                 } finally {
-                    heartbeatJobs.remove(deviceId)
+                    if (heartbeatJobs[deviceId] === heartbeatJob) heartbeatJobs.remove(deviceId)
                 }
             }
+            heartbeatJobs[deviceId] = heartbeat
+            heartbeat.start()
         }
     }
 
@@ -2259,7 +2308,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         // 撤销允许连接标记，避免对方继续访问
         allowDeviceShareConnection.remove(deviceId)
         shareGrantExpiryJobs.remove(deviceId)?.cancel()
-        deviceCertificateState.removeDeviceToken(deviceId)
+        deviceCertificateState.removeDeviceShareTokens(deviceId)
         revokeWebRtcBootstrapAuthorization(deviceId)
         shareRequestDevices.remove(deviceId)
         // 清理状态与数据，恢复为未开始
@@ -2485,13 +2534,16 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             pathOverride = "/",
         )
         shareSessionLifecycleJobs.remove(share.id)?.cancel()
-        shareSessionLifecycleJobs[share.id] = mainScope.launch {
+        val lifecycle = mainScope.launch(start = CoroutineStart.LAZY) {
+            val lifecycleJob = currentCoroutineContext().job
             while (share.session?.isActive == true) delay(500.milliseconds)
             if (shares.remove(share) && (fileState.deskType.value as? Share) === share) {
                 fileState.updateDesk(FileProtocol.Local, Local())
             }
-            shareSessionLifecycleJobs.remove(share.id)
+            if (shareSessionLifecycleJobs[share.id] === lifecycleJob) shareSessionLifecycleJobs.remove(share.id)
         }
+        shareSessionLifecycleJobs[share.id] = lifecycle
+        lifecycle.start()
     }
 
     private fun disconnectShareConnection(share: Share) {
@@ -2528,7 +2580,8 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         manager: DeviceSessionClientManager,
     ) {
         shareSessionHeartbeatJobs.remove(deviceId)?.cancel()
-        shareSessionHeartbeatJobs[deviceId] = mainScope.launch {
+        val sessionHeartbeat = mainScope.launch(start = CoroutineStart.LAZY) {
+            val heartbeatJob = currentCoroutineContext().job
             try {
                 coroutineScope {
                     val heartbeat = launch { manager.deviceRouteClient.heartbeat() }
@@ -2553,9 +2606,11 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                         .toList()
                         .forEach(::disconnectShareConnection)
                 }
-                shareSessionHeartbeatJobs.remove(deviceId)
+                if (shareSessionHeartbeatJobs[deviceId] === heartbeatJob) shareSessionHeartbeatJobs.remove(deviceId)
             }
         }
+        shareSessionHeartbeatJobs[deviceId] = sessionHeartbeat
+        sessionHeartbeat.start()
     }
 
     private fun postDeviceShareSaveNotification(

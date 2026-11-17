@@ -1,5 +1,7 @@
 package com.folderspan.service.session
 
+import com.folderspan.exception.ConnectionClosedException
+
 import com.folderspan.service.operation.ensureOperationTransferRunning
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
@@ -21,7 +23,7 @@ private const val DEVICE_SESSION_CREDIT_WAIT_TIMEOUT_MILLIS = 120_000L
 
 internal class DeviceSessionClosedException(
     message: String = "device session closed",
-) : IllegalStateException(message)
+) : ConnectionClosedException(message)
 
 internal class DeviceSessionStreamLimitException(
     message: String = "device session stream limit exceeded",

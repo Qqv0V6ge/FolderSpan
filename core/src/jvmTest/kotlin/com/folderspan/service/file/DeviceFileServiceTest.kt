@@ -12,6 +12,7 @@ import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.db.*
 import com.folderspan.exception.AuthorityException
+import com.folderspan.exception.AuthenticationException
 import com.folderspan.service.data.*
 import com.folderspan.service.http.client.HttpRouteClientManager
 import com.folderspan.service.operation.OperationParallelismConfig
@@ -50,7 +51,7 @@ class DeviceFileServiceTest {
                 DeviceSharePathScope(listOf(DeviceSharePathGrant(directory.toString(), isDirectory = true))))
             assertIs<AuthorityException>(service.checkDirectoryWriteAccess(token, directory.toString()).exceptionOrNull())
             assertEquals(0L, Files.list(directory).use { it.count() })
-            assertIs<AuthorityException>(service.checkDirectoryWriteAccess("unknown-token", directory.toString()).exceptionOrNull())
+            assertIs<AuthenticationException>(service.checkDirectoryWriteAccess("unknown-token", directory.toString()).exceptionOrNull())
         } finally { directory.toFile().deleteRecursively() }
     }
 

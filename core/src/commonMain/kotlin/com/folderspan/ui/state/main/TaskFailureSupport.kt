@@ -94,8 +94,6 @@ private fun String.isPermissionFailureMessage(): Boolean {
         contains(AppStrings.ui_insufficient_permissions) ||
         contains(AppStrings.message_task_permission_denied) ||
         contains(AppStrings.ui_insufficient_permissions) ||
-        contains(AppStrings.legacy_permission_unauthorized_marker) ||
-        contains(AppStrings.ui_unauthorized) ||
         contains("AccessDeniedException") ||
         contains("Permission denied", ignoreCase = true) ||
         contains("Operation not permitted", ignoreCase = true) ||

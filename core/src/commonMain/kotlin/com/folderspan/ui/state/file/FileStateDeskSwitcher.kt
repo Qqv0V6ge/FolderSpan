@@ -23,7 +23,7 @@ internal class FileStateDeskSwitcher(
     private val rememberPathForDesk: (DiskBase, String) -> Unit,
     private val rememberedPathForDesk: (DiskBase) -> String?,
     private val cancelListRequestsForDesk: suspend (DiskBase) -> Unit,
-    private val getRootPaths: suspend () -> List<PathInfo>,
+    private val getRootPaths: suspend () -> Result<List<PathInfo>>,
     private val updatePath: suspend (String) -> Unit,
     private val updateFileAndFolder: suspend () -> Unit,
 ) {
@@ -53,12 +53,13 @@ internal class FileStateDeskSwitcher(
         mainScope.launch {
             withContext(Dispatchers.Default) {
                 cancelListRequestsForDesk(previousDesk)
+                val rootPaths = getRootPaths().getOrElse { return@withContext }
+                if (currentDesk() !== type) return@withContext
                 fileBookmarkState.load()
                 val rememberedPath = resolveRememberedPath(
                     pathOverride,
                     rememberedPathForDesk(type),
                 )
-                val rootPaths = getRootPaths()
                 if (rootPaths.isNotEmpty()) {
                     val rootPath = if (rememberedPath != null) {
                         rootPaths.firstOrNull { item -> rememberedPath.startsWith(item.path) } ?: rootPaths.first()
