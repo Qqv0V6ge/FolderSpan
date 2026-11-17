@@ -32,9 +32,13 @@ fun normalizeTlsFingerprintSha256(value: String): String {
         .uppercase()
 }
 
-val SERVER_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE = AppStrings.ui_service_certificate_fingerprint_does_not_match
-val DEVICE_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE = AppStrings.ui_device_tls_certificate_fingerprint_does_not_match
-val SHARE_DEVICE_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE = AppStrings.ui_shared_device_tls_certificate_fingerprint_mismatch
+// 错误文案随当前语言取值，避免 TLS 工具提前加载时固定语言，导致后续错误识别失败。
+val SERVER_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE: String
+    get() = AppStrings.ui_service_certificate_fingerprint_does_not_match
+val DEVICE_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE: String
+    get() = AppStrings.ui_device_tls_certificate_fingerprint_does_not_match
+val SHARE_DEVICE_CERTIFICATE_FINGERPRINT_MISMATCH_MESSAGE: String
+    get() = AppStrings.ui_shared_device_tls_certificate_fingerprint_mismatch
 
 fun Throwable.containsMessage(expected: String): Boolean {
     var current: Throwable? = this
