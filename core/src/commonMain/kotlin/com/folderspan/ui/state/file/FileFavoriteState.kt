@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
@@ -19,7 +20,7 @@ import org.koin.core.component.inject
 class FileFavoriteState : KoinComponent {
     private val database by inject<FolderSpanDatabase>()
 
-    val favorites = mutableStateListOf<FileFavorite>()
+    val favorites = sharedSnapshotState { mutableStateListOf<FileFavorite>() }
 
     var startLimit = 0L
     var endLimit = 100L

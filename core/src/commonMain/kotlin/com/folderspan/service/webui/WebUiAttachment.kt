@@ -1,17 +1,18 @@
 package com.folderspan.service.webui
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.folderspan.data.file.PathInfo
 
 object WebUiAttachment {
-    var mode by mutableStateOf(WebUiMode.Native)
-    var showConnectionDialog by mutableStateOf(false)
+    var mode by sharedSnapshotState { mutableStateOf(WebUiMode.Native) }
+    var showConnectionDialog by sharedSnapshotState { mutableStateOf(false) }
     var target: WebUiRuntimeAddress? = null
-    var connected by mutableStateOf(false)
-    var hasSession by mutableStateOf(false)
-    var stale by mutableStateOf(false)
+    var connected by sharedSnapshotState { mutableStateOf(false) }
+    var hasSession by sharedSnapshotState { mutableStateOf(false) }
+    var stale by sharedSnapshotState { mutableStateOf(false) }
     var plaintextHttp = false
     var pathSeparator = "/"
     var homePath = "/"
@@ -19,7 +20,7 @@ object WebUiAttachment {
     var rootPaths: List<PathInfo> = emptyList()
     var hostInfo: WebUiHostInfo? = null
     var sessionToken = ""
-    var sessionGeneration by mutableStateOf(0L)
+    var sessionGeneration by sharedSnapshotState { mutableStateOf(0L) }
         private set
 
     internal fun advanceSessionGeneration() { sessionGeneration++ }

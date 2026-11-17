@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.runtime.mutableStateListOf
@@ -42,7 +43,7 @@ class HomeState : KoinComponent {
         _isCreateFolder.value = value
     }
 
-    val checkedFileSimpleInfo = mutableStateListOf<FileSimpleInfo>()
+    val checkedFileSimpleInfo = sharedSnapshotState { mutableStateListOf<FileSimpleInfo>() }
 
     private val _autoHighlightPaths = MutableStateFlow<Set<String>>(emptySet())
     val autoHighlightPaths: StateFlow<Set<String>> = _autoHighlightPaths

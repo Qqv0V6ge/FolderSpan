@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import com.folderspan.runtime.RuntimeServiceFailures
@@ -405,9 +406,9 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         _pendingConnectNewDevice.value = null
     }
 
-    val devices = mutableStateListOf<Device>()
+    val devices = sharedSnapshotState { mutableStateListOf<Device>() }
 
-    val socketDevices = mutableStateListOf<SocketDevice>()
+    val socketDevices = sharedSnapshotState { mutableStateListOf<SocketDevice>() }
 
     val webRtcConnectionStatus: StateFlow<WebRtcConnectionStatus> = webRtcController.connectionStatus
     val webRtcTransfers = webRtcController.transfers
@@ -418,7 +419,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     val browserWebRtcPeerSessionStates = browserWebRtcController.peerSessionStates
 
     // 存储已连接的远程设备ID和连接时间的映射，key为设备ID，value为连接时间戳
-    val remoteDeviceConnections = mutableStateMapOf<String, Long>()
+    val remoteDeviceConnections = sharedSnapshotState { mutableStateMapOf<String, Long>() }
     private val remoteDeviceLastSeenMutex = Mutex()
     private val remoteDeviceLastSeen = mutableMapOf<String, Long>()
 
@@ -486,8 +487,8 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     // Map<设备id, Pair<设备链接类型, 结束倒计时>>
-    val connectionRequest = mutableStateMapOf<String, Pair<DeviceConnectType, Long>>()
-    val connectionRequestsMissingNotification = mutableStateMapOf<String, Long>()
+    val connectionRequest = sharedSnapshotState { mutableStateMapOf<String, Pair<DeviceConnectType, Long>>() }
+    val connectionRequestsMissingNotification = sharedSnapshotState { mutableStateMapOf<String, Long>() }
     private val pendingWebRtcConnectRequests = mutableMapOf<String, PendingWebRtcConnectRequest>()
     internal val deviceSessionBootstrapAuthorizationRegistry =
         DeviceSessionBootstrapAuthorizationRegistry()
@@ -1910,10 +1911,10 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
 
-    val shares = mutableStateListOf<Share>()
+    val shares = sharedSnapshotState { mutableStateListOf<Share>() }
 
     // Map<设备id, Pair<设备链接类型, 结束倒计时>>
-    val shareRequest = mutableStateMapOf<String, Pair<DeviceConnectType, Long>>()
+    val shareRequest = sharedSnapshotState { mutableStateMapOf<String, Pair<DeviceConnectType, Long>>() }
 
     fun updateShareRequest(
         deviceId: String,
@@ -1939,12 +1940,12 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     // 允许远程设备连接快捷分享服务
-    val allowDeviceShareConnection = mutableStateMapOf<String, DeviceShareConnectionGrant>()
+    val allowDeviceShareConnection = sharedSnapshotState { mutableStateMapOf<String, DeviceShareConnectionGrant>() }
 
-    private val shareRequestDevices = mutableStateMapOf<String, SocketDevice>()
+    private val shareRequestDevices = sharedSnapshotState { mutableStateMapOf<String, SocketDevice>() }
 
     // 共享连接结果 Map<设备Id, 共享连接结果>
-    private val shareConnectionResults = mutableStateMapOf<String, DeviceShareConnectionResult>()
+    private val shareConnectionResults = sharedSnapshotState { mutableStateMapOf<String, DeviceShareConnectionResult>() }
 
     fun publishShareConnectionResult(
         deviceId: String,

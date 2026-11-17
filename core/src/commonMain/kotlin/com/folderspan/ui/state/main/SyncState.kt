@@ -1,8 +1,11 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.folderspan.data.StatusEnum
@@ -104,15 +107,15 @@ class SyncState(
     private val runQueue = SyncRunQueue(scope)
     internal val lifecycleMutex = Mutex()
     internal val runPreviews = mutableMapOf<Long, SyncCachedPreview>()
-    val taskAttention = androidx.compose.runtime.mutableStateMapOf<Long, SyncTaskAttention>()
+    val taskAttention = sharedSnapshotState { mutableStateMapOf<Long, SyncTaskAttention>() }
     private var started = false
     private var automaticStarted = false
     private val systemScheduler by lazy { createSyncSystemScheduler(this, scope) }
     private var scheduleTimeZone = currentSyncTimeZone()
     private val runLocks = mutableMapOf<Long, Mutex>()
     private val runLocksMutex = Mutex()
-    private val runningOperationTasks = androidx.compose.runtime.mutableStateMapOf<Long, Task>()
-    internal val activeStorageGroups = androidx.compose.runtime.mutableStateMapOf<Long, List<Task>>()
+    private val runningOperationTasks = sharedSnapshotState { mutableStateMapOf<Long, Task>() }
+    internal val activeStorageGroups = sharedSnapshotState { mutableStateMapOf<Long, List<Task>>() }
 
     /** Returns the current local copy tasks whose existing metrics back the synchronization pages. */
     fun activeOperationTasks(taskId: Long): List<Task> {
@@ -178,10 +181,10 @@ class SyncState(
     }
 
 
-    val tasks = androidx.compose.runtime.mutableStateListOf<SyncTask>()
-    val runHistory = androidx.compose.runtime.mutableStateMapOf<Long, List<SyncRunRecord>>()
+    val tasks = sharedSnapshotState { mutableStateListOf<SyncTask>() }
+    val runHistory = sharedSnapshotState { mutableStateMapOf<Long, List<SyncRunRecord>>() }
 
-    var revision by mutableIntStateOf(0)
+    var revision by sharedSnapshotState { mutableIntStateOf(0) }
         private set
 
     fun startInBackground() { scope.launch {

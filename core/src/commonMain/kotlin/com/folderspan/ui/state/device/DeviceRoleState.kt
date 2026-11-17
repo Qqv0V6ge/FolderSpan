@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.device
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import app.cash.sqldelight.SuspendingTransacterImpl
 import app.cash.sqldelight.db.SqlDriver
@@ -14,7 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class DeviceRoleState(private val database: FolderSpanDatabase, driver: SqlDriver) {
-    val roles = mutableStateListOf<DeviceRole>()
+    val roles = sharedSnapshotState { mutableStateListOf<DeviceRole>() }
     private val scope = MainScope()
     private val transactions = object : SuspendingTransacterImpl(driver) {}
 

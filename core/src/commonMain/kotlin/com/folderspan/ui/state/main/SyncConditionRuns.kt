@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateMapOf
 import com.folderspan.service.sync.SyncExecutionConditions
 import com.folderspan.service.sync.SyncPlatformConditions
@@ -46,7 +47,7 @@ internal class SyncConditionRuns(
     private val lock = TaskRuntimeStoreLock()
     private val requests = mutableMapOf<Long, SyncConditionRun>()
     private val waiting = mutableMapOf<Long, SyncConditionRun>()
-    val waitingConditions = mutableStateMapOf<Long, Set<SyncRunCondition>>()
+    val waitingConditions = sharedSnapshotState { mutableStateMapOf<Long, Set<SyncRunCondition>>() }
     private var listener: Job? = null
 
     private inline fun <T> locked(block: () -> T): T {
