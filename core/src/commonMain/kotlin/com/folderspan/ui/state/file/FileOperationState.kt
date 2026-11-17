@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.runtime.mutableStateListOf
@@ -63,5 +64,5 @@ class FileOperationState {
         _isWarningOperationDialog.value = value
     }
 
-    val files = mutableStateListOf<FileOperation>()
+    val files = sharedSnapshotState { mutableStateListOf<FileOperation>() }
 }

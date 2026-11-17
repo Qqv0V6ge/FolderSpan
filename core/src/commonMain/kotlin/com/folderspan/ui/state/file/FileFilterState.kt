@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import com.folderspan.utils.FileAccessPermission
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.data.StatusEnum
@@ -89,7 +90,7 @@ class FileFilterState(private val settings: Settings) : KoinComponent {
     private var currentDirectoryFiles: List<FileSimpleInfo> = emptyList()
     private var currentIgnoreMatcher: ResolvedIgnoreMatcher? = null
     private var fileFiltersByExtension: Map<String, FileFilter> = emptyMap()
-    val filterFileTypes = mutableStateListOf<FileFilter>()
+    val filterFileTypes = sharedSnapshotState { mutableStateListOf<FileFilter>() }
 
     private val _updateKey: MutableStateFlow<Int> = MutableStateFlow(0)
     val updateKey: StateFlow<Int> = _updateKey
@@ -162,7 +163,7 @@ class FileFilterState(private val settings: Settings) : KoinComponent {
     }
 
     // 过滤的文件类型
-    val filterFileExtensions = mutableStateListOf<FileFilterType>()
+    val filterFileExtensions = sharedSnapshotState { mutableStateListOf<FileFilterType>() }
 
     // 是否显示隐藏文件
     private val _isHideFile: MutableStateFlow<Boolean> =

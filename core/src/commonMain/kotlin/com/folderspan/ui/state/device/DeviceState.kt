@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.device
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.data.device.DeviceJoinDeviceRole
 import com.folderspan.data.main.device.DeviceCategory
@@ -29,7 +30,7 @@ class DeviceSettingsState(private val database: FolderSpanDatabase) {
      * 设备列表，包含设备及其角色信息
      * 使用mutableStateListOf以便Compose可以观察变化
      */
-    val devices = mutableStateListOf<DeviceJoinDeviceRole>()
+    val devices = sharedSnapshotState { mutableStateListOf<DeviceJoinDeviceRole>() }
 
     private val _category: MutableStateFlow<DeviceCategory> = MutableStateFlow(DeviceCategory.SERVER)
 

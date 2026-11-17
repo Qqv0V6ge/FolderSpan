@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import com.folderspan.data.file.FileProtocol
@@ -25,10 +26,10 @@ class NetworkState(private val database: FolderSpanDatabase) {
         return if (protocol == "SMB") "\\" else "/"
     }
 
-    val entries = mutableStateListOf<NetworkEntry>()
+    val entries = sharedSnapshotState { mutableStateListOf<NetworkEntry>() }
     val networks: List<Network>
         get() = entries.map { item -> item.network }
-    val connectedEntries = mutableStateListOf<NetworkEntry>()
+    val connectedEntries = sharedSnapshotState { mutableStateListOf<NetworkEntry>() }
     val connectedNetworks: List<Network>
         get() = connectedEntries.map { item -> item.network }
 

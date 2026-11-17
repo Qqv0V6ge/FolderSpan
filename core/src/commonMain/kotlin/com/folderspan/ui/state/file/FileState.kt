@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.data.file.FileInfo
 import com.folderspan.data.file.FileProtocol
@@ -379,7 +380,7 @@ class FileState : KoinComponent {
         }
     }
 
-    val fileAndFolder = mutableStateListOf<FileSimpleInfo>()
+    val fileAndFolder = sharedSnapshotState { mutableStateListOf<FileSimpleInfo>() }
     private val scrollPositions = mutableMapOf<FileScrollLocation, FileScrollPosition>()
     private val _contentLocation = MutableStateFlow<FileScrollLocation?>(null)
     val contentLocation: StateFlow<FileScrollLocation?> = _contentLocation

@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.runtime.getValue
@@ -40,10 +41,10 @@ class TaskState(
     private val runtimeStore: TaskRuntimePersistenceStore = TempTaskRuntimePersistenceStore(),
     private val cleanupStore: TaskCleanupStore = TempTaskCleanupStore(),
 ) {
-    val tasks = mutableStateListOf<Task>()
-    var revision by mutableIntStateOf(0)
+    val tasks = sharedSnapshotState { mutableStateListOf<Task>() }
+    var revision by sharedSnapshotState { mutableIntStateOf(0) }
         private set
-    private val failureRevisions = mutableStateMapOf<Long, Int>()
+    private val failureRevisions = sharedSnapshotState { mutableStateMapOf<Long, Int>() }
 
     private val artifactDisplayPaths = mutableMapOf<Pair<Long, String>, String>()
     private val transferWaitCounts = mutableMapOf<Long, MutableMap<TransferWaitReason, Int>>()

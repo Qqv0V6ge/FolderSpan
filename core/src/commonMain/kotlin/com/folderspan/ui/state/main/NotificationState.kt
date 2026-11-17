@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
@@ -73,21 +74,21 @@ data class Notification(
 }
 
 class NotificationState {
-    private val notificationList = mutableStateListOf<Notification>()
+    private val notificationList = sharedSnapshotState { mutableStateListOf<Notification>() }
 //        .apply {
 //        addAll(initialNotifications())
 //    }
 
-    var ignoredBannerIds by mutableStateOf(setOf<Long>())
+    var ignoredBannerIds by sharedSnapshotState { mutableStateOf(setOf<Long>()) }
         private set
 
     val notifications: SnapshotStateList<Notification>
         get() = notificationList
 
-    var revision by mutableStateOf(0L)
+    var revision by sharedSnapshotState { mutableStateOf(0L) }
         private set
 
-    var pendingOpenRequestId by mutableStateOf<String?>(null)
+    var pendingOpenRequestId by sharedSnapshotState { mutableStateOf<String?>(null) }
         private set
 
     fun requestOpenRequestId(requestId: String) {

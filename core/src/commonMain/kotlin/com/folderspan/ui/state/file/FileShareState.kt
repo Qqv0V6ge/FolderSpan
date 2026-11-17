@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.*
 import com.folderspan.data.file.FileProtocol
 import com.folderspan.data.file.FileSimpleInfo
@@ -39,11 +40,11 @@ class FileShareState : KoinComponent {
         showInBanner = true,
         sendSystemNotification = true
     )
-    val files = mutableStateListOf<FileSimpleInfo>()
+    val files = sharedSnapshotState { mutableStateListOf<FileSimpleInfo>() }
 
-    val checkedFiles = mutableStateListOf<FileSimpleInfo>()
+    val checkedFiles = sharedSnapshotState { mutableStateListOf<FileSimpleInfo>() }
 
-    var incomingFiles by mutableStateOf<List<FileSimpleInfo>>(emptyList())
+    var incomingFiles by sharedSnapshotState { mutableStateOf<List<FileSimpleInfo>>(emptyList()) }
         private set
 
     fun updateIncomingFiles(files: List<FileSimpleInfo>) {
@@ -54,8 +55,8 @@ class FileShareState : KoinComponent {
         incomingFiles = emptyList()
     }
 
-    val sendFile = mutableStateMapOf<String, FileShareStatus>()
-    val sendFileMessage = mutableStateMapOf<String, String>()
+    val sendFile = sharedSnapshotState { mutableStateMapOf<String, FileShareStatus>() }
+    val sendFileMessage = sharedSnapshotState { mutableStateMapOf<String, String>() }
 
     private val _connectPassword: MutableStateFlow<String> = MutableStateFlow("")
     val connectPassword: StateFlow<String> = _connectPassword
@@ -72,10 +73,10 @@ class FileShareState : KoinComponent {
 
     // 已授权通过链接访问文件的设备
     // Map<设备, 授权访问快照>
-    val authorizedLinkShareDevices = mutableStateMapOf<Device, LinkShareDeviceAccess>()
+    val authorizedLinkShareDevices = sharedSnapshotState { mutableStateMapOf<Device, LinkShareDeviceAccess>() }
     private val authorizedLinkShareDeviceFingerprints = mutableMapOf<String, ShareTokenFingerprint>()
-    val linkShareSessions = mutableStateMapOf<String, LinkShareSession>()
-    val linkShareTickets = mutableStateMapOf<String, LinkShareTicket>()
+    val linkShareSessions = sharedSnapshotState { mutableStateMapOf<String, LinkShareSession>() }
+    val linkShareTickets = sharedSnapshotState { mutableStateMapOf<String, LinkShareTicket>() }
 
     fun authorizeLinkShareDevice(
         device: Device,
@@ -251,10 +252,10 @@ class FileShareState : KoinComponent {
     }
 
     // 请求单独允许网页上传的链接访问设备
-    val pendingLinkShareUploadDevices = mutableStateListOf<Device>()
+    val pendingLinkShareUploadDevices = sharedSnapshotState { mutableStateListOf<Device>() }
 
     // 被拒绝单独网页上传的链接访问设备
-    val rejectedLinkShareUploadDevices = mutableStateListOf<Device>()
+    val rejectedLinkShareUploadDevices = sharedSnapshotState { mutableStateListOf<Device>() }
 
     fun requestLinkShareUploadPermission(device: Device): LinkShareUploadPermissionRequestResult {
         val access = getAuthorizedLinkShareDevice(device.id)
@@ -354,10 +355,10 @@ class FileShareState : KoinComponent {
     }
 
     // 等待授权通过链接访问文件的设备
-    val pendingLinkShareDevices = mutableStateListOf<Device>()
+    val pendingLinkShareDevices = sharedSnapshotState { mutableStateListOf<Device>() }
 
     // 被拒绝通过链接访问文件的设备
-    val rejectedLinkShareDevices = mutableStateListOf<Device>()
+    val rejectedLinkShareDevices = sharedSnapshotState { mutableStateListOf<Device>() }
 
     fun addPendingLinkShareDevice(
         device: Device,
@@ -544,7 +545,7 @@ class FileShareState : KoinComponent {
 
     // 已授权通过设备访问文件的设备
     // Map<设备id, Pair<是否允许访问隐藏文件, 分享文件列表>>
-    val shareToDevices = mutableStateMapOf<String, Pair<Boolean, List<FileSimpleInfo>>>()
+    val shareToDevices = sharedSnapshotState { mutableStateMapOf<String, Pair<Boolean, List<FileSimpleInfo>>>() }
 
     fun syncAuthorizedLinkShareFiles(files: List<FileSimpleInfo>) {
         val filteredFiles = filterShareableFiles(files)
@@ -576,7 +577,7 @@ class FileShareState : KoinComponent {
     }
 
     // 链接分享默认授权配置只在新授权时快照，避免设置变更覆盖已授权客户端。
-    var linkShareDefaults by mutableStateOf<LinkShareDefaults?>(null)
+    var linkShareDefaults by sharedSnapshotState { mutableStateOf<LinkShareDefaults?>(null) }
         private set
 
     fun updateLinkShareDefaults(
@@ -601,7 +602,7 @@ class FileShareState : KoinComponent {
     }
 
     // Map<设备id, 请求日志管理器>
-    val deviceRequestLog = mutableStateMapOf<String, DeviceRequestLogUtils>()
+    val deviceRequestLog = sharedSnapshotState { mutableStateMapOf<String, DeviceRequestLogUtils>() }
 
     private val pendingLinkShareDeviceSources = mutableMapOf<String, String>()
     private val pendingLinkShareDeviceFingerprints = mutableMapOf<String, ShareTokenFingerprint>()

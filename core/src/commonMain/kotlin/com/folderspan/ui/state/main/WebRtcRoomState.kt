@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.runtime.getValue
@@ -29,15 +30,15 @@ import kotlin.time.Clock
 class WebRtcRoomState(
     private val database: FolderSpanDatabase
 ) {
-    val rooms = mutableStateListOf<WebRtcRoomProfile>()
+    val rooms = sharedSnapshotState { mutableStateListOf<WebRtcRoomProfile>() }
 
-    var officialIsLoading by mutableStateOf(false)
+    var officialIsLoading by sharedSnapshotState { mutableStateOf(false) }
         private set
-    var officialRefreshState by mutableStateOf<PageRefreshState>(PageRefreshState.Idle)
+    var officialRefreshState by sharedSnapshotState { mutableStateOf<PageRefreshState>(PageRefreshState.Idle) }
         private set
-    var officialAppendState by mutableStateOf<PageAppendState>(PageAppendState.Idle)
+    var officialAppendState by sharedSnapshotState { mutableStateOf<PageAppendState>(PageAppendState.Idle) }
         private set
-    var officialError by mutableStateOf<PageErrorState?>(null)
+    var officialError by sharedSnapshotState { mutableStateOf<PageErrorState?>(null) }
         private set
 
     private val localRooms = mutableListOf<WebRtcRoomProfile>()

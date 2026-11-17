@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.file
 
+import com.folderspan.ui.state.sharedSnapshotState
 import strings.AppStrings
 
 import androidx.compose.material.icons.Icons
@@ -28,10 +29,10 @@ class FileBookmarkState(
     private val currentDesk: () -> DiskBase,
 ) {
 
-    val bookmarks = mutableStateListOf<DrawerBookmark>()
-    var activeScope by mutableStateOf(BookmarkScope.Local)
+    val bookmarks = sharedSnapshotState { mutableStateListOf<DrawerBookmark>() }
+    var activeScope by sharedSnapshotState { mutableStateOf(BookmarkScope.Local) }
         private set
-    var sourceAvailable by mutableStateOf(true)
+    var sourceAvailable by sharedSnapshotState { mutableStateOf(true) }
         private set
 
     suspend fun load() {

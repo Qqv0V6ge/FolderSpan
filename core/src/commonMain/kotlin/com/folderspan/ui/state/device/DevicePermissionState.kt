@@ -1,5 +1,6 @@
 package com.folderspan.ui.state.device
 
+import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import com.folderspan.db.DevicePermission
 import com.folderspan.db.FolderSpanDatabase
@@ -13,7 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class DevicePermissionState(private val database: FolderSpanDatabase) {
-    val permissions = mutableStateListOf<DevicePermission>()
+    val permissions = sharedSnapshotState { mutableStateListOf<DevicePermission>() }
     private val scope = MainScope()
 
     init {
