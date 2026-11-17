@@ -15,6 +15,7 @@ import com.folderspan.service.http.clipboard.ClipboardUrlDownloadResult
 import com.folderspan.service.http.clipboard.ClipboardUrlDownloadState
 import com.folderspan.service.http.clipboard.ClipboardUrlDownloadTaskConfig
 import com.folderspan.service.http.clipboard.ClipboardUrlDownloader
+import com.folderspan.service.http.clipboard.ClipboardUrlDraftConfirmResult
 import com.folderspan.test.ChineseLocalizationTest
 import com.folderspan.ui.components.dialog.TaskInfoDialog
 import com.folderspan.ui.components.dialog.TaskInfoDialogUiState
@@ -26,9 +27,14 @@ import com.folderspan.ui.state.main.TaskState
 import com.folderspan.ui.state.main.TempTaskRuntimePersistenceStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import strings.AppStrings
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class ClipboardUrlDownloadTaskDataTest : ChineseLocalizationTest() {
@@ -85,9 +91,20 @@ class ClipboardUrlDownloadTaskDataTest : ChineseLocalizationTest() {
             runOnIdle {
                 val url = "https://example.test/file.bin"
                 coordinator.openUrl(url, url)
-                coordinator.confirm(assertIs<ClipboardUrlDownloadState.Configuring>(coordinator.state.value).draft)
+                assertIs<ClipboardUrlDraftConfirmResult.Confirmed>(
+                    coordinator.confirm(assertIs<ClipboardUrlDownloadState.Configuring>(coordinator.state.value).draft),
+                )
             }
-            waitUntil(timeoutMillis = 5_000) { tasks.tasks.singleOrNull()?.currentProgressCur() == 25 }
+            // 后台任务不由 Compose 测试时钟驱动，等待其状态发布后再断言界面。
+            val downloading = withContext(Dispatchers.Default) {
+                withTimeout(5_000) {
+                    coordinator.state.first {
+                        it is ClipboardUrlDownloadState.Downloading || it is ClipboardUrlDownloadState.Fallback
+                    }
+                }
+            }
+            assertIs<ClipboardUrlDownloadState.Downloading>(downloading)
+            assertEquals(25, tasks.tasks.single().currentProgressCur())
             onNodeWithText(AppStrings.ui_arg0_total.format(arg0 = "100")).assertIsDisplayed()
             onNodeWithText(AppStrings.ui_arg0_complete.format(arg0 = "25")).assertIsDisplayed()
             onNodeWithText(AppStrings.ui_arg0_remaining.format(arg0 = "75")).assertIsDisplayed()
@@ -95,10 +112,19 @@ class ClipboardUrlDownloadTaskDataTest : ChineseLocalizationTest() {
             onNodeWithText("25.0%", substring = true).assertIsDisplayed()
             onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo(0.25f, 0f..1f))).assertIsDisplayed()
             finishDownload.complete(Unit)
-            waitUntil(timeoutMillis = 5_000) { tasks.tasks.isEmpty() }
+            val completed = withContext(Dispatchers.Default) {
+                withTimeout(5_000) {
+                    coordinator.state.first {
+                        it is ClipboardUrlDownloadState.Succeeded || it is ClipboardUrlDownloadState.Fallback
+                    }
+                }
+            }
+            assertIs<ClipboardUrlDownloadState.Succeeded>(completed)
+            assertTrue(tasks.tasks.isEmpty())
             onAllNodesWithText("3.0 GB / 12.0 GB", substring = true).assertCountEquals(0)
         } finally {
             runOnIdle { coordinator.teardown() }
+            tasks.stop()
         }
     }
 }
