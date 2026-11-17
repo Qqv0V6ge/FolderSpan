@@ -1,22 +1,16 @@
-import json
 import os
 from pathlib import Path
 import re
 import subprocess
-import sys
 import tempfile
 import textwrap
 import unittest
 
+from test_platform_selection_workflows import workflow_matrices
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-PREVIEW_TARGETS = ROOT / "scripts" / "ci" / "select-preview-targets.py"
-
-
-def select_preview(preview, target):
-    result = subprocess.check_output([sys.executable, str(PREVIEW_TARGETS), preview, target], text=True)
-    return {name: json.loads(value) for name, value in (line.split("=", 1) for line in result.splitlines())}
 
 
 class SinglePackageWorkflowsTest(unittest.TestCase):
@@ -39,8 +33,6 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
         for path in WORKFLOWS.glob("build-*.yml"):
             if path.name != "build-release.yml":
                 entries.extend(self.read_static_package_entries(path))
-        for preview in ("app", "headless"):
-            entries.extend(select_preview(preview, "all")["native"])
 
         self.assertEqual(len(entries), 18)
         for entry in entries:
@@ -69,44 +61,15 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
 
     @staticmethod
     def read_static_package_entries(path):
-        for block in re.split(r"^          - os: ", path.read_text(), flags=re.M)[1:]:
-            tasks = re.search(r"^            tasks: (.+)$", block, re.M)
-            if tasks:
-                label = re.search(r"^            label: (.+)$", block, re.M)
-                paths = re.search(r"^            paths: (.*)\n((?: {14}[^\n]+\n)*)", block, re.M)
-                output = textwrap.dedent(paths[2]).strip() if paths[1] == "|" else paths[1]
-                yield {"label": label[1], "paths": output, "tasks": tasks[1]}
+        for group, entries in workflow_matrices(path).items():
+            if group != "web":
+                yield from entries
 
-    def test_previews_only_dispatch_manually_and_filter_every_selectable_target(self):
-        platforms = ("linux", "windows", "macos")
-        native = {f"{platform}-{arch}" for platform in platforms for arch in ("x64", "arm64")}
-        for preview, file_name in (("app", "build-preview.yml"), ("headless", "build-headless-preview.yml")):
+    def test_previews_only_dispatch_manually(self):
+        for file_name in ("build-preview.yml", "build-headless-preview.yml"):
             workflow = (WORKFLOWS / file_name).read_text()
             trigger = workflow.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
             self.assertEqual(re.findall(r"^  ([\w-]+):", trigger, re.M), ["workflow_dispatch"])
-            self.assertIn("default: all", trigger)
-            targets = set(re.findall(r"^          - ([\w-]+)$", trigger, re.M))
-            extra = {"android", "ios", "web", "web-js", "web-wasm"} if preview == "app" else set()
-            self.assertEqual(targets, {"all", *platforms} | native | extra)
-
-            for target in sorted(targets):
-                with self.subTest(preview=preview, target=target):
-                    selected = select_preview(preview, target)
-                    self.assertCountEqual(
-                        [entry["label"] for entry in selected["native"]],
-                        [label for label in native if target in ("all", label, label.split("-")[0])],
-                    )
-                    if preview == "app":
-                        self.assertCountEqual(
-                            [entry["label"] for entry in selected["web"]],
-                            [label for label in ("js", "wasm") if target in ("all", "web", f"web-{label}")],
-                        )
-
-            result = subprocess.run(
-                [sys.executable, str(PREVIEW_TARGETS), preview, "invalid-target"], capture_output=True, text=True,
-            )
-            self.assertNotEqual(result.returncode, 0)
-            self.assertEqual(result.stdout, "")
 
     def test_upload_guard_accepts_one_package_and_rejects_missing_or_duplicate_files(self):
         guards = 0
