@@ -362,7 +362,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                     )
                 }
                 if (visibleSource == WebRtcRoomSource.Other) {
-                    DirectInvitePanel(deviceState, onOpenFiles = { navigator.pop() })
+                    DirectInvitePanel(deviceState, onOpenFiles = { navigator.popToRoot() })
                 } else GridList(
                     modifier = Modifier
                         .fillMaxWidth()
