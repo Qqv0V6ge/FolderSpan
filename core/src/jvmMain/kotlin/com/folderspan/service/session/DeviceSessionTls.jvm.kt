@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -49,11 +50,13 @@ internal fun createPinnedDeviceSessionSocket(
     host: String,
     port: Int,
     expectedFingerprintSha256: String,
+    connectTimeoutMillis: Int = 0,
 ): SSLSocket {
     return createDeviceSessionSocket(
         host = host,
         port = port,
         trustManager = FingerprintTrustManager(expectedFingerprintSha256),
+        connectTimeoutMillis = connectTimeoutMillis,
     )
 }
 
@@ -69,6 +72,7 @@ private fun createDeviceSessionSocket(
     host: String,
     port: Int,
     trustManager: FingerprintTrustManager,
+    connectTimeoutMillis: Int = 0,
 ): SSLSocket {
     val context = SSLContext.getInstance("TLS")
     context.init(
@@ -77,8 +81,10 @@ private fun createDeviceSessionSocket(
         SecureRandom(),
     )
     LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = (host), arg1 = (port).toString()))
-    val socket = context.socketFactory.createSocket(host, port) as SSLSocket
+    val socket = context.socketFactory.createSocket() as SSLSocket
     try {
+        socket.connect(InetSocketAddress(host, port), connectTimeoutMillis)
+        socket.soTimeout = connectTimeoutMillis
         socket.enabledProtocols = socket.supportedProtocols
             .filter { protocol -> protocol == "TLSv1.2" || protocol == "TLSv1.3" }
             .toTypedArray()
@@ -90,6 +96,7 @@ private fun createDeviceSessionSocket(
             throw DeviceSessionIoException("missing ALPN $DEVICE_SESSION_ALPN")
         }
         LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = (host), arg1 = (DEVICE_SESSION_ALPN)))
+        socket.soTimeout = 0
         return socket
     } catch (error: Throwable) {
         runCatching { socket.close() }

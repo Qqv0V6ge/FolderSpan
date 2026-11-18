@@ -15,6 +15,7 @@ internal class BrowserHttpListener(
     private var handle: String? = null
     private var callbackId: String? = null
     private var scope: CoroutineScope? = null
+    private var ownerGeneration = -1L
     var running = false
         private set
 
@@ -22,16 +23,21 @@ internal class BrowserHttpListener(
         stop()
         val id = ByteArray(16).also(SecureRandom::nextBytes).joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
         val owner = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val generation = WebUiAttachment.sessionGeneration
+        ownerGeneration = generation
         scope = owner
         callbackId = id
         WebUiPlatformClient.register(id, failed = {
             owner.cancel(); running = false; callbacks.running(false)
         }) { event ->
+            check(generation == WebUiAttachment.sessionGeneration) { "Runtime listener session changed" }
             when (event.type) {
                 "http-request" -> respond(event.data, owner)
                 "device-accepted" -> {
                     val accepted = WebUiPlatformClient.json.decodeFromString<WebUiAcceptedDevice>(event.data)
-                    owner.launch { onDevice(accepted, owner) }
+                    owner.launch {
+                        if (generation == WebUiAttachment.sessionGeneration) onDevice(accepted, owner)
+                    }
                     byteArrayOf()
                 }
                 else -> error("unknown listener event")
@@ -59,7 +65,9 @@ internal class BrowserHttpListener(
         callbackId = null
         val owned = handle
         handle = null
-        try { if (owned != null) WebUiPlatformClient.release(owned) }
+        val generation = ownerGeneration
+        ownerGeneration = -1L
+        try { if (owned != null && generation == WebUiAttachment.sessionGeneration) WebUiPlatformClient.release(owned) }
         finally { callbacks.clearSessions() }
     }
 

@@ -45,6 +45,24 @@ class WebUiPlatformBridgeTest {
     private suspend inline fun <reified T, reified R> post(session: WebUiPlatformSession, path: String, value: T): R =
         request(session, "POST", path, json.encodeToString(value).encodeToByteArray()).value()
 
+    @Test
+    fun directInviteCertificateStaysWithItsAuthenticatedRuntimeAndOfficialBridgeRejectsOtherGateways(): Unit = runBlocking {
+        val owner = WebUiPlatformSession("direct-invite-runtime")
+        try {
+            val host = platform.hostInfo(owner)
+            assertEquals(1, host.directInviteVersion)
+            assertTrue(host.deviceCertificatePem.startsWith("-----BEGIN CERTIFICATE-----"))
+            assertEquals(host.publicKey,
+                request(owner, "POST", "/devices/certificate-key", host.deviceCertificatePem.encodeToByteArray()).value<String?>())
+            assertFailsWith<IllegalArgumentException> {
+                post<WebUiOfficialSignalingOpen, WebUiHandle>(owner, "/devices/official-signaling/open",
+                    WebUiOfficialSignalingOpen("wss://untrusted.invalid/api/v1/webrtc/ws", mapOf("Authorization" to "Bearer test")))
+            }
+        } finally {
+            owner.close()
+        }
+    }
+
     @Test fun moveUsesValidatedPathsAndRefusesExistingTargets(): Unit = runBlocking {
         val root = Files.createTempDirectory("platform-move")
         val session = WebUiPlatformSession("move-test")

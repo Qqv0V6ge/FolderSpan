@@ -17,6 +17,19 @@ enum class WebRtcRoomSource {
         }
 }
 
+enum class WebRtcOfficialRoomType { Personal, Custom }
+
+enum class WebRtcRoomMembershipState { Pending, Approved, Rejected, Removed, Left }
+
+enum class WebRtcRoomMembershipAction { Apply, Leave, Approve, Reject, Remove }
+
+data class WebRtcRoomMembership(
+    val roomId: String,
+    val applicantUserUuid: String,
+    val requestVersion: Long,
+    val state: WebRtcRoomMembershipState,
+)
+
 interface WebRtcOfficialGatewayProvider {
     fun websocketUrl(): String
 
@@ -53,7 +66,7 @@ data class WebRtcRoomInput(
             roomId = roomId.trim(),
             stunUrl = stunUrl.trim(),
             turnUrl = turnUrl.trim(),
-            turnUsername = turnUsername.trim(),
+            turnUsername = turnUsername,
             turnPassword = turnPassword
         )
     }
@@ -86,6 +99,8 @@ data class WebRtcRoomProfile(
     val createdAt: Long,
     val updatedAt: Long,
     val maxDevices: Int = 0,
+    val officialType: WebRtcOfficialRoomType? = null,
+    val owned: Boolean = false,
 ) {
     val catalogKey: String
         get() = when (source) {
@@ -95,6 +110,8 @@ data class WebRtcRoomProfile(
 
     val roomIdValid: Boolean
         get() = isValidRoomId(roomId)
+
+    override fun toString(): String = "WebRtcRoomProfile($source, $roomId)"
 
     fun toInput(): WebRtcRoomInput {
         return WebRtcRoomInput(
@@ -171,6 +188,8 @@ fun officialWebRtcRoomProfile(
     createdAt: Long = 0L,
     updatedAt: Long = 0L,
     maxDevices: Int = 0,
+    officialType: WebRtcOfficialRoomType = WebRtcOfficialRoomType.Custom,
+    owned: Boolean = true,
 ): WebRtcRoomProfile = WebRtcRoomProfile(
     id = 0L,
     name = name,
@@ -186,6 +205,8 @@ fun officialWebRtcRoomProfile(
     createdAt = createdAt,
     updatedAt = updatedAt,
     maxDevices = maxDevices,
+    officialType = officialType,
+    owned = owned,
 )
 
 fun WebRtcRoomProfile.withoutCachedTurnPassword(): WebRtcRoomProfile =
@@ -202,6 +223,18 @@ interface WebRtcOfficialRoomsClient {
     suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage>
 
     suspend fun getRoom(roomId: String): Result<WebRtcRoomProfile>
+
+    suspend fun getRoomConnection(roomId: String): Result<WebRtcRoomProfile>
+
+    suspend fun getMembership(roomId: String): Result<WebRtcRoomMembership?>
+
+    suspend fun listMemberships(
+        roomId: String, state: WebRtcRoomMembershipState, page: Int,
+    ): Result<List<WebRtcRoomMembership>>
+
+    suspend fun changeMembership(
+        roomId: String, version: Long, action: WebRtcRoomMembershipAction, applicantUserUuid: String? = null,
+    ): Result<WebRtcRoomMembership>
 
     suspend fun createRoom(input: WebRtcRoomInput): Result<WebRtcRoomProfile>
 
@@ -224,6 +257,19 @@ private object UnavailableWebRtcOfficialRoomsClient : WebRtcOfficialRoomsClient 
 
     override suspend fun getRoom(roomId: String): Result<WebRtcRoomProfile> =
         unavailable()
+
+    override suspend fun getRoomConnection(roomId: String): Result<WebRtcRoomProfile> =
+        unavailable()
+
+    override suspend fun getMembership(roomId: String): Result<WebRtcRoomMembership?> = unavailable()
+
+    override suspend fun listMemberships(
+        roomId: String, state: WebRtcRoomMembershipState, page: Int,
+    ): Result<List<WebRtcRoomMembership>> = unavailable()
+
+    override suspend fun changeMembership(
+        roomId: String, version: Long, action: WebRtcRoomMembershipAction, applicantUserUuid: String?,
+    ): Result<WebRtcRoomMembership> = unavailable()
 
     override suspend fun createRoom(input: WebRtcRoomInput): Result<WebRtcRoomProfile> =
         unavailable()

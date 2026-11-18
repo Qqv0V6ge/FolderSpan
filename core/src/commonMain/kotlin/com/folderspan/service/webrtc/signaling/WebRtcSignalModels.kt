@@ -4,6 +4,8 @@ import com.folderspan.service.data.SocketDevice
 import com.folderspan.service.data.DeviceSessionBootstrapAuthorization
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import korlibs.crypto.sha256
 
 @Serializable
 data class SignalingDevice(
@@ -15,6 +17,7 @@ data class SignalingDevice(
     val type: String? = null,
     val connectType: String? = null,
     val userUuid: String? = null,
+    @Transient internal val wireDeviceId: String = "",
 )
 
 @Serializable
@@ -39,6 +42,7 @@ data class SignalingMessage(
     val bootstrapAuthorization: DeviceSessionBootstrapAuthorization? = null,
     val shareNonce: String? = null,
     val tlsFingerprintSha256: String? = null,
+    val protocolVersion: Int? = null,
     @SerialName("message")
     val errorMessage: String? = null
 )
@@ -57,7 +61,16 @@ fun SocketDevice.toSignalingDevice(overriddenId: String? = null): SignalingDevic
 
 fun SignalingDevice.asTargetDevice(): SignalingDevice {
     return SignalingDevice(
-        id = id,
+        id = wireDeviceId.ifEmpty { id },
         userUuid = userUuid?.trim()?.takeIf(String::isNotBlank),
     )
 }
+
+internal fun SignalingDevice.withOfficialIdentity(): SignalingDevice? {
+    val account = userUuid?.takeIf { officialAccountUuid.matches(it) } ?: return null
+    if (id.isBlank() || id.length > 128) return null
+    val scopedId = "official:" + "${account.lowercase()}\n$id".encodeToByteArray().sha256().hexLower
+    return copy(id = scopedId, userUuid = account, wireDeviceId = id)
+}
+
+private val officialAccountUuid = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")

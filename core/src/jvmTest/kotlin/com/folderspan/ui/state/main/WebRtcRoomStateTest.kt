@@ -11,8 +11,15 @@ import com.folderspan.data.main.device.DeviceCategory
 import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.webrtc.OfficialWebRtcRoomPage
+import com.folderspan.data.main.webrtc.WebRtcOfficialGateway
+import com.folderspan.data.main.webrtc.WebRtcOfficialGatewayProvider
+import com.folderspan.data.main.webrtc.WebRtcShareCode
+import com.folderspan.data.main.webrtc.WebRtcShareCodeException
 import com.folderspan.data.main.webrtc.WebRtcOfficialRooms
 import com.folderspan.data.main.webrtc.WebRtcOfficialRoomsClient
+import com.folderspan.data.main.webrtc.WebRtcRoomMembership
+import com.folderspan.data.main.webrtc.WebRtcRoomMembershipAction
+import com.folderspan.data.main.webrtc.WebRtcRoomMembershipState
 import com.folderspan.data.main.webrtc.WebRtcRoomInput
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcRoomSource
@@ -448,15 +455,55 @@ class WebRtcRoomStateTest {
             WebRtcOfficialRooms.client = previousClient
         }
     }
+
+    @Test
+    fun officialExportLoadsOwnerDetailsInsteadOfUsingTheCachedSummary() = runBlocking<Unit> {
+        val state = WebRtcRoomState(createInMemoryDatabase(createIsolatedSettings()))
+        val roomId = generateRoomId()
+        val summary = officialWebRtcRoomProfile("旧名称", roomId, turnUrl = "turn:old.test:3478")
+        val current = summary.copy(
+            name = "当前房间", turnUrl = "turn:one.test:3478;turns:two.test:5349",
+            turnUsername = " user ", turnPassword = " pass ",
+        )
+        val previousClient = WebRtcOfficialRooms.client
+        val previousGateway = WebRtcOfficialGateway.provider
+        val gateway = "wss://official.test/api/v1/webrtc/ws"
+        WebRtcOfficialRooms.client = FakeOfficialRoomsClient(
+            listPages = listOf(OfficialWebRtcRoomPage(listOf(summary), 1, 1, 20)),
+            details = listOf(current),
+        )
+        WebRtcOfficialGateway.provider = object : WebRtcOfficialGatewayProvider {
+            override fun websocketUrl(): String = gateway
+            override fun websocketHeaders(): Result<Map<String, String>> =
+                error("Room export must never ask for authentication headers")
+        }
+        try {
+            state.loadOfficialRooms()
+            assertEquals("", state.rooms.single().turnPassword)
+            val code = state.exportOfficialRoomCode(roomId).getOrThrow()
+            val decoded = WebRtcShareCode.decodeOfficialRoom(code, gateway)
+            assertEquals("当前房间", decoded.name)
+            assertEquals(listOf("turn:one.test:3478", "turns:two.test:5349"), decoded.turnUrls)
+            assertEquals(" user ", decoded.turnUsername)
+            assertEquals(" pass ", decoded.turnPassword)
+            kotlin.test.assertFailsWith<WebRtcShareCodeException> {
+                WebRtcShareCode.decodeOfficialRoom(code, "wss://changed.test/api/v1/webrtc/ws")
+            }
+        } finally {
+            WebRtcOfficialRooms.client = previousClient
+            WebRtcOfficialGateway.provider = previousGateway
+        }
+    }
 }
 
 private class FakeOfficialRoomsClient(
     private val listPages: List<OfficialWebRtcRoomPage> = emptyList(),
     private val listError: Throwable? = null,
+    details: List<WebRtcRoomProfile> = emptyList(),
 ) : WebRtcOfficialRoomsClient {
     val created = mutableListOf<WebRtcRoomInput>()
     val deleted = mutableListOf<String>()
-    private val roomsById = mutableMapOf<String, WebRtcRoomProfile>()
+    private val roomsById = details.associateBy(WebRtcRoomProfile::roomId).toMutableMap()
 
     override suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage> {
         listError?.let { return Result.failure(it) }
@@ -488,6 +535,18 @@ private class FakeOfficialRoomsClient(
         roomsById[profile.roomId] = profile
         return Result.success(profile)
     }
+
+    override suspend fun getRoomConnection(roomId: String): Result<WebRtcRoomProfile> = getRoom(roomId)
+
+    override suspend fun getMembership(roomId: String): Result<WebRtcRoomMembership?> = Result.success(null)
+
+    override suspend fun listMemberships(
+        roomId: String, state: WebRtcRoomMembershipState, page: Int,
+    ): Result<List<WebRtcRoomMembership>> = Result.success(emptyList())
+
+    override suspend fun changeMembership(
+        roomId: String, version: Long, action: WebRtcRoomMembershipAction, applicantUserUuid: String?,
+    ): Result<WebRtcRoomMembership> = error("Unexpected membership write")
 
     override suspend fun updateRoom(roomId: String, input: WebRtcRoomInput): Result<WebRtcRoomProfile> {
         return Result.success(

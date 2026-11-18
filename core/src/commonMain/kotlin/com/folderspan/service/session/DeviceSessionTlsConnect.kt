@@ -9,6 +9,7 @@ internal expect suspend fun connectPinnedDeviceSessionChannel(
     host: String,
     port: Int,
     expectedFingerprintSha256: String,
+    connectTimeoutMillis: Int = 0,
 ): DeviceSessionByteChannel
 
 internal expect suspend fun connectUnpinnedDeviceSessionChannel(

@@ -4,6 +4,7 @@ import com.folderspan.exception.AuthorityException
 import com.folderspan.exception.AuthenticationException
 import com.folderspan.extensions.randomString
 import com.folderspan.getSocketDevice
+import com.folderspan.service.http.tls.normalizeTlsFingerprintSha256
 import com.folderspan.routes.RawHttpApiDispatcher
 import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
 import com.folderspan.service.webrtc.models.WebRtcIceObservationSource
@@ -113,6 +114,7 @@ internal object DeviceSessionServerRuntimeLauncher {
         approvalContext: DeviceSessionServerApprovalContext,
         onAuthenticated: suspend (DeviceSessionConnectivityProbe) -> Unit = {},
         iceSnapshot: () -> WebRtcIceSnapshot? = { null },
+        directInviteControl: (() -> DirectInviteControlHandler)? = null,
     ) {
         DeviceSessionServer(
             dispatcher = dispatcher,
@@ -122,11 +124,15 @@ internal object DeviceSessionServerRuntimeLauncher {
             approvalContext = approvalContext,
             onAuthenticated = onAuthenticated,
             iceSnapshot = iceSnapshot,
+            directInviteControlFactory = directInviteControl,
         ).run()
     }
 }
 
-internal actual fun createWebRtcDeviceSessionServerLauncher(): WebRtcDeviceSessionServerLauncher? =
+internal actual fun createWebRtcDeviceSessionServerLauncher(
+    directClaim: DirectInviteClaim?,
+    officialLocalDeviceId: String?,
+): WebRtcDeviceSessionServerLauncher? =
     WebRtcDeviceSessionServerLauncher { channel, remoteDeviceId, connectionAttemptId, scope, iceSnapshot, onAuthenticated ->
         val dispatcher = RawHttpApiDispatcher()
         DeviceSessionServerRuntimeLauncher.run(
@@ -140,12 +146,14 @@ internal actual fun createWebRtcDeviceSessionServerLauncher(): WebRtcDeviceSessi
                     fingerprint = fingerprint,
                     expectedRemoteDeviceId = remoteDeviceId,
                     expectedConnectionAttemptId = connectionAttemptId,
+                    expectedLocalDeviceId = officialLocalDeviceId ?: getSocketDevice().id,
+                    directClaim = directClaim,
                 )
             },
             onAuthenticated = onAuthenticated,
             iceSnapshot = { iceSnapshot()?.takeIf {
                 it.source == WebRtcIceObservationSource.Local && it.remoteDeviceId == remoteDeviceId && it.connectionAttemptId == connectionAttemptId &&
-                    it.observerDeviceId == getSocketDevice().id
+                    it.observerDeviceId == (officialLocalDeviceId ?: getSocketDevice().id)
             } },
         )
     }
@@ -155,8 +163,14 @@ private suspend fun RawHttpApiDispatcher.authorizeWebRtcPreapprovedSession(
     fingerprint: DeviceTokenFingerprint,
     expectedRemoteDeviceId: String,
     expectedConnectionAttemptId: String,
+    expectedLocalDeviceId: String,
+    directClaim: DirectInviteClaim?,
 ): DeviceConnectResponse {
     val authorization = request.bootstrapAuthorization ?: return rejectedWebRtcSessionConnect()
+    if (directClaim != null && (authorization != directClaim.authorization ||
+            normalizeTlsFingerprintSha256(request.device.tlsFingerprintSha256) !=
+                directClaim.sessionBinding.peer.initiatorCertificateSha256.uppercase())
+    ) return rejectedWebRtcSessionConnect()
     if (
         request.authorizationMode != DeviceConnectAuthorizationMode.STANDARD ||
         request.accountDeviceProof != null ||
@@ -169,15 +183,16 @@ private suspend fun RawHttpApiDispatcher.authorizeWebRtcPreapprovedSession(
         .executeAsOneOrNullAwait()
         ?.roleId
         ?.takeIf { roleId -> roleId > 0L }
-    val currentRoleId = configuredRoleId ?: resolveAutoAuthorizeRoleId(
+    val currentRoleId = directClaim?.roleId ?: configuredRoleId ?: resolveAutoAuthorizeRoleId(
         SettingsUtils.getLong(SettingsUtils.KEY_FILE_SHARE_AUTO_AUTHORIZE_ROLE_ID, 2L),
     ) ?: return rejectedWebRtcSessionConnect()
     val result = deviceState.deviceSessionBootstrapAuthorizationRegistry.consume(
         authorization = authorization,
         initiatorDeviceId = request.device.id,
-        targetDeviceId = getSocketDevice().id,
+        targetDeviceId = expectedLocalDeviceId,
         connectionAttemptId = expectedConnectionAttemptId,
         currentRoleId = currentRoleId,
+        directInviteBinding = directClaim?.sessionBinding,
     )
     val grant = (result as? DeviceSessionBootstrapAuthorizationConsumeResult.Granted)?.grant
         ?: return rejectedWebRtcSessionConnect()
@@ -212,6 +227,7 @@ internal class DeviceSessionServer(
     private val approvalContext: DeviceSessionServerApprovalContext,
     private val onAuthenticated: suspend (DeviceSessionConnectivityProbe) -> Unit,
     private val iceSnapshot: () -> WebRtcIceSnapshot? = { null },
+    private val directInviteControlFactory: (() -> DirectInviteControlHandler)? = null,
 ) {
     private val sessionPlan = DeviceSessionWindowPlan.fromMemory()
     private val writeLocks = HashMap<String, Mutex>()
@@ -245,6 +261,8 @@ internal class DeviceSessionServer(
     private val outgoingStreamsMutex = Mutex()
     private val incomingMessageStreams = HashMap<Int, DeviceSessionIncomingStream>()
     private val controlAssembler = DeviceSessionControlAssembler()
+    private val directInviteConnection = MutableStateFlow<Boolean?>(null)
+    private val directInviteControl by lazy { directInviteControlFactory?.invoke() }
     private var messageHandler: DeviceSessionMessageHandler? = null
     private var messageEndpointIdentity: DeviceMessageEndpointIdentity? = null
     @Volatile
@@ -354,6 +372,12 @@ internal class DeviceSessionServer(
     }
 
     private suspend fun dispatchRpc(request: DeviceSessionControlRequest): DeviceSessionControlResponse {
+        val directInviteMethod = request.method == DIRECT_INVITE_CHALLENGE_RPC ||
+            request.method == DIRECT_INVITE_OFFER_RPC || request.method == DIRECT_INVITE_ICE_RPC
+        directInviteConnection.compareAndSet(null, directInviteMethod && directInviteControlFactory != null)
+        if (directInviteConnection.value == true) {
+            return checkNotNull(directInviteControl).handle(request)
+        }
         if (!isDeviceSessionRpcAllowedBeforeAuthorization(request.method)) {
             val token = boundToken
             if (token.isNullOrBlank() || !dispatcher.deviceCertificateState.isTokenValid(token)) {

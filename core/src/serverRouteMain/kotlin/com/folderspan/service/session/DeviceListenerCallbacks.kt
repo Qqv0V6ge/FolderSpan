@@ -13,7 +13,11 @@ internal class DeviceListenerCallbacks(
 internal fun createDeviceListenerCallbacks(): DeviceListenerCallbacks {
     val dispatcher = RawHttpApiDispatcher()
     return DeviceListenerCallbacks(dispatcher::dispatch, dispatcher::dispatchDeviceShareApproval) { channel, remoteHost, scope ->
-        DeviceSessionServerRuntimeLauncher.run(dispatcher, channel, remoteHost, scope, DeviceSessionServerApprovalContext.Standard)
+        val owner = currentDirectInviteIssuer()
+        DeviceSessionServerRuntimeLauncher.run(
+            dispatcher, channel, remoteHost, scope, DeviceSessionServerApprovalContext.Standard,
+            directInviteControl = { dispatcher.deviceState.directInviteCoordinator.controlHandler(owner) },
+        )
     }
 }
 

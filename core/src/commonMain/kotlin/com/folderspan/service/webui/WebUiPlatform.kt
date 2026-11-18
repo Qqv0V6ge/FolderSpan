@@ -7,6 +7,8 @@ import com.folderspan.data.file.FileSimpleInfo
 import com.folderspan.data.file.PathInfo
 import com.folderspan.service.http.server.linkshare.LinkShareHttpRequest
 import com.folderspan.service.http.server.linkshare.LinkShareHttpResponse
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 const val WEB_UI_PLATFORM_PATH = "/api/web-ui/platform"
@@ -32,8 +34,18 @@ data class WebUiHostInfo(
     val sensitivePaths: List<WebUiSensitivePath> = emptyList(),
     val deviceId: String = "",
     val deviceName: String = "",
-
+    val deviceCertificatePem: String = "",
+    val directInviteVersion: Int = 0,
+    val officialSignalingGateway: String = "",
 )
+
+@Serializable
+internal data class WebUiOfficialSignalingOpen(val gatewayUrl: String, val headers: Map<String, String>) {
+    override fun toString(): String = "WebUiOfficialSignalingOpen(<redacted>)"
+}
+
+@Serializable
+internal data class WebUiOfficialSignalingFrame(val text: String)
 
 @Serializable
 data class WebUiPathRequest(val path: String)
@@ -101,7 +113,13 @@ data class WebUiNetworkBatch(
 )
 
 @Serializable
-internal data class WebUiDeviceConnect(val host: String, val port: Int, val fingerprint: String? = null)
+@OptIn(ExperimentalSerializationApi::class)
+internal data class WebUiDeviceConnect(
+    val host: String,
+    val port: Int,
+    val fingerprint: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val connectTimeoutMillis: Int = 0,
+)
 @Serializable
 internal data class WebUiDeviceConnected(val handle: String, val fingerprint: String)
 @Serializable

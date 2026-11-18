@@ -393,19 +393,24 @@ internal class RawTlsHttpServer(private val callbacks: DeviceListenerCallbacks =
     }
 
     private fun createListeningSocket(port: Int): Int = memScoped {
-        val fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        val fd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP)
         if (fd < 0) throw posixException(AppStrings.ui_create_a_listener_socket_failure)
         try {
             val one = alloc<IntVar>()
             one.value = 1
             setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, one.ptr, sizeOf<IntVar>().convert())
+            val zero = alloc<IntVar>()
+            zero.value = 0
+            check(setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, zero.ptr, sizeOf<IntVar>().convert()) == 0) {
+                "dual-stack device listener unavailable"
+            }
 
-            val address = alloc<sockaddr_in>()
-            memset(address.ptr, 0, sizeOf<sockaddr_in>().convert())
-            address.sin_family = AF_INET.convert()
-            address.sin_port = port.toNetworkOrderPort()
-            address.sin_addr.s_addr = 0u
-            if (bind(fd, address.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) != 0) {
+            val address = alloc<sockaddr_in6>()
+            memset(address.ptr, 0, sizeOf<sockaddr_in6>().convert())
+            address.sin6_len = sizeOf<sockaddr_in6>().convert()
+            address.sin6_family = AF_INET6.convert()
+            address.sin6_port = port.toNetworkOrderPort()
+            if (bind(fd, address.ptr.reinterpret(), sizeOf<sockaddr_in6>().convert()) != 0) {
                 throw posixException(AppStrings.ui_binding_port_arg0_failed.format(arg0 = (port).toString()))
             }
             if (listen(fd, BACKLOG) != 0) {

@@ -2,24 +2,9 @@ package com.folderspan.service.session
 
 import com.folderspan.service.http.tls.normalizeTlsFingerprintSha256
 import com.folderspan.utils.LogKit
-import kotlinx.cinterop.UIntVar
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.UByteVar
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.convert
-import kotlinx.cinterop.get
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.sizeOf
-import kotlinx.cinterop.usePinned
-import kotlinx.cinterop.value
+import kotlinx.cinterop.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import platform.darwin.inet_pton
 import platform.openssl.SSL
 import platform.openssl.SSL_CTX
 import platform.openssl.SSL_CTX_free
@@ -32,23 +17,26 @@ import platform.openssl.SSL_write
 import platform.openssl.fm_create_client_ctx
 import platform.openssl.fm_ssl_alpn_is_folderspan
 import platform.openssl.fm_ssl_peer_fingerprint_sha256
-import platform.posix.AF_INET
-import platform.posix.IPPROTO_TCP
-import platform.posix.SOCK_STREAM
-import platform.posix.close
-import platform.posix.connect
-import platform.posix.memset
-import platform.posix.sockaddr_in
-import platform.posix.socket
+import platform.posix.*
 import strings.AppStrings
+import kotlin.time.TimeSource
 
 @OptIn(ExperimentalForeignApi::class)
 internal actual suspend fun connectPinnedDeviceSessionChannel(
     host: String,
     port: Int,
     expectedFingerprintSha256: String,
+    connectTimeoutMillis: Int,
 ): DeviceSessionByteChannel {
-    return connectDeviceSessionChannel(host, port, expectedFingerprintSha256).channel
+    var opened: DeviceSessionByteChannel? = null
+    return try {
+        withContext(Dispatchers.Default) {
+            connectDeviceSessionChannel(host, port, expectedFingerprintSha256, connectTimeoutMillis).channel.also { opened = it }
+        }
+    } catch (error: Throwable) {
+        opened?.close()
+        throw error
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -64,28 +52,17 @@ private fun connectDeviceSessionChannel(
     host: String,
     port: Int,
     expectedFingerprintSha256: String?,
+    connectTimeoutMillis: Int = 0,
 ): DeviceSessionBootstrapConnection {
     LogKit.d(AppStrings.ui_device_session_client_connection_host_arg0_port_arg1.format(arg0 = host, arg1 = (port).toString()))
     val ctx = fm_create_client_ctx() ?: throw DeviceSessionIoException("TLS client context failed")
-    val fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+    val fd = connectSessionSocket(host, port, connectTimeoutMillis)
     if (fd < 0) {
         SSL_CTX_free(ctx)
-        throw DeviceSessionIoException("socket create failed")
+        throw DeviceSessionIoException("device TLS connection failed")
     }
     try {
-        memScoped {
-            val address = alloc<sockaddr_in>()
-            memset(address.ptr, 0, sizeOf<sockaddr_in>().convert())
-            address.sin_family = AF_INET.convert()
-            address.sin_port = port.toNetworkOrderPort()
-            val parsed = inet_pton(AF_INET, host, address.sin_addr.ptr)
-            if (parsed != 1) {
-                throw DeviceSessionIoException("invalid host $host")
-            }
-            if (connect(fd, address.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) != 0) {
-                throw DeviceSessionIoException("connect failed")
-            }
-        }
+        if (connectTimeoutMillis > 0) configureSessionSocketTimeout(fd, connectTimeoutMillis)
         val ssl = SSL_new(ctx) ?: throw DeviceSessionIoException("SSL_new failed")
         LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = host))
         if (SSL_set_fd(ssl, fd) != 1 || SSL_connect(ssl) != 1) {
@@ -108,6 +85,7 @@ private fun connectDeviceSessionChannel(
             SSL_free(ssl)
             throw DeviceSessionIoException(AppStrings.ui_device_tls_certificate_fingerprint_does_not_match)
         }
+        if (connectTimeoutMillis > 0) configureSessionSocketTimeout(fd, 0)
         LogKit.i(AppStrings.ui_device_session_client_tls_complete_host_arg0_alpn_arg1.format(arg0 = host, arg1 = DEVICE_SESSION_ALPN))
         return DeviceSessionBootstrapConnection(
             channel = IosDeviceSessionByteChannel(ssl, ctx, fd),
@@ -118,6 +96,63 @@ private fun connectDeviceSessionChannel(
         SSL_CTX_free(ctx)
         throw error
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun connectSessionSocket(host: String, port: Int, timeout: Int): Int = memScoped {
+    val hints = alloc<addrinfo>()
+    memset(hints.ptr, 0, sizeOf<addrinfo>().convert())
+    hints.ai_family = AF_UNSPEC
+    hints.ai_socktype = SOCK_STREAM
+    val result = alloc<CPointerVar<addrinfo>>()
+    if (getaddrinfo(host, port.toString(), hints.ptr, result.ptr) != 0) return@memScoped -1
+    try {
+        val start = TimeSource.Monotonic.markNow()
+        var current = result.value
+        while (current != null) {
+            val remaining = timeout - start.elapsedNow().inWholeMilliseconds
+            if (timeout > 0 && remaining <= 0) break
+            val address = current.pointed
+            val fd = socket(address.ai_family, address.ai_socktype, address.ai_protocol)
+            if (fd >= 0) {
+                val connected = if (timeout == 0) connect(fd, address.ai_addr, address.ai_addrlen) == 0
+                else connectSessionSocketWithTimeout(fd, address, remaining.toInt())
+                if (connected) return@memScoped fd
+                close(fd)
+            }
+            current = address.ai_next
+        }
+        -1
+    } finally {
+        freeaddrinfo(result.value)
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun connectSessionSocketWithTimeout(fd: Int, address: addrinfo, timeout: Int): Boolean = memScoped {
+    val flags = fcntl(fd, F_GETFL, 0)
+    if (flags < 0 || fcntl(fd, F_SETFL, flags or O_NONBLOCK) < 0) return@memScoped false
+    val ready = alloc<pollfd>()
+    ready.fd = fd
+    ready.events = POLLOUT.convert()
+    ready.revents = 0
+    val error = alloc<IntVar>()
+    val length = alloc<socklen_tVar>()
+    length.value = sizeOf<IntVar>().convert()
+    if (connect(fd, address.ai_addr, address.ai_addrlen) != 0 &&
+        (errno != EINPROGRESS || poll(ready.ptr, 1.convert(), timeout) <= 0 ||
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, error.ptr, length.ptr) != 0 || error.value != 0)
+    ) return@memScoped false
+    fcntl(fd, F_SETFL, flags) == 0
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun configureSessionSocketTimeout(fd: Int, millis: Int) = memScoped {
+    val timeout = alloc<timeval>()
+    timeout.tv_sec = (millis / 1_000).convert()
+    timeout.tv_usec = (millis % 1_000 * 1_000).convert()
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, timeout.ptr, sizeOf<timeval>().convert())
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, timeout.ptr, sizeOf<timeval>().convert())
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -166,10 +201,4 @@ private fun peerFingerprint(ssl: CPointer<SSL>): String = memScoped {
         val value = digest[index].toInt() and 0xFF
         value.toString(16).uppercase().padStart(2, '0')
     }
-}
-
-private fun Int.toNetworkOrderPort(): UShort {
-    val value = this and 0xFFFF
-    val networkOrder = ((value and 0xFF) shl 8) or ((value ushr 8) and 0xFF)
-    return networkOrder.toUShort()
 }

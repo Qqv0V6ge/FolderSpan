@@ -33,11 +33,25 @@ actual object DeviceTlsIdentity {
     }
 
     actual fun publicKeyPem(): String? = runCatching {
-        val encoded = loadOrCreateCached().keyStore.getCertificate(ALIAS).publicKey.encoded
-        "-----BEGIN PUBLIC KEY-----\n" +
-            Base64.getMimeEncoder(64, "\n".encodeToByteArray()).encodeToString(encoded) +
-            "\n-----END PUBLIC KEY-----"
+        pem("PUBLIC KEY", loadOrCreateCached().keyStore.getCertificate(ALIAS).publicKey.encoded)
     }.getOrNull()
+
+    internal actual fun certificatePem(): String? = runCatching {
+        pem("CERTIFICATE", loadOrCreateCached().keyStore.getCertificate(ALIAS).encoded)
+    }.getOrNull()
+
+    internal actual suspend fun publicKeyFromCertificate(certificatePem: String): String? = runCatching {
+        val factory = java.security.cert.CertificateFactory.getInstance("X.509")
+        val certificate = factory.generateCertificate(ByteArrayInputStream(certificatePem.encodeToByteArray()))
+        pem("PUBLIC KEY", certificate.publicKey.encoded)
+    }.getOrNull()
+
+    internal actual suspend fun signDirectInvite(payload: ByteArray): String? = signSha256WithRsa(payload)
+
+    private fun pem(label: String, bytes: ByteArray): String =
+        "-----BEGIN $label-----\n" +
+            Base64.getMimeEncoder(64, "\n".encodeToByteArray()).encodeToString(bytes) +
+            "\n-----END $label-----"
 
     actual suspend fun signSha256WithRsa(payload: ByteArray): String? = runCatching {
         val identity = loadOrCreateCached()

@@ -8,6 +8,8 @@ const val DEFAULT_WEB_UI_ADDRESS = "127.0.0.1:12043"
 /** One root origin supplies every platform HTTP URL; credentials never enter URLs. */
 class WebUiRuntimeAddress private constructor(val origin: String) {
     val plaintext: Boolean get() = origin.startsWith("http:")
+    internal val protectsDeviceCredentials: Boolean
+        get() = !plaintext || isStorageContentLoopbackHost(Url(origin).host)
 
     fun httpUrl(path: String): String {
         require(path.startsWith('/') && !path.startsWith("//") && !path.contains('\\'))

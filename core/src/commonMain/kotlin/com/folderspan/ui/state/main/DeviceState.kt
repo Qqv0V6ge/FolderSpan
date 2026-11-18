@@ -17,6 +17,7 @@ import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.share.Share
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
+import com.folderspan.data.main.webrtc.WebRtcDirectInvite
 import com.folderspan.data.main.webrtc.WebRtcOfficialGateway
 import com.folderspan.data.main.webrtc.toWebRtcConfigResult
 import com.folderspan.db.FolderSpanDatabase
@@ -69,6 +70,7 @@ import com.folderspan.service.session.DeviceLanBeaconListener
 import com.folderspan.service.session.DeviceLanBeacons
 import com.folderspan.service.session.DeviceSessionClientManager
 import com.folderspan.service.session.DeviceSessionBootstrapAuthorizationRegistry
+import com.folderspan.service.session.DirectInviteCoordinator
 import com.folderspan.service.session.ReadOnlyShareSessionAdapter
 import com.folderspan.service.session.identifyDeviceSessionEndpoint
 import com.folderspan.service.session.resolveLanBeaconLocalHosts
@@ -492,8 +494,15 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     val connectionRequestsMissingNotification = sharedSnapshotState { mutableStateMapOf<String, Long>() }
     private val pendingWebRtcConnectRequests = mutableMapOf<String, PendingWebRtcConnectRequest>()
     internal val deviceSessionBootstrapAuthorizationRegistry =
-        DeviceSessionBootstrapAuthorizationRegistry()
+        DeviceSessionBootstrapAuthorizationRegistry(
+            isDirectInviteRoleActive = { roleId ->
+                database.deviceRoleQueries.selectById(roleId).executeAsOneOrNullAwait() != null
+            },
+            isPermanentlyRejected = ::isPermanentlyRejected,
+        )
     private val webRtcIssuedBootstrapAuthorizations = mutableMapOf<String, String>()
+    internal val directInviteCoordinator = DirectInviteCoordinator(mainScope, deviceSessionBootstrapAuthorizationRegistry)
+    val directInviteStates = directInviteCoordinator.states
 
     fun updateConnectionRequest(
         deviceId: String,
@@ -531,6 +540,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                             val authorization = issueWebRtcBootstrapAuthorization(
                                 deviceId = peer.id,
                                 connectionAttemptId = request.connectionAttemptId,
+                                officialLocalDeviceId = request.controller.officialLocalDeviceId,
                             )
                             if (authorization == null) {
                                 LogKit.w(AppStrings.ui_webrtc_connection_approval_failed_failed_generate_access_token_device.format(arg0 = peer.id))
@@ -679,6 +689,16 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             .launchIn(mainScope)
         remoteDeviceConnectionMonitor.start()
         lanBeaconListener.start()
+        directInviteStates.onEach { states ->
+            val connected = states.filterValues { it == WebRtcConnectionStatus.Connected }.keys
+            val removed = devices.filter { it.id.startsWith("direct:") && it.id.removePrefix("direct:") !in connected }
+            if (removed.isNotEmpty()) {
+                devices.removeAll(removed.toSet())
+                val fileState = inject<FileState>().value
+                val current = fileState.deskType.value as? Device
+                if (removed.any { it.id == current?.id }) fileState.updateDesk(FileProtocol.Local, Local())
+            }
+        }.launchIn(mainScope)
         webRtcPeerSessionStates
             .onEach { peerStates ->
                 syncWebRtcSocketDevices(peerStates, webRtcController)
@@ -707,6 +727,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         RuntimeServiceFailures.observe("device-presence-stop") { presenceMonitor.stop() }
         RuntimeServiceFailures.observe("device-monitor-stop") { remoteDeviceConnectionMonitor.stop() }
         RuntimeServiceFailures.observe("device-beacon-stop") { lanBeaconListener.stop() }
+        RuntimeServiceFailures.observe("direct-webrtc-stop") { directInviteCoordinator.stop() }
         mainScope.coroutineContext[Job]?.cancelAndJoin()
         RuntimeServiceFailures.observe("webrtc-stop") { webRtcController.stop() }
         RuntimeServiceFailures.observe("browser-webrtc-stop") { browserWebRtcController.stop() }
@@ -847,16 +868,64 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         webRtcController.connect(config)
     }
 
-    fun connectWebRtcRoom(room: WebRtcRoomProfile) {
-        if (!SettingsUtils.ensureSoftwareConsent()) return
-        val config = room.toWebRtcConfigResult().getOrElse { error ->
-            webRtcController.setConnectionError(error.message ?: AppStrings.ui_webrtc_room_connection_parameters_not_available)
-            return
+    suspend fun issueDirectInvite(host: String, port: Int, roleId: Long, stunUrl: String): WebRtcDirectInvite {
+        check(SettingsUtils.ensureSoftwareConsent()) { "network consent required" }
+        return directInviteCoordinator.issue(host, port, roleId, stunUrl)
+    }
+
+    fun directInviteAvailabilityError(): String? = com.folderspan.service.session.directInviteRuntimeError()
+
+    suspend fun connectDirectInvite(code: String) {
+        check(SettingsUtils.ensureSoftwareConsent()) { "network consent required" }
+        directInviteCoordinator.connect(code)
+    }
+
+    suspend fun revokeDirectInvite(invite: WebRtcDirectInvite) = directInviteCoordinator.revoke(invite)
+
+    suspend fun disconnectDirectInvite(attemptId: String) = directInviteCoordinator.disconnect(attemptId)
+
+    fun directInvitePeerName(attemptId: String): String = directInviteCoordinator.peer(attemptId)?.let { peer ->
+        peer.name?.takeIf(String::isNotBlank) ?: peer.id
+    }.orEmpty()
+
+    fun openDirectInviteDevice(attemptId: String): Boolean {
+        val fileState = inject<FileState>().value
+        val peer = directInviteCoordinator.peer(attemptId) ?: return false
+        val clients = directInviteCoordinator.clients(attemptId) ?: return false
+        val device = peer.toWebRtcSocketDevice(ConnectType.Connect)
+        val id = "direct:$attemptId"
+        val directDevice = Device(
+            id = id, name = device.name, pathSeparator = device.pathSeparator, host = mutableMapOf(),
+            type = device.type, token = "", pathClient = clients, bookmarkClient = clients, fileClient = clients,
+            transportType = DeviceTransportType.WebRtc,
+        )
+        devices.removeAll { it.id == id }
+        devices.add(directDevice)
+        fileState.updateDesk(FileProtocol.Device, directDevice)
+        return true
+    }
+
+    fun canOpenDirectInviteDevice(attemptId: String): Boolean = directInviteCoordinator.clients(attemptId) != null
+
+    private var officialRoomSelection: Long = 0
+
+    suspend fun connectWebRtcRoom(room: WebRtcRoomProfile): Boolean {
+        if (!SettingsUtils.ensureSoftwareConsent() || room.source != com.folderspan.data.main.webrtc.WebRtcRoomSource.Official) return false
+        val selection = ++officialRoomSelection
+        val latest = com.folderspan.data.main.webrtc.WebRtcOfficialRooms.client.getRoomConnection(room.roomId)
+            .mapCatching { it.toWebRtcConfigResult().getOrThrow() }
+        if (selection != officialRoomSelection) return true
+        val config = latest.getOrElse {
+            webRtcController.setConnectionError(AppStrings.official_room_unavailable)
+            return false
         }
+        pendingWebRtcConnectRequests.clear()
         connectWebRtcRoom(config)
+        return true
     }
 
     fun disconnectWebRtcRoom() {
+        officialRoomSelection++
         pendingWebRtcConnectRequests.clear()
         webRtcController.disconnect()
     }
@@ -1718,7 +1787,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     private fun syncCurrentDeskAfterWebRtcStateChange(peerStates: List<WebRtcPeerSessionSummary>) {
         val fileState = inject<FileState>().value
         val currentDesk = fileState.deskType.value as? Device ?: return
-        if (!currentDesk.isWebRtcDesk()) return
+        if (!currentDesk.isWebRtcDesk() || currentDesk.id.startsWith("direct:")) return
 
         val peerState = peerStates.firstOrNull { item -> item.peer.id == currentDesk.id }
         val shouldFallback =
@@ -1758,6 +1827,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             val authorization = issueWebRtcBootstrapAuthorization(
                 deviceId = peer.id,
                 connectionAttemptId = event.connectionAttemptId,
+                officialLocalDeviceId = controller.officialLocalDeviceId,
                 allowDefaultRole = true,
                 sharePathScope = grant.pathScope,
             )
@@ -1787,6 +1857,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
                 val authorization = issueWebRtcBootstrapAuthorization(
                     deviceId = peer.id,
                     connectionAttemptId = event.connectionAttemptId,
+                    officialLocalDeviceId = controller.officialLocalDeviceId,
                 )
                 if (authorization == null) {
                     LogKit.w(AppStrings.ui_webrtc_auto_approval_failed_failed_generate_access_token_device.format(arg0 = peer.id))
@@ -1820,6 +1891,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         if (queriedDevice?.connectionType == DeviceConnectType.PERMANENTLY_BANNED) {
             return WebRtcConnectDecision.Reject
         }
+        if (deviceId.startsWith("official:") && queriedDevice == null) return WebRtcConnectDecision.Waiting
         if (
             queriedDevice?.connectionType == DeviceConnectType.AUTO_CONNECT ||
             deviceId in accountAuthorizedDeviceIds ||
@@ -1836,6 +1908,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     private suspend fun issueWebRtcBootstrapAuthorization(
         deviceId: String,
         connectionAttemptId: String,
+        officialLocalDeviceId: String? = null,
         allowDefaultRole: Boolean = false,
         sharePathScope: DeviceSharePathScope? = null,
     ): DeviceSessionBootstrapAuthorization? {
@@ -1863,7 +1936,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
 
         val authorization = deviceSessionBootstrapAuthorizationRegistry.issue(
             initiatorDeviceId = deviceId,
-            targetDeviceId = getSocketDevice().id,
+            targetDeviceId = officialLocalDeviceId ?: getSocketDevice().id,
             connectionAttemptId = connectionAttemptId,
             roleId = roleId,
             sharePathScope = sharePathScope,
