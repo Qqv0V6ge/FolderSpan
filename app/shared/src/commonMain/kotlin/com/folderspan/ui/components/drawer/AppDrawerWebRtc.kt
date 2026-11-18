@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
+import com.folderspan.data.main.webrtc.WebRtcRoomSource
+import com.folderspan.isProAuthenticated
 import com.folderspan.data.main.webrtc.matchesActiveConfig
 import com.folderspan.service.webrtc.models.WebRtcConnectionStatus
 import com.folderspan.service.webrtc.models.toRoomDisplayLabel
@@ -32,12 +34,13 @@ import com.folderspan.ui.state.main.DrawerState
 import com.folderspan.ui.state.main.MainState
 import com.folderspan.ui.state.main.WebRtcRoomState
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 
 internal data class AppDrawerWebRtcUiState(
     val isExpanded: Boolean,
     val hasActiveRoomConfig: Boolean,
     val activeRoom: WebRtcRoomProfile?,
-    val pinnedRooms: List<WebRtcRoomProfile>,
+    val availableRooms: List<WebRtcRoomProfile>,
     val isConnecting: Boolean,
     val roomName: String,
     val roomSummary: String,
@@ -60,18 +63,17 @@ internal fun rememberAppDrawerWebRtcUiState(): AppDrawerWebRtcUiState {
     val connectionStatus by deviceState.webRtcConnectionStatus.collectAsState()
     val activeRoomConfig by deviceState.webRtcRoomConfig.collectAsState()
     val peerSessionStates by deviceState.webRtcPeerSessionStates.collectAsState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val loggedIn = isProAuthenticated()
 
-    LaunchedEffect(roomState) {
-        roomState.loadPersisted()
+    LaunchedEffect(roomState, loggedIn, isExpandWebRtc) {
+        if (loggedIn && isExpandWebRtc) roomState.loadOfficialRooms(reset = true)
     }
 
-    val rooms = roomState.rooms.toList()
+    val rooms = if (loggedIn) roomState.rooms.filter { it.source == WebRtcRoomSource.Official } else emptyList()
     val roomSelection = remember(rooms, activeRoomConfig) {
         val activeRoom = rooms.firstOrNull { item -> item.matchesActiveConfig(activeRoomConfig) }
-        val pinnedRooms = rooms.filter { item ->
-            item.pinned && !item.matchesActiveConfig(activeRoomConfig)
-        }
-        activeRoom to pinnedRooms
+        activeRoom to rooms.filter { it != activeRoom }
     }
     val activeRoom = roomSelection.first
     val isConnecting = connectionStatus == WebRtcConnectionStatus.Connecting
@@ -86,16 +88,16 @@ internal fun rememberAppDrawerWebRtcUiState(): AppDrawerWebRtcUiState {
         isExpanded = isExpandWebRtc,
         hasActiveRoomConfig = activeRoomConfig != null,
         activeRoom = activeRoom,
-        pinnedRooms = roomSelection.second,
+        availableRooms = roomSelection.second,
         isConnecting = isConnecting,
         roomName = roomName,
         roomSummary = roomSummary,
-        onAddRoom = { mainState.pushScreen(WebRtcRoomEditScreen()) },
+        onAddRoom = { mainState.pushScreen(if (loggedIn) WebRtcRoomEditScreen() else WebRtcRoomManageScreen()) },
         onManageRooms = { mainState.pushScreen(WebRtcRoomManageScreen()) },
         onToggleExpanded = { drawerState.updateExpandWebRtc(!isExpandWebRtc) },
         onOpenActiveRoom = { mainState.pushScreen(WebRtcRoomDevicesScreen()) },
         onDisconnectActiveRoom = deviceState::disconnectWebRtcRoom,
-        onConnectRoom = deviceState::connectWebRtcRoom,
+        onConnectRoom = { room -> scope.launch { deviceState.connectWebRtcRoom(room) } },
     )
 }
 
@@ -120,10 +122,10 @@ internal fun LazyListScope.appDrawerWebRtc(uiState: AppDrawerWebRtcUiState) {
             }
         }
 
-        if (uiState.pinnedRooms.isNotEmpty()) {
+        if (uiState.availableRooms.isNotEmpty()) {
             if (uiState.hasActiveRoomConfig) {
                 item(
-                    key = "drawer_webrtc_pinned_spacing",
+                    key = "drawer_webrtc_available_spacing",
                     contentType = "drawer_group_spacing",
                 ) {
                     Spacer(Modifier.height(6.dp))
@@ -131,11 +133,11 @@ internal fun LazyListScope.appDrawerWebRtc(uiState: AppDrawerWebRtcUiState) {
             }
 
             items(
-                items = uiState.pinnedRooms,
+                items = uiState.availableRooms,
                 key = { room -> "drawer_webrtc_pinned_${room.id}" },
                 contentType = { "drawer_webrtc_pinned_row" },
             ) { room ->
-                AppDrawerPinnedWebRtcRoomItem(
+                AppDrawerAvailableWebRtcRoomItem(
                     room = room,
                     uiState = uiState,
                 )
@@ -220,12 +222,12 @@ private fun AppDrawerActiveWebRtcRoomItem(uiState: AppDrawerWebRtcUiState) {
 }
 
 @Composable
-private fun AppDrawerPinnedWebRtcRoomItem(
+private fun AppDrawerAvailableWebRtcRoomItem(
     room: WebRtcRoomProfile,
     uiState: AppDrawerWebRtcUiState,
 ) {
     NavigationDrawerItem(
-        icon = { Icon(Icons.Default.PushPin, contentDescription = null) },
+        icon = { Icon(Icons.Default.Devices, contentDescription = null) },
         label = {
             WebRtcDrawerLabel(
                 title = room.name,

@@ -24,13 +24,18 @@ internal suspend fun ownDeviceChannel(session: WebUiPlatformSession, channel: De
 
 internal suspend fun devicePlatformRequest(request: LinkShareHttpRequest, session: WebUiPlatformSession): LinkShareHttpResponse {
     val operation = request.path.removePrefix("$WEB_UI_PLATFORM_PATH/devices/")
+    if (operation.startsWith("official-signaling/")) return officialSignalingRequest(operation, request, session)
     if (operation == "transport" || operation == "transfers") return deviceStreamPlatformRequest(request, session)
     return when (request.method to operation) {
         "POST" to "connect" -> {
             val input = request.platformBody<WebUiDeviceConnect>()
             require(input.host.isNotBlank() && input.port in 1..65535)
+            require(input.connectTimeoutMillis in 0..30_000)
             val connection = if (input.fingerprint == null) connectUnpinnedDeviceSessionChannel(input.host, input.port)
-            else DeviceSessionBootstrapConnection(connectPinnedDeviceSessionChannel(input.host, input.port, input.fingerprint), input.fingerprint)
+            else DeviceSessionBootstrapConnection(
+                connectPinnedDeviceSessionChannel(input.host, input.port, input.fingerprint, input.connectTimeoutMillis),
+                input.fingerprint,
+            )
             platformResponse(WebUiDeviceConnected(ownDeviceChannel(session, connection.channel).first, connection.peerFingerprintSha256))
         }
         "GET" to "channel" -> {
@@ -71,6 +76,9 @@ internal suspend fun devicePlatformRequest(request: LinkShareHttpRequest, sessio
             platformResponse(WebUiHandle(id))
         }
         "POST" to "sign" -> platformResponse(DeviceTlsIdentity.signSha256WithRsa(request.boundedBytes()))
+        "POST" to "certificate-key" -> platformResponse(
+            DeviceTlsIdentity.publicKeyFromCertificate(request.boundedBytes(8192).decodeToString(throwOnInvalidSequence = true)),
+        )
         "POST" to "verify" -> {
             val input = request.platformBody<WebUiVerifySignature>()
             platformResponse(DeviceTlsIdentity.verifySha256WithRsa(input.publicKey, input.payload, input.signature))

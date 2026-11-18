@@ -29,7 +29,7 @@ class WebRtcIceConfigTest {
                 WebRtcIceServerConfig(urls = listOf("stun:ice.example.test:3478")),
                 WebRtcIceServerConfig(
                     urls = listOf("turns:relay.example.test:5349"),
-                    username = "user",
+                    username = " user ",
                     password = " password "
                 )
             ),
@@ -87,7 +87,7 @@ class WebRtcIceConfigTest {
     }
 
     @Test
-    fun buildWebRtcIceServersKeepsBlankTurnCredentialsBlank() {
+    fun buildWebRtcIceServersPreservesWhitespaceOnlyTurnUsername() {
         val servers = buildWebRtcIceServers(
             stunUrl = " ",
             turnUrl = "turn:relay.example.test:3478",
@@ -99,7 +99,7 @@ class WebRtcIceConfigTest {
             listOf(
                 WebRtcIceServerConfig(
                     urls = listOf("turn:relay.example.test:3478"),
-                    username = "",
+                    username = " ",
                     password = ""
                 )
             ),
@@ -137,12 +137,12 @@ class WebRtcIceConfigTest {
     }
 
     @Test
-    fun multipleTurnTransportsAndAddressFamiliesShareUnmodifiedPassword() {
+    fun multipleTurnTransportsAndAddressFamiliesShareUnmodifiedCredentials() {
         val urls = listOf("turn:relay.example:3478?transport=udp", "turn:192.0.2.1:3478?transport=tcp", "turns:[2001:db8::1]:443?transport=tcp")
         val servers = buildWebRtcIceServers("stun:[2001:db8::2]:3478", "  ${urls.joinToString(" ; ")}  ", " user ", " secret ")
         assertEquals(listOf("stun:[2001:db8::2]:3478"), servers[0].urls)
         assertEquals(urls, servers[1].urls)
-        assertEquals("user", servers[1].username)
+        assertEquals(" user ", servers[1].username)
         assertEquals(" secret ", servers[1].password)
         assertEquals(listOf("turns:relay.example:443"), buildWebRtcIceServers("", "turns:relay.example:443").single().urls)
     }

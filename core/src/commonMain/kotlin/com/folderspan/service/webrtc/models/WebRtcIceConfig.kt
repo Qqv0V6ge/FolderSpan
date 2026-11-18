@@ -21,8 +21,6 @@ fun buildWebRtcIceServers(
 ): List<WebRtcIceServerConfig> {
     val normalizedStunUrl = stunUrl.trim()
     val normalizedTurnUrl = turnUrl.trim()
-    val normalizedTurnUsername = turnUsername.trim()
-    val normalizedTurnPassword = turnPassword
     val turnUrls = if (normalizedTurnUrl.isEmpty()) emptyList() else normalizedTurnUrl.split(';').map(String::trim)
     require(normalizedStunUrl.isEmpty() || isWebRtcIceUri(normalizedStunUrl, turn = false)) {
         AppStrings.webrtc_invalid_ice_url
@@ -36,8 +34,8 @@ fun buildWebRtcIceServers(
             add(
                 WebRtcIceServerConfig(
                     urls = turnUrls,
-                    username = normalizedTurnUsername,
-                    password = normalizedTurnPassword
+                    username = turnUsername,
+                    password = turnPassword
                 )
             )
         }
@@ -65,15 +63,19 @@ internal fun isWebRtcIceUri(value: String, turn: Boolean): Boolean {
         if (authority.count { it == ':' } > 1) return false
         host = authority.substringBefore(':')
         port = authority.substringAfter(':', "").takeIf { ':' in authority }
-        if (host.all { it.isDigit() || it == '.' }) {
-            if (!isWebRtcIpv4(host)) return false
-        } else if (!host.removeSuffix(".").split('.').all { label ->
-                label.length in 1..63 && label.first().isLetterOrDigit() && label.last().isLetterOrDigit() &&
-                    label.all { it in 'a'..'z' || it in 'A'..'Z' || it.isDigit() || it == '-' }
-            }) return false
+        if (!isWebRtcHost(host)) return false
     }
     return port == null || (port.isNotEmpty() && port.all(Char::isDigit) && port.toIntOrNull() in 1..65535)
 }
+
+internal fun isWebRtcHost(host: String): Boolean = when {
+    ':' in host -> isWebRtcIpv6(host)
+    host.length !in 1..253 -> false
+    host.all { it in '0'..'9' || it == '.' } -> isWebRtcIpv4(host)
+    else -> host.removeSuffix(".").split('.').all { dnsLabel.matches(it) }
+}
+
+private val dnsLabel = Regex("[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
 internal fun isWebRtcIpv4(value: String): Boolean = value.split('.').let { parts ->
     parts.size == 4 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) && it.toIntOrNull() in 0..255 }

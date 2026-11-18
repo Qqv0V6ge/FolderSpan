@@ -1,6 +1,13 @@
 package com.folderspan.service.webrtc.signaling
 
+import com.folderspan.PlatformType
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.http.client.applyConfiguredHttpProxy
+import com.folderspan.service.webui.WebUiAttachment
+import com.folderspan.service.webui.WebUiHandle
+import com.folderspan.service.webui.WebUiOfficialSignalingFrame
+import com.folderspan.service.webui.WebUiOfficialSignalingOpen
+import com.folderspan.service.webui.WebUiPlatformClient
 import com.folderspan.service.webrtc.WebRtcRoomConnectionProbeClient
 import com.folderspan.utils.LogKit
 import io.ktor.client.HttpClient
@@ -10,12 +17,16 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import strings.AppStrings
 
@@ -46,7 +57,9 @@ class WebRtcSignalingClient(
         LogKit.i(AppStrings.ui_webrtc_signaling_connection_arg0.format(arg0 = (wssUrl)))
         job = scope.launch {
             try {
-                client.webSocket(
+                if (headers.isNotEmpty() && PlatformType == DeviceType.JS) {
+                    connectThroughRuntime()
+                } else client.webSocket(
                     request = {
                         url(wssUrl)
                         this@WebRtcSignalingClient.headers.forEach { (name, value) ->
@@ -64,15 +77,7 @@ class WebRtcSignalingClient(
                     try {
                         for (frame in incoming) {
                             if (frame is Frame.Text) {
-                                val payload = frame.readText()
-                                runCatching {
-                                    json.decodeFromString(SignalingMessage.serializer(), payload)
-                                }.onSuccess { message ->
-                                    LogKit.d(AppStrings.ui_webrtc_signaling_receiver_arg0_payloadlen_arg1.format(arg0 = (summarize(message)), arg1 = (payload.length).toString()))
-                                    _messages.tryEmit(message)
-                                }.onFailure { error ->
-                                    LogKit.w(AppStrings.ui_parsing_signaling_message_failed_arg0_payloadlen_arg1.format(arg0 = (error.message).toString(), arg1 = (payload.length).toString()))
-                                }
+                                receiveText(frame.readText())
                             }
                         }
                     } catch (error: Throwable) {
@@ -94,6 +99,59 @@ class WebRtcSignalingClient(
                 LogKit.i(AppStrings.ui_webrtc_signaling_connection_ended_arg0.format(arg0 = (wssUrl)))
             }
         }
+    }
+
+    private suspend fun connectThroughRuntime() = coroutineScope {
+        check(WebUiAttachment.target?.protectsDeviceCredentials == true && WebUiAttachment.hasSession) {
+            AppStrings.direct_invite_runtime_secure
+        }
+        check(WebUiAttachment.hostInfo?.officialSignalingGateway == wssUrl) {
+            AppStrings.ui_official_webrtc_gateway_address_unavailable
+        }
+        val path = "/devices/official-signaling"
+        val generation = WebUiAttachment.sessionGeneration
+        val handle = WebUiPlatformClient.post<WebUiOfficialSignalingOpen, WebUiHandle>(
+            "$path/open", WebUiOfficialSignalingOpen(wssUrl, headers),
+        ).id
+        fun requireOwner() {
+            check(generation == WebUiAttachment.sessionGeneration) { "Runtime session changed" }
+        }
+        _openedEvents.emit(Unit)
+        val sender = launch {
+            for (text in outgoingReceiver) {
+                requireOwner()
+                WebUiPlatformClient.post<WebUiOfficialSignalingFrame, Boolean>(
+                    "$path/write?handle=$handle", WebUiOfficialSignalingFrame(text),
+                )
+            }
+        }
+        try {
+            while (true) {
+                requireOwner()
+                val text = WebUiPlatformClient.get<String?>("$path/read?handle=$handle") ?: break
+                if (text.isNotEmpty()) receiveText(text)
+            }
+        } finally {
+            sender.cancel()
+            withContext(NonCancellable) {
+                if (generation == WebUiAttachment.sessionGeneration) {
+                    withTimeoutOrNull(5_000L) { runCatching { WebUiPlatformClient.release(handle) } }
+                }
+            }
+        }
+    }
+
+    private suspend fun receiveText(payload: String) {
+        val message = runCatching { json.decodeFromString(SignalingMessage.serializer(), payload) }.getOrElse {
+            LogKit.w(AppStrings.ui_parsing_signaling_message_failed_arg0_payloadlen_arg1.format(
+                arg0 = it::class.simpleName.orEmpty(), arg1 = payload.length.toString(),
+            ))
+            return
+        }
+        LogKit.d(AppStrings.ui_webrtc_signaling_receiver_arg0_payloadlen_arg1.format(
+            arg0 = summarize(message), arg1 = payload.length.toString(),
+        ))
+        _messages.emit(message)
     }
 
     override suspend fun send(message: SignalingMessage) {

@@ -55,7 +55,7 @@ class WebRtcRoomEditScreen(
         val snackbarHostState = remember { SnackbarHostState() }
         val roomKey = room?.catalogKey ?: "new"
         val canUseOfficialGateway = isProAuthenticated()
-        val initialSource = room?.source ?: WebRtcRoomSource.Other
+        val initialSource = WebRtcRoomSource.Official
 
         var name by rememberSaveable(roomKey) { mutableStateOf(room?.name ?: "") }
         var otherWssUrl by rememberSaveable(roomKey) {
@@ -71,7 +71,7 @@ class WebRtcRoomEditScreen(
         var stunUrl by rememberSaveable(roomKey) { mutableStateOf(room?.stunUrl ?: "") }
         var turnUrl by rememberSaveable(roomKey) { mutableStateOf(room?.turnUrl ?: "") }
         var turnUsername by rememberSaveable(roomKey) { mutableStateOf(room?.turnUsername ?: "") }
-        var turnPassword by rememberSaveable(roomKey) { mutableStateOf(room?.turnPassword ?: "") }
+        var turnPassword by remember(roomKey) { mutableStateOf(room?.turnPassword ?: "") }
         var isIceTurnExpanded by rememberSaveable(roomKey) { mutableStateOf(false) }
         var isTestingWebSocket by remember { mutableStateOf(false) }
         var officialDetailReady by rememberSaveable(roomKey) {
@@ -88,7 +88,7 @@ class WebRtcRoomEditScreen(
             )
         }
         val sourceOptions = remember(canUseOfficialGateway, isEdit, initialSource) {
-            if (isEdit) listOf(initialSource) else webRtcRoomSourceOptions(canUseOfficialGateway = canUseOfficialGateway)
+            listOf(WebRtcRoomSource.Official)
         }
         val officialWssUrl = if (canUseOfficialGateway) WebRtcOfficialGateway.websocketUrl() else ""
 

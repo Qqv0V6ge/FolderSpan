@@ -12,6 +12,12 @@ expect object DeviceTlsIdentity {
     /** 返回可公开登记的 PEM 公钥；平台不支持时返回 null。 */
     fun publicKeyPem(): String?
 
+    internal fun certificatePem(): String?
+
+    internal suspend fun publicKeyFromCertificate(certificatePem: String): String?
+
+    internal suspend fun signDirectInvite(payload: ByteArray): String?
+
     /** 使用本机 TLS 身份私钥签名，私钥不会离开平台身份存储。 */
     suspend fun signSha256WithRsa(payload: ByteArray): String?
 

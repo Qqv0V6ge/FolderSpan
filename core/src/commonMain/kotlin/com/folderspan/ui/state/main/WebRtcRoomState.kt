@@ -7,13 +7,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.folderspan.data.main.webrtc.OfficialWebRtcRoomCode
+import com.folderspan.data.main.webrtc.WebRtcOfficialGateway
+import com.folderspan.data.main.webrtc.WebRtcOfficialRoomType
 import com.folderspan.data.main.webrtc.WebRtcOfficialRooms
+import com.folderspan.data.main.webrtc.WebRtcShareCode
 import com.folderspan.data.main.webrtc.WebRtcRoomInput
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcRoomSource
 import com.folderspan.data.main.webrtc.withoutCachedTurnPassword
 import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.db.WebRtcRoom
+import com.folderspan.service.webrtc.models.buildWebRtcIceServers
 import com.folderspan.ui.components.pagestate.PageAppendState
 import com.folderspan.ui.components.pagestate.PageErrorState
 import com.folderspan.ui.components.pagestate.PageRefreshState
@@ -158,6 +163,18 @@ class WebRtcRoomState(
         )
     }
 
+    suspend fun exportOfficialRoomCode(roomId: String): Result<String> =
+        officialClient.getRoom(roomId).mapCatching { room ->
+            require(room.owned && room.officialType == WebRtcOfficialRoomType.Custom)
+            val turn = buildWebRtcIceServers(turnUrl = room.turnUrl, turnUsername = room.turnUsername,
+                turnPassword = room.turnPassword).singleOrNull()
+            WebRtcShareCode.encodeOfficialRoom(OfficialWebRtcRoomCode(
+                source = "official", name = room.name, roomId = room.roomId,
+                wssUrl = WebRtcOfficialGateway.websocketUrl(), stunUrl = room.stunUrl,
+                turnUrls = turn?.urls.orEmpty(), turnUsername = room.turnUsername, turnPassword = room.turnPassword,
+            ))
+        }
+
     suspend fun addRoom(input: WebRtcRoomInput): Long? {
         ensureLoaded()
         val normalized = input.normalized()
@@ -266,7 +283,9 @@ class WebRtcRoomState(
     suspend fun deleteRooms(roomsToDelete: Collection<WebRtcRoomProfile>): Int {
         ensureLoaded()
         if (roomsToDelete.isEmpty()) return 0
-        val officialToDelete = roomsToDelete.filter { item -> item.source == WebRtcRoomSource.Official }
+        val officialToDelete = roomsToDelete.filter { item ->
+            item.source == WebRtcRoomSource.Official && item.owned && item.officialType == WebRtcOfficialRoomType.Custom
+        }
         val localToDelete = roomsToDelete.filter { item -> item.source == WebRtcRoomSource.Other }
         var deleted = 0
         officialToDelete.forEach { room ->

@@ -6,8 +6,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import korlibs.crypto.SecureRandom
 
-internal actual suspend fun connectPinnedDeviceSessionChannel(host: String, port: Int, expectedFingerprintSha256: String): DeviceSessionByteChannel {
-    val response = WebUiPlatformClient.post<WebUiDeviceConnect, WebUiDeviceConnected>("/devices/connect", WebUiDeviceConnect(host, port, expectedFingerprintSha256))
+internal actual suspend fun connectPinnedDeviceSessionChannel(
+    host: String,
+    port: Int,
+    expectedFingerprintSha256: String,
+    connectTimeoutMillis: Int,
+): DeviceSessionByteChannel {
+    val response = WebUiPlatformClient.post<WebUiDeviceConnect, WebUiDeviceConnected>(
+        "/devices/connect", WebUiDeviceConnect(host, port, expectedFingerprintSha256, connectTimeoutMillis),
+    )
     return BrowserDeviceChannel(response.handle)
 }
 
@@ -18,10 +25,12 @@ internal actual suspend fun connectUnpinnedDeviceSessionChannel(host: String, po
 
 internal class BrowserDeviceChannel(private val handle: String) : DeviceSessionPlatformChannel {
     private val session = WebUiAttachment.sessionToken
+    private val generation = WebUiAttachment.sessionGeneration
     private val readMutex = Mutex()
     private val writeMutex = Mutex()
     private var closed = false
-    private fun checkOpen() { check(!closed && session == WebUiAttachment.sessionToken) { "device channel closed" } }
+    private fun ownsSession() = session == WebUiAttachment.sessionToken && generation == WebUiAttachment.sessionGeneration
+    private fun checkOpen() { check(!closed && ownsSession()) { "device channel closed" } }
     override fun frameTransport(sendPlan: DeviceSessionWindowPlan, receivePlan: DeviceSessionWindowPlan, isClient: Boolean, onPing: (suspend (ByteArray) -> Unit)?): DeviceSessionPlatformTransport {
         checkOpen()
         return WebUiDeviceTransport(handle, WebUiDeviceTransportOpen(sendPlan, receivePlan, isClient), onPing)
@@ -50,7 +59,7 @@ internal class BrowserDeviceChannel(private val handle: String) : DeviceSessionP
         closed = true
         // close() is a synchronous channel contract. A failed HTTP cleanup is covered by the session lease.
         CoroutineScope(Dispatchers.Default).launch {
-            if (session == WebUiAttachment.sessionToken) withTimeoutOrNull(5_000) { runCatching { WebUiPlatformClient.release(handle) } }
+            if (ownsSession()) withTimeoutOrNull(5_000) { runCatching { WebUiPlatformClient.release(handle) } }
         }
     }
 }

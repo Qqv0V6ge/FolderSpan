@@ -5,6 +5,7 @@ import com.folderspan.PlatformType
 import com.folderspan.createSettings
 import com.folderspan.currentDeviceName
 import com.folderspan.getSocketDevice
+import com.folderspan.service.data.SocketDevice
 import com.folderspan.data.main.device.DeviceConnectType
 import com.folderspan.service.data.DeviceConnectAuthorizationMode
 import com.folderspan.service.data.DeviceConnectRequest
@@ -15,6 +16,7 @@ import com.folderspan.service.message.DeviceMessageLiveEndpointRegistry
 import com.folderspan.service.message.IncomingDeviceMessageCoordinator
 import com.folderspan.service.message.newDeviceMessageId
 import com.folderspan.service.session.DEVICE_SESSION_RPC_CONNECT
+import com.folderspan.service.session.DirectInviteClaim
 import com.folderspan.service.session.DEVICE_SESSION_RPC_THEME
 import com.folderspan.service.session.DEVICE_SESSION_RPC_WEBRTC_ICE
 import com.folderspan.service.session.DEVICE_SESSION_RPC_OK
@@ -50,6 +52,8 @@ import com.folderspan.service.webrtc.models.WebRtcIceSnapshot
 import com.folderspan.service.webrtc.models.asRemoteObservation
 import com.folderspan.service.webrtc.models.webRtcIceUfrags
 import com.folderspan.service.webrtc.models.icePathFailureMessage
+import com.folderspan.service.webrtc.models.isDirectIceCandidate
+import com.folderspan.service.webrtc.models.withoutNonDirectIceCandidates
 import com.folderspan.service.webrtc.models.WebRtcPeerConnection
 import com.folderspan.service.webrtc.models.WebRtcPeerConnectionState
 import com.folderspan.service.webrtc.models.WebRtcSdpType
@@ -67,6 +71,7 @@ import com.folderspan.service.webrtc.signaling.asTargetDevice
 import com.folderspan.service.webrtc.signaling.buildBrowserWebRtcConfig
 import com.folderspan.service.webrtc.signaling.isValidRoomId
 import com.folderspan.service.webrtc.signaling.toSignalingDevice
+import com.folderspan.service.webrtc.signaling.withOfficialIdentity
 import com.folderspan.utils.LogKit
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.ProtoBufCodec
@@ -167,7 +172,20 @@ class MultiPeerWebRtcController(
     private var signalingFailureJob: Job? = null
     private var signalingClosedJob: Job? = null
     private var currentConfig: WebRtcConfig? = null
+    private var direct: DirectNegotiation? = null
+
+    private data class DirectNegotiation(
+        val iceServers: List<WebRtcIceServerConfig>,
+        val peer: SignalingDevice,
+        val attemptId: String,
+        val claim: DirectInviteClaim?,
+        val localDevice: SocketDevice,
+        val send: suspend (SignalingMessage) -> Unit,
+    )
+
     private var currentLocalDeviceId: String = ""
+    internal val officialLocalDeviceId: String?
+        get() = currentLocalDeviceId.takeIf { currentConfig?.headers?.isNotEmpty() == true && it.startsWith("official:") }
 
     private val _connectionStatus = MutableStateFlow(WebRtcConnectionStatus.Idle)
     val connectionStatus: StateFlow<WebRtcConnectionStatus> = _connectionStatus.asStateFlow()
@@ -194,6 +212,45 @@ class MultiPeerWebRtcController(
         require(
             (deviceMessageEndpointRegistry == null) == (incomingDeviceMessageCoordinator == null)
         ) { "WebRTC message registry and coordinator must be configured together" }
+    }
+
+    internal fun startDirect(
+        peer: SignalingDevice,
+        attemptId: String,
+        iceServers: List<WebRtcIceServerConfig>,
+        claim: DirectInviteClaim?,
+        localDevice: SocketDevice,
+        send: suspend (SignalingMessage) -> Unit,
+    ) {
+        check(currentConfig == null && direct == null)
+        require(iceServers.all { server -> server.urls.all { it.startsWith("stun:") } })
+        direct = DirectNegotiation(iceServers, peer, attemptId, claim, localDevice, send)
+        currentLocalDeviceId = localDevice.id
+        _connectionStatus.value = WebRtcConnectionStatus.Connecting
+        approvedPeerIds.add(peer.id)
+        val session = ensureSession(peer.id, peer).apply {
+            connectionAttemptId = attemptId
+            connectRequested = true
+            isOfferer = claim == null
+            isDeviceSessionClient = isOfferer
+        }
+        setupPeerConnection(session)
+        if (session.isOfferer) startOfferIfNeeded(session)
+    }
+
+    internal fun receiveDirect(message: SignalingMessage) {
+        val active = direct ?: return
+        if (message.connectionAttemptId != active.attemptId || message.from?.id != active.peer.id) return
+        when (message.type) {
+            "offer" -> if (active.claim != null) handleOffer(null, message)
+            "answer" -> if (active.claim == null) {
+                val authorization = message.bootstrapAuthorization ?: return
+                if (authorization.connectionAttemptId != active.attemptId) return
+                peerSessions[active.peer.id]?.bootstrapAuthorization = authorization
+                handleAnswer(message)
+            }
+            "ice" -> if (message.candidate?.candidate?.isDirectIceCandidate() == true) handleIce(message)
+        }
     }
 
     fun connect(config: WebRtcConfig) {
@@ -288,7 +345,7 @@ class MultiPeerWebRtcController(
                 SignalingMessage(
                     type = "connect-request",
                     roomId = config.roomId,
-                    from = resolveLocalDevice(config),
+                    from = resolveLocalDevice(),
                     to = session.peer.asTargetDevice(),
                     connectionAttemptId = session.connectionAttemptId,
                     shareNonce = shareNonce.takeIf(String::isNotBlank),
@@ -340,7 +397,7 @@ class MultiPeerWebRtcController(
                 SignalingMessage(
                     type = "connect-approved",
                     roomId = config.roomId,
-                    from = resolveLocalDevice(config),
+                    from = resolveLocalDevice(),
                     to = session.peer.asTargetDevice(),
                     connectionAttemptId = session.connectionAttemptId,
                     bootstrapAuthorization = authorization,
@@ -366,7 +423,7 @@ class MultiPeerWebRtcController(
                 SignalingMessage(
                     type = "connect-rejected",
                     roomId = config.roomId,
-                    from = resolveLocalDevice(config),
+                    from = resolveLocalDevice(),
                     to = session.peer.asTargetDevice(),
                     connectionAttemptId = session.connectionAttemptId,
                     ts = nowMs(),
@@ -403,7 +460,8 @@ class MultiPeerWebRtcController(
                 SignalingMessage(
                     type = "join",
                     roomId = config.roomId,
-                    from = resolveLocalDevice(config),
+                    from = resolveLocalDevice(),
+                    protocolVersion = 2,
                     ts = nowMs(),
                 )
             )
@@ -496,6 +554,7 @@ class MultiPeerWebRtcController(
         _connectionStatus.value = WebRtcConnectionStatus.Idle
         if (clearConfig) {
             currentConfig = null
+            direct = null
             currentLocalDeviceId = ""
             _activeRoomConfig.value = null
         }
@@ -530,9 +589,22 @@ class MultiPeerWebRtcController(
         publishPeerSessionStates()
     }
 
-    private fun handleSignal(message: SignalingMessage) {
+    private fun handleSignal(incoming: SignalingMessage) {
         val config = currentConfig ?: return
-        message.from?.let { updatePeers(currentLocalDeviceId, listOf(it), appendOnly = true) }
+        val official = config.headers.isNotEmpty()
+        val message = if (official) {
+            if (incoming.roomId != null && incoming.roomId != config.roomId) return
+            val from = incoming.from?.withOfficialIdentity()
+            if (incoming.from != null && from == null) return
+            if (incoming.type == "joined") {
+                if (from == null || from.wireDeviceId != resolveLocalDeviceId()) return
+                currentLocalDeviceId = from.id
+            } else if (incoming.type != "error" && officialLocalDeviceId == null) return
+            incoming.copy(from = from, peers = incoming.peers?.mapNotNull(SignalingDevice::withOfficialIdentity))
+        } else incoming
+        if (message.type !in listOf("joined", "peer-left")) {
+            message.from?.let { updatePeers(currentLocalDeviceId, listOf(it), appendOnly = true) }
+        }
         when (message.type) {
             "joined" -> {
                 _connectionStatus.value = WebRtcConnectionStatus.Connected
@@ -612,8 +684,9 @@ class MultiPeerWebRtcController(
             "ice" -> handleIce(message)
 
             "peer-left" -> {
-                val remoteId = message.from?.id ?: return
-                updatePeers(currentLocalDeviceId, listOf(SignalingDevice(id = remoteId)), removeOnly = true)
+                val remote = message.from ?: return
+                val remoteId = remote.id
+                updatePeers(currentLocalDeviceId, listOf(remote), removeOnly = true)
                 pendingOutboundApprovalIds.remove(remoteId)
                 pendingInboundApprovalIds.remove(remoteId)
                 approvedPeerIds.remove(remoteId)
@@ -625,6 +698,8 @@ class MultiPeerWebRtcController(
                 publishPeerSessionStates()
             }
 
+            "room-deleted" -> handleUnexpectedRoomDisconnect(AppStrings.ui_cannot_connect_webrtc_device_rejoin_room)
+
             "error" -> {
                 _lastError.value = message.errorMessage ?: message.code ?: AppStrings.webrtc_signaling_error
                 _connectionStatus.value = WebRtcConnectionStatus.Error
@@ -632,8 +707,9 @@ class MultiPeerWebRtcController(
         }
     }
 
-    private fun handleOffer(config: WebRtcConfig, message: SignalingMessage) {
-        val sdp = message.sdp ?: return
+    private fun handleOffer(config: WebRtcConfig?, message: SignalingMessage) {
+        val incoming = message.sdp ?: return
+        val sdp = if (direct == null) incoming else incoming.withoutNonDirectIceCandidates()
         val remote = message.from ?: return
         val session = ensureSession(remote.id, remote)
         if (
@@ -680,11 +756,12 @@ class MultiPeerWebRtcController(
                 sendSignaling(
                     SignalingMessage(
                         type = "answer",
-                        roomId = config.roomId,
-                        from = resolveLocalDevice(config),
+                        roomId = config?.roomId,
+                        from = resolveLocalDevice(),
                         to = session.peer.asTargetDevice(),
                         sdp = answer.sdp,
                         connectionAttemptId = attemptId,
+                        bootstrapAuthorization = direct?.claim?.authorization,
                         ts = nowMs(),
                     )
                 )
@@ -702,7 +779,8 @@ class MultiPeerWebRtcController(
     }
 
     private fun handleAnswer(message: SignalingMessage) {
-        val sdp = message.sdp ?: return
+        val incoming = message.sdp ?: return
+        val sdp = if (direct == null) incoming else incoming.withoutNonDirectIceCandidates()
         val remote = message.from ?: return
         val session = ensureSession(remote.id, remote)
         if (
@@ -800,8 +878,8 @@ class MultiPeerWebRtcController(
 
     private fun setupPeerConnection(session: PeerSession) {
         closePeerConnection(session)
-        val config = currentConfig ?: return
-        val peerConnection = createPeerConnection(config.iceServers, session.remoteId).getOrElse { error ->
+        val iceServers = direct?.iceServers ?: currentConfig?.iceServers ?: return
+        val peerConnection = createPeerConnection(iceServers, session.remoteId).getOrElse { error ->
             failPeerSession(session, error, AppStrings.ui_connection_failed)
             return
         }
@@ -825,7 +903,7 @@ class MultiPeerWebRtcController(
             delay(30_000.milliseconds)
             if (session.isCurrent(peerConnection, generation) && !session.hasOpenSessionChannel()) {
                 failPeerSession(session, IllegalStateException("WebRTC ICE/DataChannel connection timed out"),
-                    config.iceServers.icePathFailureMessage(peerConnection.lastIceServerErrorCode))
+                    iceServers.icePathFailureMessage(peerConnection.lastIceServerErrorCode))
             }
         }
         publishPeerSessionStates()
@@ -833,14 +911,15 @@ class MultiPeerWebRtcController(
         session.peerConnectionCollectors += scope.launch(start = CoroutineStart.UNDISPATCHED) {
             peerConnection.onIceCandidate.collect { candidate ->
                 if (!session.isCurrent(peerConnection, generation) || session.remoteId !in approvedPeerIds ||
-                    session.connectionAttemptId != attempt || candidate.candidate.isBlank()
+                    session.connectionAttemptId != attempt || candidate.candidate.isBlank() ||
+                    (direct != null && !candidate.candidate.isDirectIceCandidate())
                 ) return@collect
-                val activeConfig = currentConfig ?: return@collect
+                val activeConfig = currentConfig
                 sendSignaling(
                     SignalingMessage(
                         type = "ice",
-                        roomId = activeConfig.roomId,
-                        from = resolveLocalDevice(activeConfig),
+                        roomId = activeConfig?.roomId,
+                        from = resolveLocalDevice(),
                         to = session.peer.asTargetDevice(),
                         candidate = SignalingIceCandidate(
                             sdpMid = candidate.sdpMid,
@@ -888,7 +967,7 @@ class MultiPeerWebRtcController(
                 handleUnexpectedPeerDisconnect(session, WebRtcConnectionStatus.Disconnected, "PeerConnection closed")
             }
             WebRtcPeerConnectionState.Failed -> failPeerSession(session, IllegalStateException("PeerConnection failed"),
-                currentConfig?.iceServers.orEmpty().icePathFailureMessage(session.peerConnection?.lastIceServerErrorCode))
+                (direct?.iceServers ?: currentConfig?.iceServers).orEmpty().icePathFailureMessage(session.peerConnection?.lastIceServerErrorCode))
         }
     }
 
@@ -944,7 +1023,7 @@ class MultiPeerWebRtcController(
                     session.localUfrags = offer.sdp.webRtcIceUfrags()
                     connection.setLocalDescription(offer)
                     if (!isCurrent()) return@launch
-                    sendSignaling(SignalingMessage(type = "offer", roomId = config.roomId, from = resolveLocalDevice(config),
+                    sendSignaling(SignalingMessage(type = "offer", roomId = config.roomId, from = resolveLocalDevice(),
                         to = session.peer.asTargetDevice(), sdp = offer.sdp, connectionAttemptId = attempt, ts = nowMs()))
                 } catch (error: CancellationException) { throw error }
                 catch (error: Throwable) { if (isCurrent()) failPeerSession(session, error, AppStrings.ui_create_offer_failure) }
@@ -953,7 +1032,7 @@ class MultiPeerWebRtcController(
             session.negotiationJob = scope.launch {
                 if (!session.isCurrent(connection, generation)) return@launch
                 sendSignaling(SignalingMessage(type = "ice", code = "ice-restart", roomId = config.roomId,
-                    from = resolveLocalDevice(config), to = session.peer.asTargetDevice(),
+                    from = resolveLocalDevice(), to = session.peer.asTargetDevice(),
                     sdp = session.localUfrags.sorted().joinToString(" "), connectionAttemptId = attempt, ts = nowMs()))
             }
         }
@@ -1009,7 +1088,8 @@ class MultiPeerWebRtcController(
     }
 
     private fun startOfferIfNeeded(session: PeerSession) {
-        val config = currentConfig ?: return
+        val config = currentConfig
+        if (config == null && direct == null) return
         if (session.offerStarted || !session.isOfferer) return
         val peerConnection = session.peerConnection ?: return
         session.offerStarted = true
@@ -1042,8 +1122,8 @@ class MultiPeerWebRtcController(
                 sendSignaling(
                     SignalingMessage(
                         type = "offer",
-                        roomId = config.roomId,
-                        from = resolveLocalDevice(config),
+                        roomId = config?.roomId,
+                        from = resolveLocalDevice(),
                         to = session.peer.asTargetDevice(),
                         sdp = offer.sdp,
                         connectionAttemptId = attemptId,
@@ -1186,7 +1266,9 @@ class MultiPeerWebRtcController(
                                 peer.rpcValue<DeviceConnectRequest, DeviceSessionConnectResponse>(
                                     DEVICE_SESSION_RPC_CONNECT,
                                     DeviceConnectRequest(
-                                        device = getSocketDevice(),
+                                        device = direct?.localDevice ?: getSocketDevice().let { local ->
+                                            officialLocalDeviceId?.let { local.withCopy(id = it) } ?: local
+                                        },
                                         authorizationMode = DeviceConnectAuthorizationMode.STANDARD,
                                         bootstrapAuthorization = bootstrap,
                                     ),
@@ -1228,7 +1310,10 @@ class MultiPeerWebRtcController(
                 }
             }
         } else {
-            val launcher = serverLauncher
+            val officialId = officialLocalDeviceId
+            val launcher = if (direct?.claim != null || officialId != null) {
+                createWebRtcDeviceSessionServerLauncher(direct?.claim, officialId)
+            } else serverLauncher
             if (launcher == null) {
                 failSessionProtocol(session, IllegalStateException("Device Session server is unavailable"))
                 return
@@ -1392,6 +1477,11 @@ class MultiPeerWebRtcController(
     }
 
     private suspend fun sendSignaling(message: SignalingMessage) {
+        direct?.let { negotiation ->
+            negotiation.send(message)
+            return
+        }
+
         if (
             message.type in directedSignalingTypes &&
             currentConfig?.headers?.isNotEmpty() == true &&
@@ -1499,7 +1589,7 @@ class MultiPeerWebRtcController(
 
     private fun mergeSignalingDevice(current: SignalingDevice?, incoming: SignalingDevice): SignalingDevice {
         if (current == null) return incoming
-        return SignalingDevice(
+        return current.copy(
             id = incoming.id.ifBlank { current.id },
             name = incoming.name?.takeIf(String::isNotBlank) ?: current.name,
             pathSeparator = incoming.pathSeparator?.takeIf(String::isNotBlank) ?: current.pathSeparator,
@@ -1508,13 +1598,15 @@ class MultiPeerWebRtcController(
             type = incoming.type?.takeIf(String::isNotBlank) ?: current.type,
             connectType = incoming.connectType?.takeIf(String::isNotBlank) ?: current.connectType,
             userUuid = incoming.userUuid?.trim()?.takeIf(String::isNotBlank) ?: current.userUuid,
+            wireDeviceId = incoming.wireDeviceId.ifEmpty { current.wireDeviceId },
         )
     }
 
     private fun resolveLocalDeviceId(): String =
         runCatching { createSettings().getString(KEY_DEVICE_ID, "") }.getOrDefault("")
 
-    private fun resolveLocalDevice(config: WebRtcConfig): SignalingDevice {
+    private fun resolveLocalDevice(): SignalingDevice {
+        direct?.let { return it.localDevice.toSignalingDevice() }
         val localDeviceId = resolveLocalDeviceId()
         return runCatching { getSocketDevice() }.getOrNull()?.toSignalingDevice(overriddenId = localDeviceId)
             ?: SignalingDevice(

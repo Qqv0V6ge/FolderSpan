@@ -21,6 +21,7 @@ import platform.openssl.fm_x509_sha256_fingerprint
 import platform.openssl.fm_x509_public_key_to_pem
 import platform.openssl.fm_x509_to_pem
 import platform.posix.free
+import kotlin.io.encoding.Base64
 
 @OptIn(ExperimentalForeignApi::class)
 actual object DeviceTlsIdentity {
@@ -30,8 +31,17 @@ actual object DeviceTlsIdentity {
         return loadOrCreateCached().info
     }
 
-    actual fun publicKeyPem(): String? {
-        val cert = fm_read_x509_pem(loadOrCreateCached().certPem) ?: return null
+    actual fun publicKeyPem(): String? = certificatePublicKey(loadOrCreateCached().certPem)
+
+    internal actual fun certificatePem(): String? = loadOrCreateCached().certPem
+
+    internal actual suspend fun publicKeyFromCertificate(certificatePem: String): String? = certificatePublicKey(certificatePem)
+
+    internal actual suspend fun signDirectInvite(payload: ByteArray): String? =
+        signSha256WithRsa(payload)?.hexToByteArray()?.let { Base64.encode(it) }
+
+    private fun certificatePublicKey(pem: String): String? {
+        val cert = fm_read_x509_pem(pem) ?: return null
         return try {
             fm_x509_public_key_to_pem(cert)?.let { pointer ->
                 try {
@@ -63,13 +73,15 @@ actual object DeviceTlsIdentity {
         publicKeyPem: String,
         payload: ByteArray,
         signature: String,
-    ): Boolean = payload.usePinned { pinned ->
-        fm_verify_sha256_rsa_hex(
-            publicKeyPem,
-            pinned.addressOf(0).reinterpret(),
-            payload.size.convert(),
-            signature,
-        ) == 1
+    ): Boolean {
+        val signatureHex = if (signature.length % 2 == 0 && signature.all { it.digitToIntOrNull(16) != null }) {
+            signature
+        } else {
+            runCatching { Base64.decode(signature).toHexString() }.getOrNull() ?: return false
+        }
+        return payload.usePinned { pinned ->
+            fm_verify_sha256_rsa_hex(publicKeyPem, pinned.addressOf(0).reinterpret(), payload.size.convert(), signatureHex) == 1
+        }
     }
 
     internal fun createServerContext(): ServerContext {

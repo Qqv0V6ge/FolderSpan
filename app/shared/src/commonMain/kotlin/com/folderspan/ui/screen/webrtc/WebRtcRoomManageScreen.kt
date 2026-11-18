@@ -16,6 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.folderspan.clipboard.writeClipboardText
+import com.folderspan.data.main.webrtc.WebRtcOfficialRooms
+import com.folderspan.data.main.webrtc.WebRtcOfficialRoomType
+import com.folderspan.data.main.webrtc.WebRtcRoomMembershipAction
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcRoomSource
 import com.folderspan.data.main.webrtc.isBusy
@@ -76,6 +80,10 @@ class WebRtcRoomManageScreen : AppScreenRoute {
         val lastError by deviceState.webRtcLastError.collectAsState()
 
         var pendingConnectRoom by remember { mutableStateOf<WebRtcRoomProfile?>(null) }
+        var showImportRoom by remember { mutableStateOf(false) }
+        var exportRoom by remember { mutableStateOf<WebRtcRoomProfile?>(null) }
+        var membersRoom by remember { mutableStateOf<WebRtcRoomProfile?>(null) }
+        var leaveRoom by remember { mutableStateOf<WebRtcRoomProfile?>(null) }
         var showFilterSheet by rememberSaveable { mutableStateOf(false) }
         var searchQuery by rememberSaveable { mutableStateOf("") }
         var searchDraft by rememberSaveable { mutableStateOf("") }
@@ -172,13 +180,11 @@ class WebRtcRoomManageScreen : AppScreenRoute {
         }
 
         suspend fun deleteRooms(roomsToDelete: List<WebRtcRoomProfile>) {
-            if (
-                roomsToDelete.any { room -> room.matchesActiveConfig(activeConfig) } &&
-                    connectionStatus.isBusy()
-            ) {
+            val activeRoom = roomsToDelete.firstOrNull { it.matchesActiveConfig(activeConfig) }
+            val deleted = roomState.deleteRooms(roomsToDelete)
+            if (activeRoom != null && roomState.findRoomByCatalogKey(activeRoom.catalogKey) == null && connectionStatus.isBusy()) {
                 deviceState.disconnectWebRtcRoom()
             }
-            val deleted = roomState.deleteRooms(roomsToDelete)
             clearSelection()
             snackbarHostState.showLatestSnackbar(
                 if (deleted > 0) {
@@ -190,11 +196,13 @@ class WebRtcRoomManageScreen : AppScreenRoute {
         }
 
         suspend fun deleteRoom(room: WebRtcRoomProfile) {
-            if (room.matchesActiveConfig(activeConfig) && connectionStatus.isBusy()) {
+            val deleted = roomState.deleteRoom(room)
+            if (deleted && room.matchesActiveConfig(activeConfig) && connectionStatus.isBusy()) {
                 deviceState.disconnectWebRtcRoom()
             }
-            roomState.deleteRoom(room)
-            snackbarHostState.showLatestSnackbar(AppStrings.ui_arg0_deleted.format(arg0 = room.name))
+            snackbarHostState.showLatestSnackbar(
+                if (deleted) AppStrings.ui_arg0_deleted.format(arg0 = room.name) else AppStrings.ui_no_rooms_deleted,
+            )
         }
 
         LaunchedEffect(Unit) {
@@ -249,7 +257,8 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                             )
                         }
                     },
-                    actions = {
+                    actions = actions@{
+                        if (visibleSource == WebRtcRoomSource.Other) return@actions
                         if (selectionMode) {
                             TextButton(
                                 onClick = {
@@ -265,6 +274,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                                 Text(if (allVisibleSelected) AppStrings.ui_deselect_all else AppStrings.ui_select_all)
                             }
                         } else {
+                            TextButton(onClick = { showImportRoom = true }) { Text(AppStrings.official_room_import) }
                             if (hasActiveFilter) {
                                 FilledTonalIconButton(onClick = { openFilterSheet() }) {
                                     Icon(
@@ -291,6 +301,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                     WebRtcRoomBatchBottomBar(
                         hasSelection = selectedRooms.isNotEmpty(),
                         canConnect = selectedRooms.size == 1,
+                        canDelete = selectedRooms.any { it.canDeleteOfficialRoom() },
                         canPin = visibleSource == WebRtcRoomSource.Other,
                         onConnect = {
                             selectedRooms.singleOrNull()?.let { room ->
@@ -308,7 +319,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                             }
                         },
                         onDelete = {
-                            val roomsToDelete = selectedRooms.toList()
+                            val roomsToDelete = selectedRooms.filter { it.canDeleteOfficialRoom() }
                             if (roomsToDelete.isNotEmpty()) {
                                 scope.launch {
                                     val snackbarResult = snackbarHostState.showLatestSnackbar(
@@ -328,7 +339,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
-                if (!selectionMode) {
+                if (!selectionMode && visibleSource == WebRtcRoomSource.Official) {
                     ExtendedFloatingActionButton(
                         onClick = { navigator.push(WebRtcRoomEditScreen()) },
                         icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -350,7 +361,9 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
-                GridList(
+                if (visibleSource == WebRtcRoomSource.Other) {
+                    DirectInvitePanel(deviceState, onOpenFiles = { navigator.pop() })
+                } else GridList(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -406,6 +419,9 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                         lastError = if (isActiveRoom) lastError else null,
                         onSelectionToggle = { toggleSelection(room.catalogKey) },
                         onEdit = { navigator.push(WebRtcRoomEditScreen(room)) },
+                        onExport = { exportRoom = room },
+                        onMembers = { membersRoom = room },
+                        onLeave = { leaveRoom = room },
                         onDelete = {
                             scope.launch {
                                 val snackbarResult = snackbarHostState.showLatestSnackbar(
@@ -465,6 +481,59 @@ class WebRtcRoomManageScreen : AppScreenRoute {
             )
         }
 
+        if (showImportRoom && loggedIn) {
+            OfficialRoomImportDialog(
+                onUpdated = { roomState.loadOfficialRooms(reset = true) },
+                onDismiss = { showImportRoom = false },
+            )
+        }
+        if (loggedIn) membersRoom?.let { room ->
+            OfficialRoomMembersDialog(room, onDismiss = { membersRoom = null })
+        }
+        if (loggedIn) exportRoom?.let { room ->
+            AlertDialog(
+                onDismissRequest = { exportRoom = null },
+                title = { Text(AppStrings.official_room_export) },
+                text = { Text(AppStrings.official_room_export_warning) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        exportRoom = null
+                        scope.launch {
+                            val code = roomState.exportOfficialRoomCode(room.roomId).getOrNull()
+                            val copied = code != null && writeClipboardText(code)
+                            snackbarHostState.showLatestSnackbar(if (copied) AppStrings.ui_copied else AppStrings.ui_copy_failed)
+                        }
+                    }) { Text(AppStrings.ui_copy) }
+                },
+                dismissButton = { TextButton(onClick = { exportRoom = null }) { Text(AppStrings.ui_cancel) } },
+            )
+        }
+        if (loggedIn) leaveRoom?.let { room ->
+            AlertDialog(
+                onDismissRequest = { leaveRoom = null },
+                title = { Text(AppStrings.official_room_leave) },
+                text = { Text(AppStrings.official_room_leave_warning) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        leaveRoom = null
+                        scope.launch {
+                            val client = WebRtcOfficialRooms.client
+                            val membership = client.getMembership(room.roomId).getOrNull()
+                            val left = membership != null && client.changeMembership(
+                                room.roomId, membership.requestVersion, WebRtcRoomMembershipAction.Leave,
+                            ).isSuccess
+                            if (left && room.matchesActiveConfig(activeConfig)) deviceState.disconnectWebRtcRoom()
+                            roomState.loadOfficialRooms(reset = true)
+                            snackbarHostState.showLatestSnackbar(
+                                if (left) AppStrings.official_room_left else AppStrings.official_room_unavailable,
+                            )
+                        }
+                    }) { Text(AppStrings.official_room_leave) }
+                },
+                dismissButton = { TextButton(onClick = { leaveRoom = null }) { Text(AppStrings.ui_cancel) } },
+            )
+        }
+
         pendingConnectRoom?.let { room ->
             AlertDialog(
                 onDismissRequest = { pendingConnectRoom = null },
@@ -489,19 +558,8 @@ class WebRtcRoomManageScreen : AppScreenRoute {
                                 clearSelection()
                             }
                             scope.launch {
-                                val liveRoom = if (target.source == WebRtcRoomSource.Official) {
-                                    roomState.getOfficialRoom(target.roomId)
-                                } else {
-                                    target
-                                }
-                                if (liveRoom == null) {
-                                    snackbarHostState.showLatestSnackbar(
-                                        AppStrings.ui_failed_load_webrtc_room_arg0.format(
-                                            arg0 = AppStrings.ui_operation_failed_please_try_again_later,
-                                        )
-                                    )
-                                } else {
-                                    deviceState.connectWebRtcRoom(liveRoom)
+                                if (!deviceState.connectWebRtcRoom(target)) {
+                                    snackbarHostState.showLatestSnackbar(AppStrings.official_room_unavailable)
                                 }
                             }
                         }
@@ -531,6 +589,9 @@ private fun WebRtcRoomListContent(
     lastError: String?,
     onSelectionToggle: () -> Unit,
     onEdit: () -> Unit,
+    onExport: () -> Unit,
+    onMembers: () -> Unit,
+    onLeave: () -> Unit,
     onDelete: () -> Unit,
     onTogglePinned: () -> Unit,
     onOpenDevices: () -> Unit,
@@ -604,6 +665,7 @@ private fun WebRtcRoomListContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(connectionLabel)
+                if (room.officialType == WebRtcOfficialRoomType.Personal) Text(AppStrings.official_room_personal)
                 if (selectionMode && room.pinned) {
                     Icon(
                         imageVector = Icons.Default.PushPin,
@@ -659,7 +721,7 @@ private fun WebRtcRoomListContent(
                                     }
                                 )
                             }
-                            if (isConnectedRoom) {
+                            if (room.owned) {
                                 DropdownMenuItem(
                                     text = { Text(AppStrings.ui_edit) },
                                     onClick = {
@@ -670,6 +732,27 @@ private fun WebRtcRoomListContent(
                                         Icon(Icons.Default.Edit, contentDescription = null)
                                     }
                                 )
+                            }
+                            if (room.canDeleteOfficialRoom()) {
+                                DropdownMenuItem(text = { Text(AppStrings.official_room_export) }, onClick = {
+                                    menuExpanded = false
+                                    onExport()
+                                })
+                                DropdownMenuItem(text = { Text(AppStrings.official_room_members) }, onClick = {
+                                    menuExpanded = false
+                                    onMembers()
+                                })
+                                DropdownMenuItem(text = { Text(AppStrings.ui_delete) }, onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                })
+                            } else if (room.source == WebRtcRoomSource.Official && !room.owned) {
+                                DropdownMenuItem(text = { Text(AppStrings.official_room_leave) }, onClick = {
+                                    menuExpanded = false
+                                    onLeave()
+                                })
+                            }
+                            if (isConnectedRoom) {
                                 DropdownMenuItem(
                                     text = { Text(AppStrings.ui_equipment) },
                                     onClick = {
@@ -690,27 +773,6 @@ private fun WebRtcRoomListContent(
                                         Icon(Icons.Default.Close, contentDescription = null)
                                     }
                                 )
-                            } else {
-                                DropdownMenuItem(
-                                    text = { Text(AppStrings.ui_edit) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onEdit()
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Edit, contentDescription = null)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(AppStrings.ui_delete) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onDelete()
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Delete, contentDescription = null)
-                                    }
-                                )
                             }
                         }
                     }
@@ -722,10 +784,13 @@ private fun WebRtcRoomListContent(
     )
 }
 
+private fun WebRtcRoomProfile.canDeleteOfficialRoom(): Boolean = owned && officialType == WebRtcOfficialRoomType.Custom
+
 @Composable
 private fun WebRtcRoomBatchBottomBar(
     hasSelection: Boolean,
     canConnect: Boolean,
+    canDelete: Boolean,
     canPin: Boolean,
     onConnect: () -> Unit,
     onPin: () -> Unit,
@@ -758,7 +823,7 @@ private fun WebRtcRoomBatchBottomBar(
         WebRtcRoomBottomBarAction(
             label = AppStrings.ui_delete,
             icon = Icons.Default.Delete,
-            enabled = hasSelection,
+            enabled = canDelete,
             isDestructive = true,
             onClick = onDelete
         )
