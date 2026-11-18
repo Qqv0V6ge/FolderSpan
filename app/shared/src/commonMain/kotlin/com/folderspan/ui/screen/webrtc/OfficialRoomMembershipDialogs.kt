@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import strings.AppStrings
 
 @Composable
-internal fun OfficialRoomImportDialog(onUpdated: suspend () -> Unit, onDismiss: () -> Unit) {
+internal fun OfficialRoomImportDialog(onUpdated: () -> Unit, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val client = WebRtcOfficialRooms.client
     var code by remember { mutableStateOf("") }

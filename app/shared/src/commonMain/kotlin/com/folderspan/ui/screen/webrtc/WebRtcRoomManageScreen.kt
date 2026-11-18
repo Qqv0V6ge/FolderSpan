@@ -483,7 +483,7 @@ class WebRtcRoomManageScreen : AppScreenRoute {
 
         if (showImportRoom && loggedIn) {
             OfficialRoomImportDialog(
-                onUpdated = { roomState.loadOfficialRooms(reset = true) },
+                onUpdated = { scope.launch { roomState.loadOfficialRooms(reset = true) } },
                 onDismiss = { showImportRoom = false },
             )
         }
