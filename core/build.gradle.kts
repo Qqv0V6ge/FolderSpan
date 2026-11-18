@@ -17,6 +17,10 @@ if (providers.gradleProperty("webrtcInterop").isPresent) {
     tasks.withType<AbstractTestTask>().configureEach { outputs.upToDateWhen { false } }
 }
 
+tasks.matching { it.name.startsWith("cinteropOpensslIos") }.configureEach {
+    inputs.file(layout.projectDirectory.file("src/iosMain/cinterop/openssl_wrapper.h"))
+}
+
 val appReleaseVersion = providers.gradleProperty("releaseVersion")
     .map { item -> item.removePrefix("v") }
     .orElse("1.0.0")

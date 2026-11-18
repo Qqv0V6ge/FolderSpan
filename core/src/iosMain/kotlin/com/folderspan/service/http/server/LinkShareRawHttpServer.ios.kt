@@ -45,8 +45,8 @@ import platform.openssl.SSL_accept
 import platform.openssl.SSL_free
 import platform.openssl.SSL_new
 import platform.openssl.SSL_read
-import platform.openssl.SSL_set_fd
 import platform.openssl.SSL_write
+import platform.openssl.fm_ssl_set_socket
 import platform.posix.AF_INET
 import platform.posix.AF_INET6
 import platform.posix.EOF
@@ -205,7 +205,7 @@ internal class LinkShareRawHttpServer(
         }
         var connection: LinkShareConnection? = null
         try {
-            if (ssl != null && (SSL_set_fd(ssl, clientFd) != 1 || SSL_accept(ssl) != 1)) {
+            if (ssl != null && (fm_ssl_set_socket(ssl, clientFd) != 1 || SSL_accept(ssl) != 1)) {
                 return
             }
             val activeConnection = if (ssl != null) SslLinkShareConnection(ssl) else FdLinkShareConnection(clientFd)
