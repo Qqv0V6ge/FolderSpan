@@ -1,7 +1,11 @@
 package com.folderspan.service.session
 
+import com.folderspan.data.file.FileProtocol
+import com.folderspan.data.main.device.Device
+import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.webrtc.WebRtcShareCode
 import com.folderspan.getSocketDevice
+import com.folderspan.service.data.DeviceTransportType
 import com.folderspan.service.http.tls.DeviceTlsIdentity
 import com.folderspan.service.webrtc.controller.MultiPeerWebRtcController
 import com.folderspan.service.webrtc.models.WebRtcConfig
@@ -189,7 +193,18 @@ class DirectInviteFileTransferJvmTest {
                         roomController.connect(WebRtcConfig(wssUrl = "ws://127.0.0.1:1", roomId = generateRoomId(), iceServers = emptyList(), unreliableMode = false))
                         roomController.connect(WebRtcConfig(wssUrl = "ws://127.0.0.1:1", roomId = generateRoomId(), iceServers = emptyList(), unreliableMode = false))
                         roomController.disconnect()
-                        val received = client.readBytes(fixture.input.toString(), 0L, fixture.bytes.size.toLong()).getOrThrow()
+                        val device = Device(
+                            id = "direct:$attemptId", name = "Direct test peer", pathSeparator = "/",
+                            host = mutableMapOf(), type = DeviceType.JVM, token = "", pathClient = client, fileClient = client,
+                            transportType = DeviceTransportType.WebRtc,
+                        )
+                        val entry = device.paths.getList(fixture.input.parent.toString()).getOrThrow()
+                            .single { it.name == fixture.input.fileName.toString() }
+                        assertEquals(FileProtocol.Device, entry.protocol)
+                        assertEquals(device.id, entry.protocolId)
+                        assertEquals(device.id, device.files.get(entry.path).getOrThrow().protocolId)
+                        assertEquals(device.id, device.files.getInfo(entry.path).getOrThrow().protocolId)
+                        val received = device.files.readBytes(entry.path, 0L, fixture.bytes.size.toLong()).getOrThrow()
                         val digest = MessageDigest.getInstance("SHA-256")
                         assertTrue(digest.digest(fixture.bytes).contentEquals(digest.digest(received)))
                         assertTrue(client.readBytes(outside.toString(), 0L, 1L).isFailure)
