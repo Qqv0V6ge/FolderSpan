@@ -59,6 +59,7 @@ class WebRtcRoomState(
         get() = officialRooms.size < officialTotal
 
     private val loadMutex = Mutex()
+    private val officialLoadMutex = Mutex()
 
     suspend fun loadPersisted(): Boolean = loadMutex.withLock {
         if (!hasLoaded) hasLoaded = refreshRooms()
@@ -88,7 +89,7 @@ class WebRtcRoomState(
         return true
     }
 
-    suspend fun loadOfficialRooms(reset: Boolean = true) {
+    suspend fun loadOfficialRooms(reset: Boolean = true) = officialLoadMutex.withLock {
         if (reset) {
             if (officialRooms.isEmpty()) {
                 officialIsLoading = true
@@ -98,14 +99,18 @@ class WebRtcRoomState(
             officialError = null
             officialAppendState = PageAppendState.Idle
         } else {
-            if (!officialHasMore || officialAppendState is PageAppendState.Loading) return
+            if (!officialHasMore) return@withLock
             officialAppendState = PageAppendState.Loading
         }
 
         val page = if (reset) 1 else officialPage + 1
-        val result = officialClient.listRooms(page, WebRtcOfficialRooms.DefaultPageSize)
-        officialIsLoading = false
-        officialRefreshState = PageRefreshState.Idle
+        val result = try {
+            officialClient.listRooms(page, WebRtcOfficialRooms.DefaultPageSize)
+        } finally {
+            officialIsLoading = false
+            officialRefreshState = PageRefreshState.Idle
+            if (!reset) officialAppendState = PageAppendState.Idle
+        }
 
         result.fold(
             onSuccess = { payload ->

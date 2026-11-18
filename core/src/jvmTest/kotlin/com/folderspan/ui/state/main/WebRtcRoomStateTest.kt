@@ -26,9 +26,15 @@ import com.folderspan.data.main.webrtc.WebRtcRoomSource
 import com.folderspan.data.main.webrtc.officialWebRtcRoomProfile
 import com.folderspan.db.*
 import com.folderspan.service.webrtc.signaling.generateRoomId
+import com.folderspan.ui.components.pagestate.PageAppendState
+import com.folderspan.ui.components.pagestate.PageRefreshState
 import com.folderspan.ui.state.file.DrawerBookmarkType
 import com.folderspan.utils.*
 import com.russhwolf.settings.PreferencesSettings
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.*
 import java.util.prefs.Preferences
@@ -451,6 +457,50 @@ class WebRtcRoomStateTest {
             assertEquals(AppStrings.ui_log_in_before_connecting_official_webrtc_room, state.officialError?.message)
             assertTrue(state.rooms.none { item -> item.source == WebRtcRoomSource.Official })
             assertEquals(0, database.webRtcRoomQueries.countAll().executeAsOneAwait())
+        } finally {
+            WebRtcOfficialRooms.client = previousClient
+        }
+    }
+
+    @Test
+    fun cancelledOfficialLoadsReleaseProgressAndAllowAnotherLoad() = runBlocking {
+        val state = WebRtcRoomState(createInMemoryDatabase(createIsolatedSettings()))
+        val first = officialWebRtcRoomProfile("First", generateRoomId())
+        val second = officialWebRtcRoomProfile("Second", generateRoomId())
+        val client = FakeOfficialRoomsClient(listPages = listOf(
+            OfficialWebRtcRoomPage(listOf(first), 2, 1, 1),
+            OfficialWebRtcRoomPage(listOf(second), 2, 2, 1),
+        ))
+        val previousClient = WebRtcOfficialRooms.client
+        var pause = true
+        WebRtcOfficialRooms.client = object : WebRtcOfficialRoomsClient by client {
+            override suspend fun listRooms(page: Int, pageSize: Int): Result<OfficialWebRtcRoomPage> {
+                if (pause) awaitCancellation()
+                return client.listRooms(page, pageSize)
+            }
+        }
+        try {
+            val initial = launch(start = CoroutineStart.UNDISPATCHED) { state.loadOfficialRooms() }
+            assertTrue(state.officialIsLoading)
+            initial.cancelAndJoin()
+            assertFalse(state.officialIsLoading)
+
+            pause = false
+            state.loadOfficialRooms()
+            pause = true
+            val refresh = launch(start = CoroutineStart.UNDISPATCHED) { state.loadOfficialRooms() }
+            assertEquals(PageRefreshState.Refreshing, state.officialRefreshState)
+            refresh.cancelAndJoin()
+            assertEquals(PageRefreshState.Idle, state.officialRefreshState)
+
+            val append = launch(start = CoroutineStart.UNDISPATCHED) { state.loadOfficialRooms(reset = false) }
+            assertEquals(PageAppendState.Loading, state.officialAppendState)
+            append.cancelAndJoin()
+            assertEquals(PageAppendState.Idle, state.officialAppendState)
+            pause = false
+            state.loadOfficialRooms(reset = false)
+            assertEquals(setOf(first.roomId, second.roomId), state.rooms.map { it.roomId }.toSet())
+            assertEquals(PageAppendState.End, state.officialAppendState)
         } finally {
             WebRtcOfficialRooms.client = previousClient
         }
