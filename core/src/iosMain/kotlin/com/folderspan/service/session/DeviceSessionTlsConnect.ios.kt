@@ -12,11 +12,11 @@ import platform.openssl.SSL_connect
 import platform.openssl.SSL_free
 import platform.openssl.SSL_new
 import platform.openssl.SSL_read
-import platform.openssl.SSL_set_fd
 import platform.openssl.SSL_write
 import platform.openssl.fm_create_client_ctx
 import platform.openssl.fm_ssl_alpn_is_folderspan
 import platform.openssl.fm_ssl_peer_fingerprint_sha256
+import platform.openssl.fm_ssl_set_socket
 import platform.posix.*
 import strings.AppStrings
 import kotlin.time.TimeSource
@@ -65,7 +65,7 @@ private fun connectDeviceSessionChannel(
         if (connectTimeoutMillis > 0) configureSessionSocketTimeout(fd, connectTimeoutMillis)
         val ssl = SSL_new(ctx) ?: throw DeviceSessionIoException("SSL_new failed")
         LogKit.d(AppStrings.ui_tls_handshake_host_arg0.format(arg0 = host))
-        if (SSL_set_fd(ssl, fd) != 1 || SSL_connect(ssl) != 1) {
+        if (fm_ssl_set_socket(ssl, fd) != 1 || SSL_connect(ssl) != 1) {
             SSL_free(ssl)
             throw DeviceSessionIoException("TLS handshake failed")
         }

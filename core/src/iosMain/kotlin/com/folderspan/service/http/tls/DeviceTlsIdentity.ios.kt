@@ -25,15 +25,16 @@ import kotlin.io.encoding.Base64
 
 @OptIn(ExperimentalForeignApi::class)
 actual object DeviceTlsIdentity {
-    private var cached: CachedIdentity? = null
+    // Listener startup and device discovery can request the identity at the same time.
+    private val identity by lazy(::loadOrCreateIdentity)
 
     actual fun loadOrCreate(): DeviceTlsIdentityInfo {
-        return loadOrCreateCached().info
+        return identity.info
     }
 
-    actual fun publicKeyPem(): String? = certificatePublicKey(loadOrCreateCached().certPem)
+    actual fun publicKeyPem(): String? = certificatePublicKey(identity.certPem)
 
-    internal actual fun certificatePem(): String? = loadOrCreateCached().certPem
+    internal actual fun certificatePem(): String? = identity.certPem
 
     internal actual suspend fun publicKeyFromCertificate(certificatePem: String): String? = certificatePublicKey(certificatePem)
 
@@ -57,7 +58,7 @@ actual object DeviceTlsIdentity {
 
     actual suspend fun signSha256WithRsa(payload: ByteArray): String? = payload.usePinned { pinned ->
         fm_sign_sha256_rsa_hex(
-            loadOrCreateCached().privateKeyPem,
+            identity.privateKeyPem,
             pinned.addressOf(0).reinterpret(),
             payload.size.convert(),
         )?.let { pointer ->
@@ -85,7 +86,6 @@ actual object DeviceTlsIdentity {
     }
 
     internal fun createServerContext(): ServerContext {
-        val identity = loadOrCreateCached()
         val ctx = fm_create_server_ctx(identity.certPem, identity.privateKeyPem)
             ?: error(AppStrings.ui_tls_server_context_creation_failed)
         return ServerContext(ctx)
@@ -99,13 +99,6 @@ actual object DeviceTlsIdentity {
             error(AppStrings.ui_tls_server_context_creation_failed)
         }
         return context
-    }
-
-    private fun loadOrCreateCached(): CachedIdentity {
-        cached?.let { return it }
-        val identity = loadOrCreateIdentity()
-        cached = identity
-        return identity
     }
 
     private fun loadOrCreateIdentity(): CachedIdentity {

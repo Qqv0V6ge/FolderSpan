@@ -9,9 +9,19 @@
 #include <openssl/x509.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 static inline void fm_openssl_init(void) {
     OPENSSL_init_ssl(0, NULL);
+}
+
+static inline int fm_ssl_set_socket(SSL *ssl, int fd) {
+    // Surface peer disconnects as socket errors instead of terminating the app.
+    const int enabled = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, sizeof(enabled)) != 0) {
+        return 0;
+    }
+    return SSL_set_fd(ssl, fd);
 }
 
 static inline EVP_PKEY *fm_generate_rsa_key(void) {

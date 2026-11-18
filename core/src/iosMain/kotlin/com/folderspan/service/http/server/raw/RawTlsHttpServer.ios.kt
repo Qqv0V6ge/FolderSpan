@@ -22,9 +22,9 @@ import platform.openssl.SSL_accept
 import platform.openssl.SSL_free
 import platform.openssl.SSL_new
 import platform.openssl.SSL_read
-import platform.openssl.SSL_set_fd
 import platform.openssl.SSL_write
 import platform.openssl.fm_ssl_alpn_is_folderspan
+import platform.openssl.fm_ssl_set_socket
 import platform.posix.*
 
 @OptIn(ExperimentalForeignApi::class)
@@ -118,7 +118,7 @@ internal class RawTlsHttpServer(private val callbacks: DeviceListenerCallbacks =
         var idleDataKeepAlivePermit: RawHttpCapacityPermit? = null
         try {
             LogKit.d(AppStrings.ui_device_session_tls_handshake_remote_arg0.format(arg0 = (remoteHost).toString()))
-            if (SSL_set_fd(ssl, clientFd) != 1 || SSL_accept(ssl) != 1) {
+            if (fm_ssl_set_socket(ssl, clientFd) != 1 || SSL_accept(ssl) != 1) {
                 LogKit.w(AppStrings.ui_device_session_tls_handshake_failed_remote_arg0.format(arg0 = (remoteHost).toString()))
                 return
             }
