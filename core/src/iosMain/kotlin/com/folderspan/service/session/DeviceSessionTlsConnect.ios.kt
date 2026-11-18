@@ -5,6 +5,7 @@ import com.folderspan.utils.LogKit
 import kotlinx.cinterop.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import platform.Foundation.NSLock
 import platform.openssl.SSL
 import platform.openssl.SSL_CTX
 import platform.openssl.SSL_CTX_free
@@ -156,36 +157,76 @@ private fun configureSessionSocketTimeout(fd: Int, millis: Int) = memScoped {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private class IosDeviceSessionByteChannel(
+internal class IosDeviceSessionByteChannel(
     private val ssl: CPointer<SSL>,
     private val ctx: CPointer<SSL_CTX>,
     private val fd: Int,
 ) : DeviceSessionByteChannel {
+    private val lifetimeLock = NSLock()
+    private var closed = false
+    private var activeOperations = 0
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = withContext(Dispatchers.Default) {
         if (length <= 0) return@withContext 0
-        buffer.usePinned { pinned ->
-            SSL_read(ssl, pinned.addressOf(offset), length)
+        withOpenSession(onClosed = { -1 }) {
+            buffer.usePinned { pinned ->
+                SSL_read(ssl, pinned.addressOf(offset), length)
+            }
         }
     }
 
     override suspend fun write(buffer: ByteArray, offset: Int, length: Int) = withContext(Dispatchers.Default) {
         if (length <= 0) return@withContext
-        buffer.usePinned { pinned ->
-            var writtenTotal = 0
-            while (writtenTotal < length) {
-                val written = SSL_write(ssl, pinned.addressOf(offset + writtenTotal), length - writtenTotal)
-                if (written <= 0) throw DeviceSessionIoException("TLS write failed")
-                writtenTotal += written
+        withOpenSession(onClosed = { throw DeviceSessionIoException("TLS session closed") }) {
+            buffer.usePinned { pinned ->
+                var writtenTotal = 0
+                while (writtenTotal < length) {
+                    val written = SSL_write(ssl, pinned.addressOf(offset + writtenTotal), length - writtenTotal)
+                    if (written <= 0) throw DeviceSessionIoException("TLS write failed")
+                    writtenTotal += written
+                }
             }
         }
     }
 
     override suspend fun flush() = Unit
 
-    override fun close() {
+    override fun close() = lifetimeLock.withLock {
+        if (closed) return@withLock
+        closed = true
+        // Cancellation does not interrupt a blocking SSL_read or SSL_write.
+        shutdown(fd, SHUT_RDWR)
+        if (activeOperations == 0) release()
+    }
+
+    private inline fun <T> withOpenSession(onClosed: () -> T, action: () -> T): T {
+        lifetimeLock.withLock {
+            if (closed) return onClosed()
+            activeOperations++
+        }
+        return try {
+            action()
+        } finally {
+            lifetimeLock.withLock {
+                activeOperations--
+                if (closed && activeOperations == 0) release()
+            }
+        }
+    }
+
+    private fun release() {
         SSL_free(ssl)
         SSL_CTX_free(ctx)
         close(fd)
+    }
+}
+
+private inline fun <T> NSLock.withLock(action: () -> T): T {
+    lock()
+    return try {
+        action()
+    } finally {
+        unlock()
     }
 }
 
