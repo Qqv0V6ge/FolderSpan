@@ -6,7 +6,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.concurrent.Volatile
 
+internal expect fun installDataChannelErrorHandler(channel: DataChannel)
+
 private class NonJvmDataChannel(private val channel: DataChannel) : WebRtcDataChannel {
+    init { installDataChannelErrorHandler(channel) }
+
     private val safeLabel: String = runCatching { channel.label }.getOrDefault("unknown")
 
     override val label: String
