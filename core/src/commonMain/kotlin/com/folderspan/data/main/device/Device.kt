@@ -52,6 +52,7 @@ import com.folderspan.utils.PathUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -172,6 +173,9 @@ data class Device(
     val bookmarks: BookmarkOperations = BookmarkOperations()
     val files: FileOperations = FileOperations()
 
+    private fun FileSimpleInfo.bindToWebRtcSession(): FileSimpleInfo =
+        if (transportType == DeviceTransportType.WebRtc) withCopy(protocol = FileProtocol.Device, protocolId = id) else this
+
     inner class PathOperations {
         private fun getPathClient(): DevicePathClient {
             return pathClient ?: getConnect().pathRouteClient
@@ -207,7 +211,7 @@ data class Device(
                 ).map { entries ->
                     entries.filterNot { entry ->
                         isUnsafeRemoteListEntry(entry.name, entry.path)
-                    }
+                    }.map { it.bindToWebRtcSession() }
                 }
             } catch (e: Exception) {
                 LogKit.e(AppStrings.ui_device_failed_to_retrieve_file_list_arg0.format(arg0 = (e.message).toString()), e)
@@ -217,7 +221,9 @@ data class Device(
 
         fun traverse(path: String): Flow<Result<List<FileSimpleInfo>>> {
             return try {
-                getPathClient().traversePath(path)
+                getPathClient().traversePath(path).map { result ->
+                    result.map { entries -> entries.map { it.bindToWebRtcSession() } }
+                }
             } catch (e: Exception) {
                 LogKit.e(AppStrings.ui_device_traversal_failed_arg0.format(arg0 = (e.message).toString()), e)
                 flowOf(Result.failure(e))
@@ -1301,7 +1307,7 @@ data class Device(
 
         suspend fun get(path: String): Result<FileSimpleInfo> {
             return try {
-                getFileClient().getFileByPath(path)
+                getFileClient().getFileByPath(path).map { it.bindToWebRtcSession() }
             } catch (e: Exception) {
                 LogKit.e(AppStrings.ui_device_query_failed_arg0.format(arg0 = (e.message).toString()), e)
                 Result.failure(e)
@@ -1310,7 +1316,9 @@ data class Device(
 
         suspend fun getInfo(path: String): Result<FileInfo> {
             return try {
-                getFileClient().getFileInfoByPath(path)
+                getFileClient().getFileInfoByPath(path).map { info ->
+                    if (transportType == DeviceTransportType.WebRtc) info.copy(protocol = FileProtocol.Device, protocolId = id) else info
+                }
             } catch (e: Exception) {
                 LogKit.e(AppStrings.ui_device_query_file_information_failed_arg0.format(arg0 = (e.message).toString()), e)
                 Result.failure(e)
