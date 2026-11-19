@@ -30,6 +30,9 @@ internal data class DirectInviteClaim(
     val roleId: Long,
     val stunUrl: String,
     val sessionBinding: DirectInviteSessionBinding,
+    val turnUrl: String = "",
+    val turnUsername: String = "",
+    val turnPassword: String = "",
 ) {
     override fun toString(): String = "DirectInviteClaim(<redacted>)"
 }
@@ -93,6 +96,9 @@ internal class DeviceSessionBootstrapAuthorizationRegistry(
         val targetDeviceId: String,
         val roleId: Long,
         val stunUrl: String,
+        val turnUrl: String,
+        val turnUsername: String,
+        val turnPassword: String,
         val expiresAtMillis: Long,
         var claim: DirectInviteClaim? = null,
     )
@@ -141,6 +147,9 @@ internal class DeviceSessionBootstrapAuthorizationRegistry(
         fingerprintSha256: String,
         roleId: Long,
         stunUrl: String = "",
+        turnUrl: String = "",
+        turnUsername: String = "",
+        turnPassword: String = "",
     ): WebRtcDirectInvite = mutex.withLock {
         require(issuerSessionId.isNotBlank())
         if (roleId <= 0 || !isDirectInviteRoleActive(roleId)) reject(DirectInviteDenial.RoleRevoked)
@@ -152,9 +161,12 @@ internal class DeviceSessionBootstrapAuthorizationRegistry(
         check(digest !in directInvites)
         val invite = WebRtcDirectInvite(
             targetDeviceId, host, port, fingerprintSha256, credential, now + DIRECT_INVITE_TTL_MILLIS, stunUrl,
+            turnUrl, turnUsername, turnPassword,
         )
         WebRtcShareCode.validateDirectInvite(invite)
-        directInvites[digest] = PendingInvite(issuerSessionId, targetDeviceId, roleId, stunUrl, invite.expiresAtEpochMillis)
+        directInvites[digest] = PendingInvite(
+            issuerSessionId, targetDeviceId, roleId, stunUrl, turnUrl, turnUsername, turnPassword, invite.expiresAtEpochMillis,
+        )
         invite
     }
 
@@ -189,7 +201,10 @@ internal class DeviceSessionBootstrapAuthorizationRegistry(
             expiresAtMillis = minOf(now + ttlMillis, invite.expiresAtMillis),
             directInvite = sessionBinding,
         ))
-        DirectInviteClaim(authorization, invite.roleId, invite.stunUrl, sessionBinding).also { invite.claim = it }
+        DirectInviteClaim(
+            authorization, invite.roleId, invite.stunUrl, sessionBinding,
+            invite.turnUrl, invite.turnUsername, invite.turnPassword,
+        ).also { invite.claim = it }
     }
 
     suspend fun consume(

@@ -12,6 +12,7 @@ import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.http.tls.currentDeviceTlsFingerprint
 import com.folderspan.service.webrtc.controller.MultiPeerWebRtcController
 import com.folderspan.service.webrtc.models.WebRtcConnectionStatus
+import com.folderspan.service.webrtc.models.WebRtcIceServerConfig
 import com.folderspan.service.webrtc.models.buildWebRtcIceServers
 import com.folderspan.service.webrtc.signaling.SignalingDevice
 import com.folderspan.service.webrtc.signaling.SignalingIceCandidate
@@ -21,6 +22,8 @@ import com.folderspan.utils.secureRandomBytes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.io.encoding.Base64
+import kotlin.time.Clock
 import strings.AppStrings
 
 internal fun directInviteRuntimeError(): String? {
@@ -52,30 +56,96 @@ internal fun directInviteRuntimeError(): String? {
 internal class DirectInviteCoordinator(
     private val scope: CoroutineScope,
     private val registry: DeviceSessionBootstrapAuthorizationRegistry,
+    private val rendezvousUrl: String = DIRECT_INVITE_RENDEZVOUS_URL,
     private val localDevice: () -> SocketDevice = ::getSocketDevice,
 ) {
     private val attempts = mutableMapOf<String, Attempt>()
+    private val rendezvousJobs = mutableMapOf<String, Job>()
     private val inbound = mutableMapOf<DirectInviteSessionBinding, Attempt>()
     private var lastIssuer: String? = null
     private val _states = MutableStateFlow<Map<String, WebRtcConnectionStatus>>(emptyMap())
     val states: StateFlow<Map<String, WebRtcConnectionStatus>> = _states
 
-    suspend fun issue(host: String, port: Int, roleId: Long, stunUrl: String): WebRtcDirectInvite {
+    suspend fun issue(
+        host: String, port: Int, roleId: Long, stunUrl: String,
+        turnUrl: String = "", turnUsername: String = "", turnPassword: String = "",
+    ): WebRtcDirectInvite {
         val owner = currentDirectInviteIssuer()
         return onOwner(owner) {
             directInviteRuntimeError()?.let { error(it) }
-            lastIssuer?.takeIf { it != owner }?.let { registry.revokeDirectInvites(it) }
+            lastIssuer?.takeIf { it != owner }?.let {
+                registry.revokeDirectInvites(it)
+                rendezvousJobs.values.toList().forEach(Job::cancel)
+            }
             lastIssuer = owner
-            registry.issueDirectInvite(owner, localDevice().id, host, port, currentDeviceTlsFingerprint(), roleId, stunUrl)
+            val invite = registry.issueDirectInvite(
+                owner, localDevice().id, host, port, currentDeviceTlsFingerprint(), roleId, stunUrl,
+                turnUrl, turnUsername, turnPassword,
+            )
+            if (invite.usesRendezvous) {
+                val ready = CompletableDeferred<Unit>()
+                val job = scope.launch(start = CoroutineStart.LAZY) { runRendezvousIssuer(owner, invite, ready) }
+                rendezvousJobs[invite.credential] = job
+                job.start()
+                try {
+                    ready.await()
+                } catch (error: Throwable) {
+                    job.cancel()
+                    throw error
+                }
+            }
+            invite
         }
     }
 
-    suspend fun revoke(invite: WebRtcDirectInvite) = registry.revokeDirectInvite(currentDirectInviteIssuer(), invite.credential)
+    suspend fun revoke(invite: WebRtcDirectInvite) = onOwner(currentDirectInviteIssuer()) {
+        registry.revokeDirectInvite(currentDirectInviteIssuer(), invite.credential)
+        rendezvousJobs.remove(invite.credential)?.cancel()
+    }
 
-    fun controlHandler(owner: String): DirectInviteControlHandler {
+    private suspend fun runRendezvousIssuer(
+        owner: String, invite: WebRtcDirectInvite, ready: CompletableDeferred<Unit>,
+    ) {
+        try {
+            withTimeout((invite.expiresAtEpochMillis - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(1L)) {
+                coroutineScope {
+                    val channel = openDirectInviteRendezvous(rendezvousUrl, invite, issuer = true)
+                    try {
+                        val plan = DeviceSessionWindowPlan.fromMemory()
+                        val peer = DeviceSessionPeer(
+                            DeviceSessionTransport(channel, plan, plan, isClient = false), plan,
+                            role = DeviceSessionEndpointRole.Server,
+                        )
+                        val handler = controlHandler(owner, invite)
+                        peer.setRequestHandler(handler::handle)
+                        val connection = peer.start(this)
+                        ready.complete(Unit)
+                        connection.join()
+                    } finally {
+                        channel.close()
+                    }
+                }
+            }
+        } catch (error: CancellationException) {
+            ready.completeExceptionally(error)
+            throw error
+        } catch (error: Exception) {
+            ready.completeExceptionally(error)
+        } finally {
+            withContext(NonCancellable) {
+                onOwner(null) {
+                    rendezvousJobs.remove(invite.credential)
+                    registry.revokeDirectInvite(owner, invite.credential)
+                }
+            }
+        }
+    }
+
+    fun controlHandler(owner: String, invite: WebRtcDirectInvite? = null): DirectInviteControlHandler {
         return DirectInviteControlHandler(
             localDeviceId = { localDevice().id },
             localFingerprint = ::currentDeviceTlsFingerprint,
+            rendezvousInvite = invite,
             exchangeIce = { binding, batch -> onOwner(owner) {
                 val attempt = inbound[binding] ?: throw DirectInviteException(DirectInviteDenial.Missing)
                 batch.candidates.forEach(attempt::addPeerCandidate)
@@ -88,7 +158,7 @@ internal class DirectInviteCoordinator(
                 inbound[claim.sessionBinding] ?: Attempt(
                     SignalingDevice(id = binding.initiatorDeviceId),
                     binding.connectionAttemptId,
-                    claim.stunUrl,
+                    buildWebRtcIceServers(claim.stunUrl, claim.turnUrl, claim.turnUsername, claim.turnPassword),
                     claim,
                 ).also { active ->
                     inbound[claim.sessionBinding] = active
@@ -107,7 +177,10 @@ internal class DirectInviteCoordinator(
         val initiator = localDevice()
         val attempt = onOwner(owner) {
             require(invite.deviceId != initiator.id) { "cannot connect to your own direct invitation" }
-            Attempt(SignalingDevice(id = invite.deviceId), newAttemptId(), invite.stunUrl, null)
+            Attempt(
+                SignalingDevice(id = invite.deviceId), newAttemptId(),
+                buildWebRtcIceServers(invite.stunUrl, invite.turnUrl, invite.turnUsername, invite.turnPassword), null,
+            )
         }
         var phase = WebRtcDirectFailure.Contact
         try {
@@ -117,7 +190,7 @@ internal class DirectInviteCoordinator(
                 var received = 0
                 for (connection in 0..1) {
                     try {
-                        withDirectInviteControl(invite, attempt.scope) { challenge ->
+                        withDirectInviteControl(invite, attempt.scope, rendezvousUrl) { challenge ->
                             if (connection == 0) {
                                 phase = WebRtcDirectFailure.Handshake
                                 onOwner(owner) { attempt.start(initiator) }
@@ -154,7 +227,7 @@ internal class DirectInviteCoordinator(
                         break
                     } catch (error: DeviceSessionClosedException) {
                         if (attempt.connected.isCompleted) break
-                        if (connection != 0 || !attempt.description.isCompleted) throw error
+                        if (invite.usesRendezvous || connection != 0 || !attempt.description.isCompleted) throw error
                     }
                 }
             }
@@ -180,6 +253,8 @@ internal class DirectInviteCoordinator(
     }
 
     suspend fun stop() = onOwner(null) {
+        rendezvousJobs.values.toList().forEach(Job::cancel)
+        rendezvousJobs.clear()
         lastIssuer?.let { registry.revokeDirectInvites(it) }
         lastIssuer = null
         attempts.values.toList().forEach { it.stop() }
@@ -194,7 +269,7 @@ internal class DirectInviteCoordinator(
     private inner class Attempt(
         val peer: SignalingDevice,
         val id: String,
-        private val stunUrl: String,
+        private val iceServers: List<WebRtcIceServerConfig>,
         val claim: DirectInviteClaim?,
     ) {
         val scope = CoroutineScope(this@DirectInviteCoordinator.scope.coroutineContext +
@@ -208,7 +283,7 @@ internal class DirectInviteCoordinator(
         fun start(device: SocketDevice = localDevice()) {
             if (attempts.size >= 32 || id in attempts) throw DirectInviteException(DirectInviteDenial.Capacity)
             attempts[id] = this
-            controller.startDirect(peer, id, buildWebRtcIceServers(stunUrl), claim, device) { message ->
+            controller.startDirect(peer, id, iceServers, claim, device) { message ->
                 when (message.type) {
                     "offer", "answer" -> message.sdp?.let(description::complete)
                     "ice" -> message.candidate?.let { candidate ->

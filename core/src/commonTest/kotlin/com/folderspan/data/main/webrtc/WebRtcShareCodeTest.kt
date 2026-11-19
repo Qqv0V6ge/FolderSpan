@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class WebRtcShareCodeTest {
     @Test
@@ -27,6 +28,21 @@ class WebRtcShareCodeTest {
                 WebRtcShareCode.decodeDirectInvite(DIRECT_SAMPLE, invite.expiresAtEpochMillis)
             }.reason,
         )
+    }
+
+    @Test
+    fun deviceInviteCarriesRendezvousAndTurnSettings() {
+        val invite = WebRtcShareCode.decodeDirectInvite(DIRECT_SAMPLE, NOW).copy(
+            host = "", port = 0, stunUrl = "",
+            turnUrl = "turn:relay.example.test:3478;turns:relay.example.test:443?transport=tcp",
+            turnUsername = "user", turnPassword = " pass ",
+        )
+        val decoded = WebRtcShareCode.decodeDirectInvite(WebRtcShareCode.encodeDirectInvite(invite), NOW)
+        assertEquals(invite, decoded)
+        assertTrue(decoded.usesRendezvous)
+        assertFalse(decoded.toString().contains(" pass "))
+        assertFailsWith<WebRtcShareCodeException> { WebRtcShareCode.encodeDirectInvite(invite.copy(port = 12040)) }
+        assertFailsWith<WebRtcShareCodeException> { WebRtcShareCode.encodeDirectInvite(invite.copy(turnUrl = "")) }
     }
 
     @Test
