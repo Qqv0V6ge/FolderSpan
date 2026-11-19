@@ -1,6 +1,5 @@
 package com.folderspan.service.session
 
-import com.folderspan.data.main.webrtc.WebRtcDirectInvite
 import com.folderspan.service.http.client.applyConfiguredHttpProxy
 import com.folderspan.utils.AesGcm
 import com.folderspan.utils.secureRandomBytes
@@ -22,10 +21,10 @@ private val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 
 internal suspend fun openDirectInviteRendezvous(
     url: String,
-    invite: WebRtcDirectInvite,
+    credential: String,
     issuer: Boolean,
 ): DeviceSessionByteChannel {
-    val keys = RendezvousKeys(invite.credential)
+    val keys = RendezvousKeys(credential)
     val client = HttpClient {
         applyConfiguredHttpProxy()
         followRedirects = false

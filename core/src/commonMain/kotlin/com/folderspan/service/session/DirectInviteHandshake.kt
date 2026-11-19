@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 
 internal const val DIRECT_INVITE_HANDSHAKE_VERSION = 1
+internal const val DIRECT_INVITE_LOOKUP_RPC = "DirectInviteLookup"
 internal const val DIRECT_INVITE_CHALLENGE_RPC = "DirectInviteChallenge"
 internal const val DIRECT_INVITE_OFFER_RPC = "DirectInviteOffer"
 internal const val DIRECT_INVITE_ICE_RPC = "DirectInviteIce"
@@ -29,6 +30,16 @@ internal data class DirectInviteChallenge(
     @ProtoNumber(4) val issuerSignature: String = "",
 ) {
     override fun toString(): String = "DirectInviteChallenge(<redacted>)"
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+internal data class DirectInviteLookup(
+    @ProtoNumber(1) val code: String,
+    @ProtoNumber(2) val name: String,
+    @ProtoNumber(3) val proof: DirectInviteChallenge,
+) {
+    override fun toString(): String = "DirectInviteLookup(<redacted>)"
 }
 
 @OptIn(ExperimentalSerializationApi::class)

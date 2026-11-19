@@ -40,11 +40,17 @@ import com.folderspan.service.webrtc.models.toRoomDisplayLabel
 import com.folderspan.ui.state.device.DeviceRoleState
 import com.folderspan.ui.state.main.DeviceState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import strings.AppStrings
 import kotlin.time.Clock
+
+private data class InviteDevicePreview(
+    val name: String,
+    val decision: CompletableDeferred<Boolean>,
+)
 
 @Composable
 internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit) {
@@ -56,6 +62,8 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
     val roles = koinInject<DeviceRoleState>().roles
     val scope = rememberCoroutineScope()
     val states by deviceState.directInviteStates.collectAsState()
+    var signalingUrl by remember { mutableStateOf(deviceState.directInviteSignalingUrl()) }
+    var devicePreview by remember { mutableStateOf<InviteDevicePreview?>(null) }
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf(runCatching { getSocketDevice().httpsPort.toString() }.getOrDefault("")) }
     var stun by remember { mutableStateOf("") }
@@ -72,7 +80,7 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
     val role = roles.firstOrNull { it.id == roleId }
     val canUseDeviceEntry = host.isBlank() || port.toIntOrNull() in 1..65535
     val currentInvite = invitation
-    val inviteText = remember(currentInvite) { currentInvite?.let(WebRtcShareCode::encodeDirectInvite) }
+    val inviteText = remember(currentInvite) { currentInvite?.let(WebRtcShareCode::displayDeviceInvite) }
 
     LaunchedEffect(currentInvite) {
         while (currentInvite != null) {
@@ -103,8 +111,41 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        DirectInviteEntry(codeInput, working, onChange = { codeInput = it; feedback = "" }) {
-            runAction { deviceState.connectDirectInvite(codeInput); codeInput = "" }
+        OutlinedTextField(
+            value = signalingUrl,
+            onValueChange = { signalingUrl = it.take(512); feedback = "" },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(AppStrings.direct_invite_signaling_url) },
+            enabled = !working,
+            singleLine = true,
+        )
+        val validServer = WebRtcShareCode.isSecureSignalingUrl(signalingUrl)
+        if (!validServer) Text(AppStrings.direct_invite_signaling_invalid)
+        DirectInviteEntry(codeInput, working || !validServer, onChange = { codeInput = it; feedback = "" }) {
+            runAction {
+                deviceState.setDirectInviteSignalingUrl(signalingUrl)
+                deviceState.connectDirectInvite(codeInput) { name ->
+                    val preview = InviteDevicePreview(name, CompletableDeferred())
+                    devicePreview = preview
+                    try {
+                        if (!preview.decision.await()) throw CancellationException("device connection cancelled")
+                    } finally {
+                        devicePreview = null
+                    }
+                }
+                codeInput = ""
+            }
+        }
+        devicePreview?.let { preview ->
+            ListItem(
+                headlineContent = { Text(preview.name) },
+                trailingContent = {
+                    Column {
+                        Button(onClick = { preview.decision.complete(true) }) { Text(AppStrings.ui_connect) }
+                        TextButton(onClick = { preview.decision.complete(false) }) { Text(AppStrings.ui_cancel) }
+                    }
+                },
+            )
         }
         if (feedback.isNotBlank()) Text(feedback, style = MaterialTheme.typography.bodyMedium)
 
@@ -155,8 +196,9 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
                 }
             }
         }
-        Button(enabled = !working && role != null && canUseDeviceEntry, onClick = {
+        Button(enabled = !working && validServer && role != null && canUseDeviceEntry, onClick = {
             runAction {
+                deviceState.setDirectInviteSignalingUrl(signalingUrl)
                 currentInvite?.let { deviceState.revokeDirectInvite(it) }
                 invitation = deviceState.issueDirectInvite(
                     host = host.trim().removeSurrounding("[", "]"),
