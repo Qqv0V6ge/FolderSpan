@@ -39,7 +39,6 @@ class PageSettingsScreen : AppScreenRoute {
         val navigator = LocalAppNavigator.currentOrThrow
         val drawerState = koinInject<DrawerState>()
         val isShowDevice by drawerState.isShowDevice.collectAsState()
-        val isShowWebRtc by drawerState.isShowWebRtc.collectAsState()
         val isShowNetwork by drawerState.isShowNetwork.collectAsState()
         val isShowSync by drawerState.isShowSync.collectAsState()
         val isFileGridView by drawerState.isFileGridView.collectAsState()
@@ -76,15 +75,6 @@ class PageSettingsScreen : AppScreenRoute {
                         subtitle = AppStrings.ui_show_device_page_sidebar,
                         checked = isShowDevice,
                         onCheckedChange = drawerState::updateShowDevice
-                    )
-                }
-
-                item {
-                    PageVisibilitySwitchItem(
-                        title = AppStrings.webrtc_label,
-                        subtitle = AppStrings.ui_show_webrtc_page_sidebar,
-                        checked = isShowWebRtc,
-                        onCheckedChange = drawerState::updateShowWebRtc
                     )
                 }
 

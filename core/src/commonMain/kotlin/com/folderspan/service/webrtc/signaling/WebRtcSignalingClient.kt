@@ -103,7 +103,7 @@ class WebRtcSignalingClient(
 
     private suspend fun connectThroughRuntime() = coroutineScope {
         check(WebUiAttachment.target?.protectsDeviceCredentials == true && WebUiAttachment.hasSession) {
-            AppStrings.direct_invite_runtime_secure
+            AppStrings.webrtc_runtime_secure
         }
         check(WebUiAttachment.hostInfo?.officialSignalingGateway == wssUrl) {
             AppStrings.ui_official_webrtc_gateway_address_unavailable

@@ -126,14 +126,12 @@ fun AppDrawerContainer() {
         }
     }
     val isShowDevice by drawerState.isShowDevice.collectAsState()
-    val isShowWebRtc by drawerState.isShowWebRtc.collectAsState()
     val isShowNetwork by drawerState.isShowNetwork.collectAsState()
     val isShowSync by drawerState.isShowSync.collectAsState()
     val accountHeader = if (softwareConsent) rememberProAccountHeader() else AppDrawerAccountHeader(title = AppStrings.app_name)
     val showSignInPrompt = rememberAppDrawerSignInPrompt(enabled = PRO_AVAILABLE && !isProAuthenticated())
     val bookmarkUiState = rememberAppDrawerBookmarkUiState()
     val deviceUiState = if (softwareConsent && isShowDevice) rememberAppDrawerDeviceUiState() else null
-    val webRtcUiState = if (softwareConsent && isShowWebRtc) rememberAppDrawerWebRtcUiState() else null
     val shareUiState = rememberAppDrawerShareUiState()
     val fileShareUiState = if (softwareConsent) rememberAppDrawerFileShareUiState() else null
     val networkUiState = if (softwareConsent && isShowNetwork) rememberAppDrawerNetworkUiState() else null
@@ -276,15 +274,6 @@ fun AppDrawerContainer() {
                 }
                 item(
                     key = "drawer_device_divider",
-                    contentType = "drawer_divider",
-                ) {
-                    HorizontalDivider()
-                }
-            }
-            if (isShowWebRtc) {
-                webRtcUiState?.let { state -> appDrawerWebRtc(state) }
-                item(
-                    key = "drawer_webrtc_divider",
                     contentType = "drawer_divider",
                 ) {
                     HorizontalDivider()

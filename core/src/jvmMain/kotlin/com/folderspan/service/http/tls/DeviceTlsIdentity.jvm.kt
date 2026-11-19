@@ -46,8 +46,6 @@ actual object DeviceTlsIdentity {
         pem("PUBLIC KEY", certificate.publicKey.encoded)
     }.getOrNull()
 
-    internal actual suspend fun signDirectInvite(payload: ByteArray): String? = signSha256WithRsa(payload)
-
     private fun pem(label: String, bytes: ByteArray): String =
         "-----BEGIN $label-----\n" +
             Base64.getMimeEncoder(64, "\n".encodeToByteArray()).encodeToString(bytes) +

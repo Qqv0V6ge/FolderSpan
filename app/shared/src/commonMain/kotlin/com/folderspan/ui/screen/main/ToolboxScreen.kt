@@ -19,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sync
@@ -46,7 +45,6 @@ import com.folderspan.ui.screen.file.share.FileShareManageScreen
 import com.folderspan.ui.screen.mcp.McpManageScreen
 import com.folderspan.ui.screen.network.NetworkManageScreen
 import com.folderspan.ui.screen.sync.SyncManageScreen
-import com.folderspan.ui.screen.webrtc.WebRtcRoomManageScreen
 import com.folderspan.ui.navigation.AppScreenRoute
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.currentOrThrow
@@ -61,11 +59,6 @@ internal class ToolboxScreen : AppScreenRoute {
                 title = AppStrings.ui_device_management,
                 icon = Icons.Default.Devices,
                 onClick = { navigator.push(DeviceScreen()) },
-            ),
-            ToolboxEntry(
-                title = AppStrings.ui_cross_network_management,
-                icon = Icons.Default.Link,
-                onClick = { navigator.push(WebRtcRoomManageScreen()) },
             ),
             ToolboxEntry(
                 title = AppStrings.ui_share_management,

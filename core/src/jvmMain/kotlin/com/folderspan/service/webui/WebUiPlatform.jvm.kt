@@ -156,7 +156,6 @@ class JvmWebUiPlatform : WebUiPlatform {
             fingerprint = com.folderspan.service.http.tls.currentDeviceTlsFingerprint(),
             publicKey = com.folderspan.service.http.tls.DeviceTlsIdentity.publicKeyPem().orEmpty(),
             deviceCertificatePem = com.folderspan.service.http.tls.DeviceTlsIdentity.certificatePem().orEmpty(),
-            directInviteVersion = com.folderspan.service.session.DIRECT_INVITE_HANDSHAKE_VERSION,
             officialSignalingGateway = officialSignalingGateway,
             compressionCodecs = com.folderspan.service.http.archive.FolderSpanArchivePlatformCompression.supportedCodecs.toList(),
             caseInsensitive = com.folderspan.utils.securityBoundaryCaseInsensitive,

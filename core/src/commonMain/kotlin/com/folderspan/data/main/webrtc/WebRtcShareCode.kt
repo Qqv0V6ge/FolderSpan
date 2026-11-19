@@ -1,13 +1,10 @@
 package com.folderspan.data.main.webrtc
 
 import com.folderspan.service.webrtc.models.isWebRtcHost
-import com.folderspan.utils.secureRandomBytes
 import com.folderspan.service.webrtc.models.isWebRtcIceUri
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import kotlin.io.encoding.Base64
-import kotlin.time.Clock
-import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -20,25 +17,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
-
-@OptIn(ExperimentalSerializationApi::class)
-@Serializable
-data class WebRtcDirectInvite(
-    val deviceId: String,
-    val host: String,
-    val port: Int,
-    val fingerprintSha256: String,
-    val credential: String,
-    val expiresAtEpochMillis: Long,
-    val stunUrl: String = "",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnUrl: String = "",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnUsername: String = "",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnPassword: String = "",
-) {
-    val usesRendezvous: Boolean get() = host.isEmpty()
-
-    override fun toString(): String = "WebRtcDirectInvite(<redacted>)"
-}
 
 @Serializable
 data class OfficialWebRtcRoomCode(
@@ -55,26 +33,17 @@ data class OfficialWebRtcRoomCode(
 }
 
 enum class WebRtcShareCodeError {
-    Invalid, TooLarge, WrongKind, UnsupportedVersion, Expired, UntrustedGateway,
+    Invalid, TooLarge, WrongKind, UnsupportedVersion, UntrustedGateway,
 }
 
 class WebRtcShareCodeException(val reason: WebRtcShareCodeError) : IllegalArgumentException(reason.name)
 
-enum class WebRtcDirectFailure { Contact, Handshake, Ice }
-
-class WebRtcDirectConnectionException(val failure: WebRtcDirectFailure, cause: Throwable? = null) :
-    IllegalStateException(failure.name, cause)
-
 object WebRtcShareCode {
     private const val VERSION = 1
-    private const val TEMPORARY_ID_PREFIX = "fsd1-"
-    private const val ID_PIN_BYTES = 16
-    private const val DIRECT_INVITE = "direct-invite"
     private const val OFFICIAL_ROOM = "official-room"
     private const val MAX_CODE_LENGTH = 8192
     private const val MAX_JSON_BYTES = 6144
     private const val MAX_ICE_LENGTH = 255
-    private val fingerprintPattern = Regex("[A-Fa-f0-9]{64}")
     private val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -83,55 +52,6 @@ object WebRtcShareCode {
         exceptionsWithDebugInfo = false
         maxNestingDepth = 4
     }
-
-    fun encodeDirectInvite(invite: WebRtcDirectInvite): String {
-        validateDirectInvite(invite)
-        return encode(DIRECT_INVITE, WebRtcDirectInvite.serializer(), invite)
-    }
-
-    fun decodeDirectInvite(
-        code: String,
-        nowMillis: Long = Clock.System.now().toEpochMilliseconds(),
-    ): WebRtcDirectInvite {
-        val fields = decode(code, DIRECT_INVITE)
-        if ((fields["port"] as? JsonPrimitive)?.isString != false ||
-            (fields["expiresAtEpochMillis"] as? JsonPrimitive)?.isString != false
-        ) invalid()
-        val invite = parse { json.decodeFromJsonElement(WebRtcDirectInvite.serializer(), fields) }
-        validateDirectInvite(invite)
-        if (invite.expiresAtEpochMillis <= nowMillis) fail(WebRtcShareCodeError.Expired)
-        return invite
-    }
-
-    /** 对端只需收到此临时 ID。设备资料和 ICE 配置在加密握手里交付。 */
-    fun displayDeviceInvite(invite: WebRtcDirectInvite): String {
-        if (!invite.usesRendezvous) return encodeDirectInvite(invite)
-        validateDirectInvite(invite)
-        require(temporaryIdMatches(invite.credential, invite.fingerprintSha256))
-        return TEMPORARY_ID_PREFIX + invite.credential
-    }
-
-    internal fun parseTemporaryDeviceId(text: String): String? {
-        val normalized = text.trim()
-        if (!normalized.startsWith(TEMPORARY_ID_PREFIX)) return null
-        val token = normalized.removePrefix(TEMPORARY_ID_PREFIX)
-        if (!isToken32(token)) invalid()
-        return token
-    }
-
-    internal fun newTemporaryDeviceId(fingerprint: String): String =
-        base64.encode(secureRandomBytes(32 - ID_PIN_BYTES) + fingerprintPrefix(fingerprint))
-
-    internal fun temporaryIdMatches(credential: String, fingerprint: String): Boolean =
-        isToken32(credential) && fingerprintPattern.matches(fingerprint) &&
-            base64.decode(credential).copyOfRange(32 - ID_PIN_BYTES, 32).contentEquals(fingerprintPrefix(fingerprint))
-
-    private fun fingerprintPrefix(fingerprint: String): ByteArray {
-        require(fingerprintPattern.matches(fingerprint))
-        return ByteArray(ID_PIN_BYTES) { i -> fingerprint.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
-    }
-
-    fun isSecureSignalingUrl(value: String): Boolean = validGateway(value.trim())
 
     fun encodeOfficialRoom(room: OfficialWebRtcRoomCode): String {
         validateRoom(room)
@@ -144,15 +64,6 @@ object WebRtcShareCode {
         validateRoom(room)
         if (room.wssUrl != trustedGatewayUrl) fail(WebRtcShareCodeError.UntrustedGateway)
         return room
-    }
-
-    internal fun validateDirectInvite(invite: WebRtcDirectInvite) {
-        if (!validText(invite.deviceId, 128) || invite.deviceId.any { it.isWhitespace() || it.isISOControl() } ||
-            !(invite.usesRendezvous && invite.port == 0 || isWebRtcHost(invite.host) && invite.port in 1..65535) ||
-            !fingerprintPattern.matches(invite.fingerprintSha256) || !isToken32(invite.credential) ||
-            invite.expiresAtEpochMillis <= 0 || !validStun(invite.stunUrl) ||
-            !validTurn(invite.turnUrl, invite.turnUsername, invite.turnPassword)
-        ) invalid()
     }
 
     private fun validateRoom(room: OfficialWebRtcRoomCode) {
@@ -168,11 +79,6 @@ object WebRtcShareCode {
             !validText(room.turnUsername, 255) || !validText(room.turnPassword, 255)
         ) invalid()
     }
-
-    private fun validTurn(url: String, username: String, password: String): Boolean =
-        if (url.isEmpty()) username.isEmpty() && password.isEmpty()
-        else url.length <= MAX_ICE_LENGTH && url.split(';').all { isWebRtcIceUri(it.trim(), turn = true) } &&
-            validText(username, MAX_ICE_LENGTH) && validText(password, MAX_ICE_LENGTH)
 
     private fun validStun(value: String): Boolean =
         value.isEmpty() || (value.length <= MAX_ICE_LENGTH && isWebRtcIceUri(value, turn = false))
@@ -219,10 +125,7 @@ object WebRtcShareCode {
         val version = (fields["version"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull ?: invalid()
         if (version != VERSION) fail(WebRtcShareCodeError.UnsupportedVersion)
         val kind = (fields["kind"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: invalid()
-        if (kind != expectedKind) {
-            if (kind == DIRECT_INVITE || kind == OFFICIAL_ROOM) fail(WebRtcShareCodeError.WrongKind)
-            invalid()
-        }
+        if (kind != expectedKind) fail(WebRtcShareCodeError.WrongKind)
         return JsonObject(fields - "version" - "kind")
     }
 

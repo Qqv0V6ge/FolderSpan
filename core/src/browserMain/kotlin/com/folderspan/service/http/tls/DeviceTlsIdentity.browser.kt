@@ -14,8 +14,6 @@ actual object DeviceTlsIdentity {
         ).body.decodeToString()
     )
 
-    internal actual suspend fun signDirectInvite(payload: ByteArray): String? = signSha256WithRsa(payload)
-
     actual suspend fun signSha256WithRsa(payload: ByteArray): String? = WebUiPlatformClient.json.decodeFromString(
         WebUiPlatformClient.exchange("POST", "$WEB_UI_PLATFORM_PATH/devices/sign", payload, "application/octet-stream").body.decodeToString())
     actual suspend fun verifySha256WithRsa(publicKeyPem: String, payload: ByteArray, signature: String): Boolean =

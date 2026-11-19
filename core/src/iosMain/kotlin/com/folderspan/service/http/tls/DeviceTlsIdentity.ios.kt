@@ -38,9 +38,6 @@ actual object DeviceTlsIdentity {
 
     internal actual suspend fun publicKeyFromCertificate(certificatePem: String): String? = certificatePublicKey(certificatePem)
 
-    internal actual suspend fun signDirectInvite(payload: ByteArray): String? =
-        signSha256WithRsa(payload)?.hexToByteArray()?.let { Base64.encode(it) }
-
     private fun certificatePublicKey(pem: String): String? {
         val cert = fm_read_x509_pem(pem) ?: return null
         return try {
