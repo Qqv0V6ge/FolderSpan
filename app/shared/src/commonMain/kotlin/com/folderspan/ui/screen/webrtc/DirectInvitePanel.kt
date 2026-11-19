@@ -59,6 +59,9 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf(runCatching { getSocketDevice().httpsPort.toString() }.getOrDefault("")) }
     var stun by remember { mutableStateOf("") }
+    var turnUrl by remember { mutableStateOf("") }
+    var turnUsername by remember { mutableStateOf("") }
+    var turnPassword by remember { mutableStateOf("") }
     var roleId by remember { mutableStateOf<Long?>(null) }
     var choosingRole by remember { mutableStateOf(false) }
     var invitation by remember { mutableStateOf<WebRtcDirectInvite?>(null) }
@@ -67,6 +70,7 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
     var working by remember { mutableStateOf(false) }
     var seconds by remember { mutableStateOf(0L) }
     val role = roles.firstOrNull { it.id == roleId }
+    val canUseDeviceEntry = host.isBlank() || port.toIntOrNull() in 1..65535
     val currentInvite = invitation
     val inviteText = remember(currentInvite) { currentInvite?.let(WebRtcShareCode::encodeDirectInvite) }
 
@@ -132,12 +136,17 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
         )
         OutlinedTextField(
             value = port, onValueChange = { port = it.take(5) }, modifier = Modifier.fillMaxWidth(),
-            label = { Text(AppStrings.direct_invite_port) }, singleLine = true,
+            label = { Text(AppStrings.direct_invite_port) }, singleLine = true, enabled = host.isNotBlank(),
         )
-        OutlinedTextField(
-            value = stun, onValueChange = { stun = it }, modifier = Modifier.fillMaxWidth(),
-            label = { Text(AppStrings.direct_invite_stun) }, singleLine = true,
+        WebRtcIceTurnFields(
+            stunUrl = stun, onStunUrlChange = { stun = it },
+            turnUrl = turnUrl, onTurnUrlChange = { turnUrl = it },
+            turnUsername = turnUsername, onTurnUsernameChange = { turnUsername = it },
+            turnPassword = turnPassword, onTurnPasswordChange = { turnPassword = it },
         )
+        if (turnUrl.isNotBlank()) {
+            Text(AppStrings.direct_invite_turn_warning, style = MaterialTheme.typography.bodyMedium)
+        }
         Box {
             OutlinedButton(onClick = { choosingRole = true }) { Text(role?.localizedName ?: AppStrings.direct_invite_access) }
             DropdownMenu(expanded = choosingRole, onDismissRequest = { choosingRole = false }) {
@@ -146,11 +155,17 @@ internal fun DirectInvitePanel(deviceState: DeviceState, onOpenFiles: () -> Unit
                 }
             }
         }
-        Button(enabled = !working && role != null && host.isNotBlank() && port.toIntOrNull() in 1..65535, onClick = {
+        Button(enabled = !working && role != null && canUseDeviceEntry, onClick = {
             runAction {
                 currentInvite?.let { deviceState.revokeDirectInvite(it) }
                 invitation = deviceState.issueDirectInvite(
-                    host.trim().removeSurrounding("[", "]"), port.toInt(), checkNotNull(role).id, stun.trim(),
+                    host = host.trim().removeSurrounding("[", "]"),
+                    port = if (host.isBlank()) 0 else port.toInt(),
+                    roleId = checkNotNull(role).id,
+                    stunUrl = stun.trim(),
+                    turnUrl = turnUrl.trim(),
+                    turnUsername = turnUsername,
+                    turnPassword = turnPassword,
                 )
             }
         }) { Text(AppStrings.direct_invite_create) }

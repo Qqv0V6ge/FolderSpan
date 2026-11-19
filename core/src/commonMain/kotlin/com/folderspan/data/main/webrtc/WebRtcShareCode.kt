@@ -6,6 +6,7 @@ import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -19,6 +20,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class WebRtcDirectInvite(
     val deviceId: String,
@@ -28,7 +30,12 @@ data class WebRtcDirectInvite(
     val credential: String,
     val expiresAtEpochMillis: Long,
     val stunUrl: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnUrl: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnUsername: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val turnPassword: String = "",
 ) {
+    val usesRendezvous: Boolean get() = host.isEmpty()
+
     override fun toString(): String = "WebRtcDirectInvite(<redacted>)"
 }
 
@@ -108,9 +115,10 @@ object WebRtcShareCode {
 
     internal fun validateDirectInvite(invite: WebRtcDirectInvite) {
         if (!validText(invite.deviceId, 128) || invite.deviceId.any { it.isWhitespace() || it.isISOControl() } ||
-            !isWebRtcHost(invite.host) || invite.port !in 1..65535 ||
+            !(invite.usesRendezvous && invite.port == 0 || isWebRtcHost(invite.host) && invite.port in 1..65535) ||
             !fingerprintPattern.matches(invite.fingerprintSha256) || !isToken32(invite.credential) ||
-            invite.expiresAtEpochMillis <= 0 || !validStun(invite.stunUrl)
+            invite.expiresAtEpochMillis <= 0 || !validStun(invite.stunUrl) ||
+            !validTurn(invite.turnUrl, invite.turnUsername, invite.turnPassword)
         ) invalid()
     }
 
@@ -127,6 +135,11 @@ object WebRtcShareCode {
             !validText(room.turnUsername, 255) || !validText(room.turnPassword, 255)
         ) invalid()
     }
+
+    private fun validTurn(url: String, username: String, password: String): Boolean =
+        if (url.isEmpty()) username.isEmpty() && password.isEmpty()
+        else url.length <= MAX_ICE_LENGTH && url.split(';').all { isWebRtcIceUri(it.trim(), turn = true) } &&
+            validText(username, MAX_ICE_LENGTH) && validText(password, MAX_ICE_LENGTH)
 
     private fun validStun(value: String): Boolean =
         value.isEmpty() || (value.length <= MAX_ICE_LENGTH && isWebRtcIceUri(value, turn = false))

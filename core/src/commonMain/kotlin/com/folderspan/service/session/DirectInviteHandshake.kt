@@ -25,7 +25,11 @@ internal const val DIRECT_INVITE_MAX_CANDIDATES = 128
 internal data class DirectInviteChallenge(
     @ProtoNumber(1) val version: Int,
     @ProtoNumber(2) val nonce: String = "",
-)
+    @ProtoNumber(3) val issuerCertificate: String = "",
+    @ProtoNumber(4) val issuerSignature: String = "",
+) {
+    override fun toString(): String = "DirectInviteChallenge(<redacted>)"
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -158,7 +162,7 @@ internal suspend fun verifyDirectInviteOffer(
     return binding.takeIf { verify(publicKey, payload, offer.signature) }
 }
 
-private fun pemBytes(pem: String, label: String): ByteArray? {
+internal fun pemBytes(pem: String, label: String): ByteArray? {
     val normalized = pem.trim()
     val prefix = "-----BEGIN $label-----"
     val suffix = "-----END $label-----"

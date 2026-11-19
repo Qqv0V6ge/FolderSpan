@@ -523,7 +523,7 @@ internal fun webRtcRoomConnectionTestMessage(result: WebRtcRoomConnectionTestRes
 }
 
 @Composable
-private fun WebRtcIceTurnFields(
+internal fun WebRtcIceTurnFields(
     stunUrl: String,
     onStunUrlChange: (String) -> Unit,
     turnUrl: String,

@@ -173,6 +173,8 @@ class MultiPeerWebRtcController(
     private var signalingClosedJob: Job? = null
     private var currentConfig: WebRtcConfig? = null
     private var direct: DirectNegotiation? = null
+    private val directOnly: Boolean
+        get() = direct?.iceServers?.all { server -> server.urls.all { it.startsWith("stun:") } } == true
 
     private data class DirectNegotiation(
         val iceServers: List<WebRtcIceServerConfig>,
@@ -223,7 +225,6 @@ class MultiPeerWebRtcController(
         send: suspend (SignalingMessage) -> Unit,
     ) {
         check(currentConfig == null && direct == null)
-        require(iceServers.all { server -> server.urls.all { it.startsWith("stun:") } })
         direct = DirectNegotiation(iceServers, peer, attemptId, claim, localDevice, send)
         currentLocalDeviceId = localDevice.id
         _connectionStatus.value = WebRtcConnectionStatus.Connecting
@@ -249,7 +250,7 @@ class MultiPeerWebRtcController(
                 peerSessions[active.peer.id]?.bootstrapAuthorization = authorization
                 handleAnswer(message)
             }
-            "ice" -> if (message.candidate?.candidate?.isDirectIceCandidate() == true) handleIce(message)
+            "ice" -> if (!directOnly || message.candidate?.candidate?.isDirectIceCandidate() == true) handleIce(message)
         }
     }
 
@@ -709,7 +710,7 @@ class MultiPeerWebRtcController(
 
     private fun handleOffer(config: WebRtcConfig?, message: SignalingMessage) {
         val incoming = message.sdp ?: return
-        val sdp = if (direct == null) incoming else incoming.withoutNonDirectIceCandidates()
+        val sdp = if (directOnly) incoming.withoutNonDirectIceCandidates() else incoming
         val remote = message.from ?: return
         val session = ensureSession(remote.id, remote)
         if (
@@ -780,7 +781,7 @@ class MultiPeerWebRtcController(
 
     private fun handleAnswer(message: SignalingMessage) {
         val incoming = message.sdp ?: return
-        val sdp = if (direct == null) incoming else incoming.withoutNonDirectIceCandidates()
+        val sdp = if (directOnly) incoming.withoutNonDirectIceCandidates() else incoming
         val remote = message.from ?: return
         val session = ensureSession(remote.id, remote)
         if (
@@ -912,7 +913,7 @@ class MultiPeerWebRtcController(
             peerConnection.onIceCandidate.collect { candidate ->
                 if (!session.isCurrent(peerConnection, generation) || session.remoteId !in approvedPeerIds ||
                     session.connectionAttemptId != attempt || candidate.candidate.isBlank() ||
-                    (direct != null && !candidate.candidate.isDirectIceCandidate())
+                    (directOnly && !candidate.candidate.isDirectIceCandidate())
                 ) return@collect
                 val activeConfig = currentConfig
                 sendSignaling(

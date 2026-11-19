@@ -868,9 +868,12 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         webRtcController.connect(config)
     }
 
-    suspend fun issueDirectInvite(host: String, port: Int, roleId: Long, stunUrl: String): WebRtcDirectInvite {
+    suspend fun issueDirectInvite(
+        host: String, port: Int, roleId: Long, stunUrl: String,
+        turnUrl: String = "", turnUsername: String = "", turnPassword: String = "",
+    ): WebRtcDirectInvite {
         check(SettingsUtils.ensureSoftwareConsent()) { "network consent required" }
-        return directInviteCoordinator.issue(host, port, roleId, stunUrl)
+        return directInviteCoordinator.issue(host, port, roleId, stunUrl, turnUrl, turnUsername, turnPassword)
     }
 
     fun directInviteAvailabilityError(): String? = com.folderspan.service.session.directInviteRuntimeError()
