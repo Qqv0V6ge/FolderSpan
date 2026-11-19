@@ -8,12 +8,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.folderspan.test.createInMemorySettings
 import com.folderspan.ui.navigation.AppRoute
 import com.folderspan.ui.navigation.AppRoutePayloadStore
 import com.folderspan.ui.navigation.LocalAppNavigator
 import com.folderspan.ui.navigation.MutableAppNavigator
 import com.folderspan.ui.screen.file.filter.FileFilterScreen
 import com.folderspan.ui.screen.file.share.FileShareManageScreen
+import com.folderspan.utils.SettingsUtils
 import strings.AppStrings
 import kotlin.test.Test
 import kotlin.test.assertIs
@@ -22,6 +24,8 @@ import kotlin.test.assertIs
 class ToolboxScreenTest {
     @Test
     fun toolboxOpensFileFiltersAndShares() = runComposeUiTest {
+        SettingsUtils.init(createInMemorySettings())
+        SettingsUtils.setWelcomeAgreementAccepted(true)
         val navigator = MutableAppNavigator(AppRoute.Home)
         setContent {
             CompositionLocalProvider(LocalAppNavigator provides navigator) {
@@ -30,6 +34,7 @@ class ToolboxScreenTest {
         }
 
         onNodeWithText(AppStrings.ui_device_management).assertIsDisplayed()
+        onNodeWithText(AppStrings.ui_cross_network_management).assertDoesNotExist()
         onNodeWithText(AppStrings.ui_filter_type).performScrollTo().performClick()
         val filterRoute = assertIs<AppRoute.Payload>(navigator.currentRoute)
         assertIs<FileFilterScreen>(AppRoutePayloadStore.resolve(filterRoute))

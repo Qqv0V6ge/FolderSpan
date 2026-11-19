@@ -9,7 +9,6 @@ import com.folderspan.ui.state.main.DeviceState
 import com.folderspan.ui.state.main.NetworkState
 import com.folderspan.ui.state.main.SyncState
 import com.folderspan.ui.state.main.TaskState
-import com.folderspan.ui.state.main.WebRtcRoomState
 import com.folderspan.ui.state.file.FileState
 import com.folderspan.ui.state.file.FileShareState
 import com.folderspan.utils.SettingsUtils
@@ -77,7 +76,6 @@ suspend fun startFolderSpanRuntime(
                 sync = koin.get<SyncState>()
                 devices = koin.get<DeviceState>()
                 check(koin.get<NetworkState>().loadPersisted()) { "Network configuration failed to load" }
-                check(koin.get<WebRtcRoomState>().loadPersisted()) { "WebRTC configuration failed to load" }
                 optionalServices = launch(start = CoroutineStart.UNDISPATCHED) {
                     RuntimeServiceFailures.observe("account-services", runOptionalServices)
                 }

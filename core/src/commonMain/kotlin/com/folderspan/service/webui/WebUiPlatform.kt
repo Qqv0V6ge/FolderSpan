@@ -35,7 +35,6 @@ data class WebUiHostInfo(
     val deviceId: String = "",
     val deviceName: String = "",
     val deviceCertificatePem: String = "",
-    val directInviteVersion: Int = 0,
     val officialSignalingGateway: String = "",
 )
 

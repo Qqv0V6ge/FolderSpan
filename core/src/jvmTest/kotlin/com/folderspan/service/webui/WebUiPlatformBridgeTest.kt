@@ -46,11 +46,10 @@ class WebUiPlatformBridgeTest {
         request(session, "POST", path, json.encodeToString(value).encodeToByteArray()).value()
 
     @Test
-    fun directInviteCertificateStaysWithItsAuthenticatedRuntimeAndOfficialBridgeRejectsOtherGateways(): Unit = runBlocking {
-        val owner = WebUiPlatformSession("direct-invite-runtime")
+    fun deviceCertificateStaysWithItsAuthenticatedRuntimeAndOfficialBridgeRejectsOtherGateways(): Unit = runBlocking {
+        val owner = WebUiPlatformSession("official-signaling-runtime")
         try {
             val host = platform.hostInfo(owner)
-            assertEquals(1, host.directInviteVersion)
             assertTrue(host.deviceCertificatePem.startsWith("-----BEGIN CERTIFICATE-----"))
             assertEquals(host.publicKey,
                 request(owner, "POST", "/devices/certificate-key", host.deviceCertificatePem.encodeToByteArray()).value<String?>())

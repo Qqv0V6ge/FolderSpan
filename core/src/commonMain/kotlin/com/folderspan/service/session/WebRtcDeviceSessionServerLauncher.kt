@@ -17,6 +17,5 @@ internal fun interface WebRtcDeviceSessionServerLauncher {
 }
 
 internal expect fun createWebRtcDeviceSessionServerLauncher(
-    directClaim: DirectInviteClaim? = null,
     officialLocalDeviceId: String? = null,
 ): WebRtcDeviceSessionServerLauncher?
