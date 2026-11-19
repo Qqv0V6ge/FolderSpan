@@ -18,6 +18,7 @@ import com.folderspan.data.main.device.DeviceType
 import com.folderspan.data.main.share.Share
 import com.folderspan.data.main.webrtc.WebRtcRoomProfile
 import com.folderspan.data.main.webrtc.WebRtcDirectInvite
+import com.folderspan.data.main.webrtc.WebRtcShareCode
 import com.folderspan.data.main.webrtc.WebRtcOfficialGateway
 import com.folderspan.data.main.webrtc.toWebRtcConfigResult
 import com.folderspan.db.FolderSpanDatabase
@@ -70,6 +71,7 @@ import com.folderspan.service.session.DeviceLanBeaconListener
 import com.folderspan.service.session.DeviceLanBeacons
 import com.folderspan.service.session.DeviceSessionClientManager
 import com.folderspan.service.session.DeviceSessionBootstrapAuthorizationRegistry
+import com.folderspan.service.session.DIRECT_INVITE_RENDEZVOUS_URL
 import com.folderspan.service.session.DirectInviteCoordinator
 import com.folderspan.service.session.ReadOnlyShareSessionAdapter
 import com.folderspan.service.session.identifyDeviceSessionEndpoint
@@ -868,19 +870,28 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
         webRtcController.connect(config)
     }
 
+    fun directInviteSignalingUrl(): String = SettingsUtils.inviteSignalingUrl(DIRECT_INVITE_RENDEZVOUS_URL)
+
+    fun setDirectInviteSignalingUrl(url: String) {
+        require(WebRtcShareCode.isSecureSignalingUrl(url))
+        SettingsUtils.setInviteSignalingUrl(url.trim())
+    }
+
     suspend fun issueDirectInvite(
         host: String, port: Int, roleId: Long, stunUrl: String,
         turnUrl: String = "", turnUsername: String = "", turnPassword: String = "",
     ): WebRtcDirectInvite {
         check(SettingsUtils.ensureSoftwareConsent()) { "network consent required" }
-        return directInviteCoordinator.issue(host, port, roleId, stunUrl, turnUrl, turnUsername, turnPassword)
+        return directInviteCoordinator.issue(
+            host, port, roleId, stunUrl, turnUrl, turnUsername, turnPassword, directInviteSignalingUrl(),
+        )
     }
 
     fun directInviteAvailabilityError(): String? = com.folderspan.service.session.directInviteRuntimeError()
 
-    suspend fun connectDirectInvite(code: String) {
+    suspend fun connectDirectInvite(code: String, confirmDevice: suspend (String) -> Unit = {}) {
         check(SettingsUtils.ensureSoftwareConsent()) { "network consent required" }
-        directInviteCoordinator.connect(code)
+        directInviteCoordinator.connect(code, directInviteSignalingUrl(), confirmDevice)
     }
 
     suspend fun revokeDirectInvite(invite: WebRtcDirectInvite) = directInviteCoordinator.revoke(invite)

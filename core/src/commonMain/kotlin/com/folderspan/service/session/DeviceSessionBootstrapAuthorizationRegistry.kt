@@ -156,7 +156,7 @@ internal class DeviceSessionBootstrapAuthorizationRegistry(
         val now = nowMillis()
         removeExpired(now)
         if (directInvites.size >= MAX_PENDING_DIRECT_INVITES) reject(DirectInviteDenial.Capacity)
-        val credential = newCredential()
+        val credential = if (host.isEmpty()) WebRtcShareCode.newTemporaryDeviceId(fingerprintSha256) else newCredential()
         val digest = credential.inviteDigest()
         check(digest !in directInvites)
         val invite = WebRtcDirectInvite(

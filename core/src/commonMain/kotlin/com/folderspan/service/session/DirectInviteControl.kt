@@ -8,8 +8,12 @@ import com.folderspan.service.http.tls.normalizeTlsFingerprintSha256
 import com.folderspan.utils.ProtoBufCodec
 import com.folderspan.utils.secureRandomBytes
 import korlibs.crypto.sha256
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -29,6 +33,7 @@ internal class DirectInviteControlHandler(
         DirectInviteIceBatch(batch.offset)
     },
     private val rendezvousInvite: WebRtcDirectInvite? = null,
+    private val issuerName: () -> String = localDeviceId,
     private val receiveOffer: suspend (DirectInviteOffer, DirectInviteBinding) -> DirectInviteAnswer,
 ) {
     private val mutex = Mutex()
@@ -40,6 +45,7 @@ internal class DirectInviteControlHandler(
     suspend fun handle(request: DeviceSessionControlRequest): DeviceSessionControlResponse {
         if (request.payload.size > DIRECT_INVITE_MAX_CONTROL_BYTES) return response(request, DEVICE_SESSION_RPC_BAD_REQUEST)
         return when (request.method) {
+            DIRECT_INVITE_LOOKUP_RPC -> lookup(request)
             DIRECT_INVITE_CHALLENGE_RPC -> mutex.withLock {
                 val query = runCatching { ProtoBufCodec.decode<DirectInviteChallenge>(request.payload) }.getOrNull()
                     ?: return@withLock response(request, DEVICE_SESSION_RPC_BAD_REQUEST)
@@ -53,9 +59,7 @@ internal class DirectInviteControlHandler(
                     DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, nonce)
                 } else {
                     if (!rendezvousNonce.matches(query.nonce)) return@withLock response(request, DEVICE_SESSION_RPC_BAD_REQUEST)
-                    val certificate = checkNotNull(DeviceTlsIdentity.certificatePem())
-                    val signature = checkNotNull(DeviceTlsIdentity.signDirectInvite(rendezvousProof(rendezvousInvite, query.nonce, nonce)))
-                    DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, nonce, certificate, signature)
+                    signedChallenge(rendezvousInvite, query.nonce, nonce)
                 }
                 challenge = issued
                 issuedAt = TimeSource.Monotonic.markNow()
@@ -65,6 +69,21 @@ internal class DirectInviteControlHandler(
             DIRECT_INVITE_ICE_RPC -> handleCandidates(request)
             else -> response(request, DEVICE_SESSION_RPC_UNAUTHORIZED)
         }
+    }
+
+    private suspend fun lookup(request: DeviceSessionControlRequest): DeviceSessionControlResponse {
+        val invite = rendezvousInvite ?: return response(request, DEVICE_SESSION_RPC_UNAUTHORIZED)
+        if (invite.expiresAtEpochMillis <= Clock.System.now().toEpochMilliseconds()) {
+            return response(request, DEVICE_SESSION_RPC_FORBIDDEN)
+        }
+        val query = runCatching { ProtoBufCodec.decode<DirectInviteChallenge>(request.payload) }.getOrNull()
+        if (query == null || query.version != DIRECT_INVITE_HANDSHAKE_VERSION || !rendezvousNonce.matches(query.nonce)) {
+            return response(request, DEVICE_SESSION_RPC_BAD_REQUEST)
+        }
+        val name = issuerName().take(128).filterNot(Char::isISOControl).ifBlank { invite.deviceId }
+        val proof = signedChallenge(invite, query.nonce, newDirectInviteNonce(), name)
+        val metadata = DirectInviteLookup(WebRtcShareCode.encodeDirectInvite(invite), name, proof)
+        return response(request, DEVICE_SESSION_RPC_OK, ProtoBufCodec.encode(metadata))
     }
 
     private suspend fun handleOffer(request: DeviceSessionControlRequest): DeviceSessionControlResponse {
@@ -121,6 +140,50 @@ internal suspend fun <T> withDirectInviteControl(
     rendezvousUrl: String = DIRECT_INVITE_RENDEZVOUS_URL,
     action: suspend DeviceSessionPeer.(DirectInviteChallenge) -> T,
 ): T {
+    val pin = verifiedInvitePin(invite)
+    return withInvitePeer(scope, {
+        if (invite.usesRendezvous) openDirectInviteRendezvous(rendezvousUrl, invite.credential, issuer = false)
+        else connectPinnedDeviceSessionChannel(invite.host, invite.port, pin, DIRECT_INVITE_CONTACT_TIMEOUT_MS.toInt())
+    }) {
+        action(requestInviteChallenge(invite))
+    }
+}
+
+internal suspend fun <T> withTemporaryDeviceControl(
+    credential: String,
+    scope: CoroutineScope,
+    url: String,
+    action: suspend DeviceSessionPeer.(WebRtcDirectInvite, String) -> T,
+): T = withInvitePeer(scope, { openDirectInviteRendezvous(url, credential, issuer = false) }) {
+    val unavailable = CompletableDeferred<Nothing>()
+    setCloseHandler {
+        unavailable.completeExceptionally(DeviceSessionClosedException("inviting device went offline"))
+    }
+    val nonce = newDirectInviteNonce()
+    val lookup = withTimeout(DIRECT_INVITE_CONTACT_TIMEOUT_MS) {
+        rpcValue<DirectInviteChallenge, DirectInviteLookup>(
+            DIRECT_INVITE_LOOKUP_RPC, DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, nonce),
+        )
+    }
+    val invite = WebRtcShareCode.decodeDirectInvite(lookup.code)
+    require(invite.usesRendezvous && invite.credential == credential &&
+        WebRtcShareCode.temporaryIdMatches(credential, invite.fingerprintSha256) &&
+        lookup.name.length in 1..128 && lookup.name.none(Char::isISOControl)) { "temporary ID does not match the device" }
+    verifyRendezvousIssuer(invite, verifiedInvitePin(invite), nonce, lookup.proof, lookup.name)
+    coroutineScope {
+        val result = async { action(invite, lookup.name) }
+        try {
+            select {
+                result.onAwait { it }
+                unavailable.onAwait { it }
+            }
+        } finally {
+            result.cancel()
+        }
+    }
+}
+
+private fun verifiedInvitePin(invite: WebRtcDirectInvite): String {
     WebRtcShareCode.validateDirectInvite(invite)
     if (invite.expiresAtEpochMillis <= Clock.System.now().toEpochMilliseconds()) {
         throw DirectInviteException(DirectInviteDenial.Expired)
@@ -128,25 +191,35 @@ internal suspend fun <T> withDirectInviteControl(
     val pinned = normalizeTlsFingerprintSha256(invite.fingerprintSha256)
     val known = TrustedDeviceCertificateStore.expectedFingerprint(invite.deviceId)
     require(known.isEmpty() || known == pinned) { "direct invitation certificate mismatch" }
+    return pinned
+}
+
+internal suspend fun DeviceSessionPeer.requestInviteChallenge(invite: WebRtcDirectInvite): DirectInviteChallenge {
+    val pin = verifiedInvitePin(invite)
+    val nonce = if (invite.usesRendezvous) newDirectInviteNonce() else ""
+    val challenge = withTimeout(DIRECT_INVITE_CONTACT_TIMEOUT_MS) {
+        rpcValue<DirectInviteChallenge, DirectInviteChallenge>(
+            DIRECT_INVITE_CHALLENGE_RPC, DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, nonce),
+        )
+    }
+    if (invite.usesRendezvous) verifyRendezvousIssuer(invite, pin, nonce, challenge)
+    return challenge
+}
+
+private suspend fun <T> withInvitePeer(
+    scope: CoroutineScope,
+    open: suspend () -> DeviceSessionByteChannel,
+    action: suspend DeviceSessionPeer.() -> T,
+): T {
     var channel: DeviceSessionByteChannel? = null
     var peer: DeviceSessionPeer? = null
     try {
-        withTimeout(DIRECT_INVITE_CONTACT_TIMEOUT_MS) {
-            channel = if (invite.usesRendezvous) openDirectInviteRendezvous(rendezvousUrl, invite, issuer = false)
-                else connectPinnedDeviceSessionChannel(invite.host, invite.port, pinned, DIRECT_INVITE_CONTACT_TIMEOUT_MS.toInt())
-        }
+        withTimeout(DIRECT_INVITE_CONTACT_TIMEOUT_MS) { channel = open() }
         val plan = DeviceSessionWindowPlan.fromMemory()
         val active = DeviceSessionPeer(DeviceSessionTransport(checkNotNull(channel), plan, plan, isClient = true), receivePlan = plan)
         peer = active
         active.start(scope)
-        val nonce = if (invite.usesRendezvous) newDirectInviteNonce() else ""
-        val challenge = withTimeout(DIRECT_INVITE_CONTACT_TIMEOUT_MS) {
-            active.rpcValue<DirectInviteChallenge, DirectInviteChallenge>(
-                DIRECT_INVITE_CHALLENGE_RPC, DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, nonce),
-            )
-        }
-        if (invite.usesRendezvous) verifyRendezvousIssuer(invite, pinned, nonce, challenge)
-        return active.action(challenge)
+        return active.action()
     } finally {
         withContext(NonCancellable) {
             val active = peer
@@ -174,9 +247,18 @@ private val rendezvousNonce = Regex("[A-Za-z0-9_-]{43}")
 private fun newDirectInviteNonce(): String =
     Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).encode(secureRandomBytes(32))
 
-private fun rendezvousProof(invite: WebRtcDirectInvite, receiver: String, issuer: String): ByteArray {
+private fun rendezvousProof(invite: WebRtcDirectInvite, receiver: String, issuer: String, name: String?): ByteArray {
     val codeHash = WebRtcShareCode.encodeDirectInvite(invite).encodeToByteArray().sha256().hexLower
-    return "FolderSpan.InviteIssuer.v1\n$codeHash\n$receiver\n$issuer".encodeToByteArray()
+    val proof = "FolderSpan.InviteIssuer.v1\n$codeHash\n$receiver\n$issuer"
+    return (if (name == null) proof else "$proof\n$name").encodeToByteArray()
+}
+
+private suspend fun signedChallenge(
+    invite: WebRtcDirectInvite, receiver: String, issuer: String, name: String? = null,
+): DirectInviteChallenge {
+    val certificate = checkNotNull(DeviceTlsIdentity.certificatePem())
+    val signature = checkNotNull(DeviceTlsIdentity.signDirectInvite(rendezvousProof(invite, receiver, issuer, name)))
+    return DirectInviteChallenge(DIRECT_INVITE_HANDSHAKE_VERSION, issuer, certificate, signature)
 }
 
 private suspend fun verifyRendezvousIssuer(
@@ -184,6 +266,7 @@ private suspend fun verifyRendezvousIssuer(
     fingerprint: String,
     nonce: String,
     challenge: DirectInviteChallenge,
+    name: String? = null,
 ) {
     require(challenge.version == DIRECT_INVITE_HANDSHAKE_VERSION && rendezvousNonce.matches(challenge.nonce) &&
         challenge.issuerCertificate.length in 1..8192 && challenge.issuerSignature.length in 1..1024) {
@@ -192,6 +275,6 @@ private suspend fun verifyRendezvousIssuer(
     val der = requireNotNull(pemBytes(challenge.issuerCertificate, "CERTIFICATE"))
     require(normalizeTlsFingerprintSha256(der.sha256().hexLower) == fingerprint) { "invitation issuer certificate mismatch" }
     val key = requireNotNull(DeviceTlsIdentity.publicKeyFromCertificate(challenge.issuerCertificate))
-    require(DeviceTlsIdentity.verifySha256WithRsa(key, rendezvousProof(invite, nonce, challenge.nonce),
+    require(DeviceTlsIdentity.verifySha256WithRsa(key, rendezvousProof(invite, nonce, challenge.nonce, name),
         challenge.issuerSignature)) { "invalid invitation issuer signature" }
 }

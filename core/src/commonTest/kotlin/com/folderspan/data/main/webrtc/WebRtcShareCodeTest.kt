@@ -31,6 +31,30 @@ class WebRtcShareCodeTest {
     }
 
     @Test
+    fun temporaryIdAuthenticatesDeviceAndCarriesNoServerOrTurnConfiguration() {
+        val original = WebRtcShareCode.decodeDirectInvite(DIRECT_SAMPLE, NOW)
+        val token = WebRtcShareCode.newTemporaryDeviceId(original.fingerprintSha256)
+        val invite = original.copy(host = "", port = 0, credential = token,
+            turnUrl = "turn:relay.example.test", turnUsername = "tester", turnPassword = "private-turn")
+        val id = WebRtcShareCode.displayDeviceInvite(invite)
+        assertEquals(48, id.length)
+        assertEquals(token, WebRtcShareCode.parseTemporaryDeviceId(id))
+        assertTrue(WebRtcShareCode.temporaryIdMatches(token, invite.fingerprintSha256))
+        assertFalse(WebRtcShareCode.temporaryIdMatches(token, "09".repeat(32)))
+        assertFalse(id.contains(invite.turnPassword))
+        assertFalse(id.contains(invite.deviceId))
+        assertFailsWith<WebRtcShareCodeException> { WebRtcShareCode.parseTemporaryDeviceId("fsd1-unsafe") }
+    }
+
+    @Test
+    fun signalingServerAcceptsSelfHostedWssWithoutUrlCredentials() {
+        assertTrue(WebRtcShareCode.isSecureSignalingUrl("wss://example.test:8443/custom/invites"))
+        assertFalse(WebRtcShareCode.isSecureSignalingUrl("ws://example.test/invites"))
+        assertFalse(WebRtcShareCode.isSecureSignalingUrl("wss://user@example.test/invites"))
+        assertFalse(WebRtcShareCode.isSecureSignalingUrl("wss://example.test/invites?secret=1"))
+    }
+
+    @Test
     fun deviceInviteCarriesRendezvousAndTurnSettings() {
         val invite = WebRtcShareCode.decodeDirectInvite(DIRECT_SAMPLE, NOW).copy(
             host = "", port = 0, stunUrl = "",

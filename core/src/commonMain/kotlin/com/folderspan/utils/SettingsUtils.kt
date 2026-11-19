@@ -84,6 +84,7 @@ object SettingsUtils {
     const val KEY_BOOKMARK_DEFAULT_INITIALIZED = "settings.bookmark.defaultInitialized"
     const val KEY_STARTUP_PERMISSION_REMINDER_HANDLED = "settings.notification.startupPermissionReminderHandled"
     const val KEY_ANNOUNCEMENT_READ_CUTOFF = "settings.notification.announcementReadCutoff"
+    private const val KEY_INVITE_SIGNALING_URL = "settings.network.inviteSignalingUrl"
     const val KEY_APP_UPDATE_CHANNEL = "settings.app.updateChannel"
     const val DEFAULT_APP_UPDATE_CHANNEL = "release"
     /** Device-local diagnostic capture; intentionally absent from syncableSettings. */
@@ -266,6 +267,13 @@ object SettingsUtils {
 
     fun persistAnnouncementReadCutoff(value: Long) {
         settings.putLong(KEY_ANNOUNCEMENT_READ_CUTOFF, value)
+    }
+
+    fun inviteSignalingUrl(defaultUrl: String): String =
+        settings.getString(KEY_INVITE_SIGNALING_URL, defaultUrl)
+
+    fun setInviteSignalingUrl(url: String) {
+        settings.putString(KEY_INVITE_SIGNALING_URL, url)
     }
 
     fun appUpdateChannel(): String =

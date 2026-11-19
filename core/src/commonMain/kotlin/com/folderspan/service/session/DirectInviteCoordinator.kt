@@ -69,6 +69,7 @@ internal class DirectInviteCoordinator(
     suspend fun issue(
         host: String, port: Int, roleId: Long, stunUrl: String,
         turnUrl: String = "", turnUsername: String = "", turnPassword: String = "",
+        signalingUrl: String = rendezvousUrl,
     ): WebRtcDirectInvite {
         val owner = currentDirectInviteIssuer()
         return onOwner(owner) {
@@ -84,7 +85,7 @@ internal class DirectInviteCoordinator(
             )
             if (invite.usesRendezvous) {
                 val ready = CompletableDeferred<Unit>()
-                val job = scope.launch(start = CoroutineStart.LAZY) { runRendezvousIssuer(owner, invite, ready) }
+                val job = scope.launch(start = CoroutineStart.LAZY) { runRendezvousIssuer(owner, invite, signalingUrl, ready) }
                 rendezvousJobs[invite.credential] = job
                 job.start()
                 try {
@@ -104,12 +105,12 @@ internal class DirectInviteCoordinator(
     }
 
     private suspend fun runRendezvousIssuer(
-        owner: String, invite: WebRtcDirectInvite, ready: CompletableDeferred<Unit>,
+        owner: String, invite: WebRtcDirectInvite, signalingUrl: String, ready: CompletableDeferred<Unit>,
     ) {
         try {
             withTimeout((invite.expiresAtEpochMillis - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(1L)) {
                 coroutineScope {
-                    val channel = openDirectInviteRendezvous(rendezvousUrl, invite, issuer = true)
+                    val channel = openDirectInviteRendezvous(signalingUrl, invite.credential, issuer = true)
                     try {
                         val plan = DeviceSessionWindowPlan.fromMemory()
                         val peer = DeviceSessionPeer(
@@ -146,6 +147,7 @@ internal class DirectInviteCoordinator(
             localDeviceId = { localDevice().id },
             localFingerprint = ::currentDeviceTlsFingerprint,
             rendezvousInvite = invite,
+            issuerName = { localDevice().name },
             exchangeIce = { binding, batch -> onOwner(owner) {
                 val attempt = inbound[binding] ?: throw DirectInviteException(DirectInviteDenial.Missing)
                 batch.candidates.forEach(attempt::addPeerCandidate)
@@ -170,64 +172,94 @@ internal class DirectInviteCoordinator(
         }
     }
 
-    suspend fun connect(code: String) {
-        val invite = WebRtcShareCode.decodeDirectInvite(code)
+    suspend fun connect(
+        code: String,
+        signalingUrl: String = rendezvousUrl,
+        confirmDevice: suspend (String) -> Unit = {},
+    ) = coroutineScope {
+        val credential = WebRtcShareCode.parseTemporaryDeviceId(code)
+        val directInvite = if (credential == null) WebRtcShareCode.decodeDirectInvite(code) else null
         directInviteRuntimeError()?.let { error(it) }
         val owner = currentDirectInviteIssuer()
         val initiator = localDevice()
-        val attempt = onOwner(owner) {
-            require(invite.deviceId != initiator.id) { "cannot connect to your own direct invitation" }
-            Attempt(
-                SignalingDevice(id = invite.deviceId), newAttemptId(),
-                buildWebRtcIceServers(invite.stunUrl, invite.turnUrl, invite.turnUsername, invite.turnPassword), null,
-            )
-        }
+        var attempt: Attempt? = null
+        var answer: DirectInviteAnswer? = null
+        var sent = 0
+        var received = 0
         var phase = WebRtcDirectFailure.Contact
+
+        suspend fun prepare(invite: WebRtcDirectInvite, name: String): Attempt {
+            require(invite.deviceId != initiator.id) { "cannot connect to your own direct invitation" }
+            val available = (invite.expiresAtEpochMillis - Clock.System.now().toEpochMilliseconds())
+                .coerceIn(1L, 300_000L)
+            withTimeout(available) { confirmDevice(name) }
+            return onOwner(owner) {
+                Attempt(
+                    SignalingDevice(id = invite.deviceId, name = name), newAttemptId(),
+                    buildWebRtcIceServers(invite.stunUrl, invite.turnUrl, invite.turnUsername, invite.turnPassword), null,
+                ).also { attempt = it }
+            }
+        }
+
+        suspend fun DeviceSessionPeer.exchange(
+            invite: WebRtcDirectInvite,
+            challenge: DirectInviteChallenge,
+            active: Attempt,
+            retry: Boolean = false,
+        ) {
+            if (active.connected.isCompleted) return
+            if (!retry) {
+                phase = WebRtcDirectFailure.Handshake
+                onOwner(owner) { active.start(initiator) }
+            }
+            val offer = active.description.await()
+            val reply = submitDirectInviteOffer(invite, challenge, active.id, offer, initiator.id)
+            if (answer == null) {
+                answer = reply
+                phase = WebRtcDirectFailure.Ice
+                onOwner(owner) { active.receive("answer", reply.sdp, reply.authorization) }
+            } else {
+                check(answer == reply) { "direct invitation response changed" }
+            }
+            while (true) {
+                val candidates = onOwner(owner) {
+                    if (active.connected.isCompleted) return@onOwner null
+                    check(attempts[active.id] === active) { "direct invitation connection closed" }
+                    active.candidates.drop(sent).take(DIRECT_INVITE_MAX_ICE_BATCH)
+                } ?: break
+                val response = rpcValue<DirectInviteIceBatch, DirectInviteIceBatch>(
+                    DIRECT_INVITE_ICE_RPC, DirectInviteIceBatch(received, candidates),
+                )
+                check(response.isValid() && response.offset == received + response.candidates.size) {
+                    "invalid direct invitation candidate response"
+                }
+                sent += candidates.size
+                received = response.offset
+                onOwner(owner) { response.candidates.forEach(active::addPeerCandidate) }
+                delay(100L)
+            }
+        }
+
         try {
-            withTimeout(45_000L) {
-                var answer: DirectInviteAnswer? = null
-                var sent = 0
-                var received = 0
-                for (connection in 0..1) {
-                    try {
-                        withDirectInviteControl(invite, attempt.scope, rendezvousUrl) { challenge ->
-                            if (connection == 0) {
-                                phase = WebRtcDirectFailure.Handshake
-                                onOwner(owner) { attempt.start(initiator) }
-                            } else if (attempt.connected.isCompleted) {
-                                return@withDirectInviteControl
+            if (credential != null) {
+                withTemporaryDeviceControl(credential, this, signalingUrl) { invite, name ->
+                    val active = prepare(invite, name)
+                    withTimeout(45_000L) { exchange(invite, requestInviteChallenge(invite), active) }
+                }
+            } else {
+                val invite = checkNotNull(directInvite)
+                val active = prepare(invite, invite.deviceId)
+                withTimeout(45_000L) {
+                    for (connection in 0..1) {
+                        try {
+                            withDirectInviteControl(invite, active.scope, signalingUrl) { challenge ->
+                                exchange(invite, challenge, active, retry = connection != 0)
                             }
-                            val offer = attempt.description.await()
-                            val reply = submitDirectInviteOffer(invite, challenge, attempt.id, offer, initiator.id)
-                            if (answer == null) {
-                                answer = reply
-                                phase = WebRtcDirectFailure.Ice
-                                onOwner(owner) { attempt.receive("answer", reply.sdp, reply.authorization) }
-                            } else {
-                                check(answer == reply) { "direct invitation response changed" }
-                            }
-                            while (true) {
-                                val candidates = onOwner(owner) {
-                                    if (attempt.connected.isCompleted) return@onOwner null
-                                    check(attempts[attempt.id] === attempt) { "direct invitation connection closed" }
-                                    attempt.candidates.drop(sent).take(DIRECT_INVITE_MAX_ICE_BATCH)
-                                } ?: break
-                                val response = rpcValue<DirectInviteIceBatch, DirectInviteIceBatch>(
-                                    DIRECT_INVITE_ICE_RPC, DirectInviteIceBatch(received, candidates),
-                                )
-                                check(response.isValid() && response.offset == received + response.candidates.size) {
-                                    "invalid direct invitation candidate response"
-                                }
-                                sent += candidates.size
-                                received = response.offset
-                                onOwner(owner) { response.candidates.forEach(attempt::addPeerCandidate) }
-                                delay(100L)
-                            }
+                            break
+                        } catch (error: DeviceSessionClosedException) {
+                            if (active.connected.isCompleted) break
+                            if (invite.usesRendezvous || connection != 0 || !active.description.isCompleted) throw error
                         }
-                        break
-                    } catch (error: DeviceSessionClosedException) {
-                        if (attempt.connected.isCompleted) break
-                        if (invite.usesRendezvous || connection != 0 || !attempt.description.isCompleted) throw error
                     }
                 }
             }
@@ -239,7 +271,7 @@ internal class DirectInviteCoordinator(
             throw WebRtcDirectConnectionException(phase, error)
         } finally {
             withContext(NonCancellable) {
-                if (!attempt.connected.isCompleted) onOwner(null) { attempt.stop() }
+                attempt?.takeIf { !it.connected.isCompleted }?.let { active -> onOwner(null) { active.stop() } }
             }
         }
     }

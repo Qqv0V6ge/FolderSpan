@@ -1,6 +1,7 @@
 package com.folderspan.data.main.webrtc
 
 import com.folderspan.service.webrtc.models.isWebRtcHost
+import com.folderspan.utils.secureRandomBytes
 import com.folderspan.service.webrtc.models.isWebRtcIceUri
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
@@ -66,6 +67,8 @@ class WebRtcDirectConnectionException(val failure: WebRtcDirectFailure, cause: T
 
 object WebRtcShareCode {
     private const val VERSION = 1
+    private const val TEMPORARY_ID_PREFIX = "fsd1-"
+    private const val ID_PIN_BYTES = 16
     private const val DIRECT_INVITE = "direct-invite"
     private const val OFFICIAL_ROOM = "official-room"
     private const val MAX_CODE_LENGTH = 8192
@@ -99,6 +102,36 @@ object WebRtcShareCode {
         if (invite.expiresAtEpochMillis <= nowMillis) fail(WebRtcShareCodeError.Expired)
         return invite
     }
+
+    /** 对端只需收到此临时 ID。设备资料和 ICE 配置在加密握手里交付。 */
+    fun displayDeviceInvite(invite: WebRtcDirectInvite): String {
+        if (!invite.usesRendezvous) return encodeDirectInvite(invite)
+        validateDirectInvite(invite)
+        require(temporaryIdMatches(invite.credential, invite.fingerprintSha256))
+        return TEMPORARY_ID_PREFIX + invite.credential
+    }
+
+    internal fun parseTemporaryDeviceId(text: String): String? {
+        val normalized = text.trim()
+        if (!normalized.startsWith(TEMPORARY_ID_PREFIX)) return null
+        val token = normalized.removePrefix(TEMPORARY_ID_PREFIX)
+        if (!isToken32(token)) invalid()
+        return token
+    }
+
+    internal fun newTemporaryDeviceId(fingerprint: String): String =
+        base64.encode(secureRandomBytes(32 - ID_PIN_BYTES) + fingerprintPrefix(fingerprint))
+
+    internal fun temporaryIdMatches(credential: String, fingerprint: String): Boolean =
+        isToken32(credential) && fingerprintPattern.matches(fingerprint) &&
+            base64.decode(credential).copyOfRange(32 - ID_PIN_BYTES, 32).contentEquals(fingerprintPrefix(fingerprint))
+
+    private fun fingerprintPrefix(fingerprint: String): ByteArray {
+        require(fingerprintPattern.matches(fingerprint))
+        return ByteArray(ID_PIN_BYTES) { i -> fingerprint.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+    }
+
+    fun isSecureSignalingUrl(value: String): Boolean = validGateway(value.trim())
 
     fun encodeOfficialRoom(room: OfficialWebRtcRoomCode): String {
         validateRoom(room)
