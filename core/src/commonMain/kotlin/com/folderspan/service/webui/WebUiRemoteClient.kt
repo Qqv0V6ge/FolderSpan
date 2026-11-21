@@ -7,7 +7,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
 /** Authentication and platform events only; all business state belongs to the caller. */
-class WebUiRemoteClient(private val scope: CoroutineScope) {
+class WebUiRemoteClient(
+    private val scope: CoroutineScope,
+    private val reload: (WebUiRuntimeAddress) -> Unit = {},
+) {
     private val json = WebUiPlatformClient.json
     private var monitoring: Job? = null
     private var connection: WebUiManagementConnection? = null
@@ -64,8 +67,7 @@ class WebUiRemoteClient(private val scope: CoroutineScope) {
                 val failure = active.closed.await()
                 if (generation == attempt && connection === active && WebUiAttachment.target === target) {
                     WebUiAttachment.stale = true
-                    WebUiPlatformClient.invalidate(failure)
-                    logout()
+                    closeSessionAndReload(target, failure)
                 }
             }
         } catch (error: Throwable) {
@@ -76,8 +78,13 @@ class WebUiRemoteClient(private val scope: CoroutineScope) {
 
     suspend fun checkConnection() {
         // The management connection owns the lease and detects a disconnected Runtime.
-        if (WebUiAttachment.hasSession && monitoring?.isActive != true) logout()
+        val target = WebUiAttachment.target ?: return
+        if (WebUiAttachment.hasSession && monitoring?.isActive != true) {
+            closeSessionAndReload(target)
+        }
     }
+
+    suspend fun switchTarget(target: WebUiRuntimeAddress) = closeSessionAndReload(target)
 
     suspend fun disconnect() = logout()
 
@@ -86,7 +93,16 @@ class WebUiRemoteClient(private val scope: CoroutineScope) {
         clearSession()
     }
 
-    private suspend fun clearSession() {
+    private suspend fun closeSessionAndReload(
+        destination: WebUiRuntimeAddress,
+        failure: Throwable = IllegalStateException("Runtime session closed"),
+    ) {
+        val attempt = ++generation
+        clearSession(failure)
+        if (generation == attempt) reload(destination)
+    }
+
+    private suspend fun clearSession(failure: Throwable = IllegalStateException("Runtime session closed")) {
         val previousMonitoring = monitoring
         val previous = connection
         val token = WebUiAttachment.sessionToken
@@ -100,7 +116,7 @@ class WebUiRemoteClient(private val scope: CoroutineScope) {
         // Clear shared state before any suspension so old cleanup cannot erase a newer login.
         val current = currentCoroutineContext()[Job]
         withContext(NonCancellable) {
-            WebUiPlatformClient.invalidate(IllegalStateException("Runtime session closed"))
+            WebUiPlatformClient.invalidate(failure)
             if (previousMonitoring !== current) previousMonitoring?.cancelAndJoin()
             retire(target, token, previous)
         }

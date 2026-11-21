@@ -3,7 +3,6 @@
 package com.folderspan
 
 import com.folderspan.service.webui.WebUiAttachment
-import com.folderspan.service.webui.WebUiBrowserHttp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,15 +83,6 @@ private fun WebApp() {
         detectWebUiAttachment()
         initKoin()
         bootstrapReady = true
-    }
-    var authenticatedOnce by remember { mutableStateOf(false) }
-    LaunchedEffect(WebUiAttachment.hasSession) {
-        if (WebUiAttachment.hasSession) authenticatedOnce = true
-        else if (authenticatedOnce) {
-            WebUiAttachment.target?.let {
-                WebUiBrowserHttp.selectTargetAndReload(it.origin)
-            }
-        }
     }
     if (!bootstrapReady) return
     if (WebUiAttachment.hasSession) App(

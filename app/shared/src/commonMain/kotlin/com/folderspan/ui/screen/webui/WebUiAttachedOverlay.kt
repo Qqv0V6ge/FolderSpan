@@ -58,7 +58,9 @@ import org.koin.compose.koinInject
 fun WebUiAttachedOverlay() {
     if (!WebUiAttachment.isAttached) return
     val scope = rememberCoroutineScope()
-    val client = remember(scope) { WebUiRemoteClient(scope) }
+    val client = remember(scope) {
+        WebUiRemoteClient(scope) { WebUiBrowserHttp.selectTargetAndReload(it.origin) }
+    }
     OnAppResumeEffect { scope.launch { client.checkConnection() } }
     LaunchedEffect(client) {
         try {
@@ -148,11 +150,13 @@ private fun WebUiLoginContent(client: WebUiRemoteClient) {
                     Text(AppStrings.ui_web_ui_runtime_switch_note)
                     Button(
                         onClick = {
+                            if (busy) return@Button
                             scope.launch {
                                 busy = true
                                 try {
-                                    client.logout()
-                                    WebUiBrowserHttp.selectTargetAndReload(parsedTarget.getOrThrow().origin)
+                                    client.switchTarget(parsedTarget.getOrThrow())
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
                                 } catch (failure: Exception) {
                                     addressError = failure.message
                                 } finally { busy = false }
