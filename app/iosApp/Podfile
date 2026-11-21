@@ -2,6 +2,8 @@ platform :ios, '17.0'
 
 use_frameworks!
 
+install! 'cocoapods', :integrate_targets => false
+
 project 'iosApp.xcodeproj'
 
 target 'iosApp' do

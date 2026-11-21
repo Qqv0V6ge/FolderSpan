@@ -1,5 +1,7 @@
 package com.folderspan.ui.state.main
 
+import com.folderspan.AppBuildConfig
+
 import com.folderspan.ui.state.sharedSnapshotState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -850,6 +852,10 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     private var officialRoomSelection: Long = 0
 
     suspend fun connectWebRtcRoom(room: WebRtcRoomProfile): Boolean {
+        if (!AppBuildConfig.WEBRTC_AVAILABLE) {
+            webRtcController.setConnectionError(AppStrings.webrtc_pro_only)
+            return false
+        }
         if (!SettingsUtils.ensureSoftwareConsent() || room.source != com.folderspan.data.main.webrtc.WebRtcRoomSource.Official) return false
         val selection = ++officialRoomSelection
         val latest = com.folderspan.data.main.webrtc.WebRtcOfficialRooms.client.getRoomConnection(room.roomId)
@@ -1346,7 +1352,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
             item.id == deviceId &&
                 when (item.transportType) {
                     DeviceTransportType.Session -> item.sessionClient != null || item.httpClient != null
-                    DeviceTransportType.WebRtc -> item.connectType == ConnectType.Connect
+                    DeviceTransportType.WebRtc -> AppBuildConfig.WEBRTC_AVAILABLE && item.connectType == ConnectType.Connect
                 }
         } ?: return null
 
@@ -1375,6 +1381,7 @@ class DeviceState : KoinComponent, AccountDeviceAutomation {
     }
 
     private fun connectWebRtcDevice(connectDevice: SocketDevice) {
+        check(AppBuildConfig.WEBRTC_AVAILABLE) { AppStrings.webrtc_pro_only }
         val controller = resolveWebRtcControllerForPeer(connectDevice.id)
         if (controller.connectionStatus.value != WebRtcConnectionStatus.Connected) {
             throw IllegalStateException(AppStrings.ui_join_webrtc_room_first)

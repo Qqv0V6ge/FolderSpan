@@ -1,5 +1,6 @@
 package com.folderspan.service.session
 
+import com.folderspan.AppBuildConfig
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.data.DeviceTransportType
@@ -16,7 +17,7 @@ import kotlin.time.Clock
 internal const val DEVICE_LAN_BEACON_PORT = 12041
 internal const val DEVICE_LAN_BEACON_MAX_AGE_SECONDS = 30L
 
-fun DeviceType.usesTriggeredDeviceDiscovery(): Boolean = this == DeviceType.JS
+fun DeviceType.usesTriggeredDeviceDiscovery(): Boolean = AppBuildConfig.WEBRTC_AVAILABLE && this == DeviceType.JS
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable

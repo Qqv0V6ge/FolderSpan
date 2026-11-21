@@ -13,7 +13,11 @@ plugins {
     alias(libs.plugins.build.config)
 }
 
-if (providers.gradleProperty("webrtcInterop").isPresent) {
+val includeProMain = findProject(":proMain") != null
+val proCoreSources = rootProject.file("proMain/host/core")
+val webrtcInterop = includeProMain && providers.gradleProperty("webrtcInterop").isPresent
+
+if (webrtcInterop) {
     tasks.withType<AbstractTestTask>().configureEach { outputs.upToDateWhen { false } }
 }
 
@@ -61,6 +65,7 @@ buildConfig {
     }
     buildConfigField("APP_VERSION", appReleaseVersion)
     buildConfigField("BUILD_TYPE", appBuildType)
+    buildConfigField("WEBRTC_AVAILABLE", includeProMain)
     buildConfigField("GATEWAY_BASE_URL", gatewayBaseUrl)
     buildConfigField("HTTP_PROXY_URL", httpProxyUrl)
     buildConfigField("API_HOST_HEADER", apiHostHeader)
@@ -122,6 +127,7 @@ fun resolveIosNativeXcframeworksRoot(targetName: String): String? {
 }
 
 fun podInstalledXcframeworkRoots(): List<File> {
+    if (!includeProMain) return emptyList()
     val podsRootFromEnvironment = System.getenv("PODS_ROOT")?.let(::file)
     val repoPodsRoot = rootProject.file("app/iosApp/Pods").takeIf { it.exists() }
     return listOfNotNull(
@@ -146,13 +152,14 @@ fun iosNativeXcframeworkRoots(targetName: String): List<File> {
 }
 
 fun collectXcframeworks(root: File): List<File> {
-    return if (root.name.endsWith(".xcframework")) {
+    val frameworks = if (root.name.endsWith(".xcframework")) {
         listOf(root)
     } else {
         root.listFiles()
             ?.filter { it.isDirectory && it.name.endsWith(".xcframework") }
             ?: emptyList()
     }
+    return if (includeProMain) frameworks else frameworks.filterNot { it.name == "WebRTC.xcframework" }
 }
 
 fun selectXcframeworkSlice(xcframework: File, targetName: String): File? {
@@ -457,7 +464,7 @@ kotlin {
                     }
                 )
             }
-            if (!frameworkNames.contains("WebRTC")) {
+            if (includeProMain && !frameworkNames.contains("WebRTC")) {
                 val xcframeworkRoots = iosNativeXcframeworkRoots(iosTarget.name)
                 throw GradleException(
                     buildString {
@@ -575,7 +582,12 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     sourceSets {
-        getByName("jvmTest").kotlin.srcDirs("src/udpSocketTest/kotlin", "src/jvmAndroidTest/kotlin")
+        configureEach {
+            val editionRoot = if (includeProMain) proCoreSources else project.file("src/noPro")
+            kotlin.srcDir(editionRoot.resolve("$name/kotlin"))
+        }
+        getByName("jvmTest").kotlin.srcDir("src/udpSocketTest/kotlin")
+        if (includeProMain) getByName("jvmTest").kotlin.srcDir(proCoreSources.resolve("jvmAndroidTest/kotlin"))
         getByName("jsTest").kotlin.srcDir("src/browserTest/kotlin")
         getByName("wasmJsTest").kotlin.srcDir("src/browserTest/kotlin")
         getByName("androidDeviceTest").kotlin.srcDir("src/udpSocketTest/kotlin")
@@ -590,12 +602,18 @@ kotlin {
             getByName("iosSimulatorArm64Test").kotlin.srcDir("src/storageContentIosAppTest/kotlin")
         }
         // The two interop endpoints must run together; keep them out of standalone suites.
-        if (providers.gradleProperty("webrtcInterop").isPresent) {
-            getByName("jvmTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropJvmTest/kotlin", "src/webrtcInteropHostTest/kotlin")
-            getByName("androidDeviceTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropAndroidTest/kotlin", "src/webrtcInteropHostTest/kotlin", "src/jvmAndroidTest/kotlin")
-            getByName("jsTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropJsTest/kotlin")
-            getByName("wasmJsTest").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropWasmJsTest/kotlin")
-            getByName("iosSimulatorArm64Test").kotlin.srcDirs("src/webrtcInteropCommonTest/kotlin", "src/webrtcInteropBrowserTest/kotlin", "src/webrtcInteropIosTest/kotlin")
+        if (webrtcInterop) {
+            val testSources = mapOf(
+                "jvmTest" to listOf("webrtcInteropBrowserTest", "webrtcInteropJvmTest", "webrtcInteropHostTest"),
+                "androidDeviceTest" to listOf("webrtcInteropBrowserTest", "webrtcInteropAndroidTest", "webrtcInteropHostTest", "jvmAndroidTest"),
+                "jsTest" to listOf("webrtcInteropBrowserTest", "webrtcInteropJsTest"),
+                "wasmJsTest" to listOf("webrtcInteropBrowserTest", "webrtcInteropWasmJsTest"),
+                "iosSimulatorArm64Test" to listOf("webrtcInteropBrowserTest", "webrtcInteropIosTest"),
+            )
+            testSources.forEach { (sourceSet, directories) ->
+                val paths = (listOf("webrtcInteropCommonTest") + directories).map { proCoreSources.resolve("$it/kotlin") }
+                getByName(sourceSet).kotlin.srcDirs(paths)
+            }
         }
         val commonMain = getByName("commonMain")
         val androidMain = getByName("androidMain")
@@ -629,8 +647,11 @@ kotlin {
         val nonJvmMain = maybeCreate("nonJvmMain").apply {
             dependsOn(commonMain)
         }
-        val kmpWebRtcMain = maybeCreate("kmpWebRtcMain").apply {
-            dependsOn(nonJvmMain)
+        if (includeProMain) {
+            val kmpWebRtcMain = maybeCreate("kmpWebRtcMain").apply { dependsOn(nonJvmMain) }
+            iosMain.dependsOn(kmpWebRtcMain)
+            jsMain.dependsOn(kmpWebRtcMain)
+            wasmJsMain.dependsOn(kmpWebRtcMain)
         }
         val fileStagingMain = maybeCreate("fileStagingMain").apply {
             dependsOn(commonMain)
@@ -657,14 +678,11 @@ kotlin {
         jvmMain.dependsOn(zstdMain)
         jvmMain.dependsOn(udpSocketMain)
         iosMain.dependsOn(skiaMain)
-        iosMain.dependsOn(kmpWebRtcMain)
         iosMain.dependsOn(serverRouteMain)
         iosMain.dependsOn(fileStagingMain)
         iosMain.dependsOn(zstdMain)
         jsMain.dependsOn(skiaMain)
-        jsMain.dependsOn(kmpWebRtcMain)
         wasmJsMain.dependsOn(skiaMain)
-        wasmJsMain.dependsOn(kmpWebRtcMain)
 
         commonMain.dependencies {
             implementation(libs.ksoup)
@@ -718,7 +736,7 @@ kotlin {
 
         }
         nonJvmMain.dependencies {
-            implementation(libs.webrtc.kmp)
+            if (includeProMain) implementation(libs.webrtc.kmp)
         }
         zstdMain.dependencies {
             implementation(libs.zstd.kmp)
@@ -808,12 +826,14 @@ kotlin {
             implementation(libs.sqldelight.driver.sqlite)
             implementation(libs.nucleus.notification.common)
             implementation(libs.nucleus.core.runtime)
-            // Select the native classifier explicitly; Windows ARM64 has no upstream JNI artifact.
-            implementation("dev.onvoid.webrtc:webrtc-java:$webrtcJavaVersion") {
-                isTransitive = false
-            }
-            webrtcJvmClassifier()?.let { classifier ->
-                implementation("dev.onvoid.webrtc:webrtc-java:$webrtcJavaVersion:$classifier@jar")
+            if (includeProMain) {
+                // Select the native classifier explicitly; Windows ARM64 has no upstream JNI artifact.
+                implementation("dev.onvoid.webrtc:webrtc-java:$webrtcJavaVersion") {
+                    isTransitive = false
+                }
+                webrtcJvmClassifier()?.let { classifier ->
+                    implementation("dev.onvoid.webrtc:webrtc-java:$webrtcJavaVersion:$classifier@jar")
+                }
             }
         }
         jvmTest.dependencies {

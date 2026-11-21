@@ -1,5 +1,7 @@
 package com.folderspan.service.session
 
+import com.folderspan.AppBuildConfig
+
 import com.folderspan.data.main.device.DeviceType
 import com.folderspan.service.data.DeviceDiscoveryStatus
 import com.folderspan.service.http.server.defaultDeviceShareApprovalPort
@@ -41,8 +43,8 @@ class DeviceLanBeaconTest {
     }
 
     @Test
-    fun browserUsesTriggeredWebRtcDiscovery() {
-        assertTrue(DeviceType.JS.usesTriggeredDeviceDiscovery())
+    fun browserUsesTriggeredWebRtcDiscoveryOnlyInPro() {
+        assertEquals(AppBuildConfig.WEBRTC_AVAILABLE, DeviceType.JS.usesTriggeredDeviceDiscovery())
     }
 
     @Test

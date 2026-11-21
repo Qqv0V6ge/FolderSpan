@@ -150,7 +150,7 @@ jobs:
           MACOS_RUNTIME_PROFILE_BASE64: ${{ secrets.MACOS_RUNTIME_PROFILE_BASE64 }}
         run: python3 scripts/ci/prepare-apple-profiles.py macos
       - name: Install CocoaPods dependencies
-        if: matrix.platform == 'ios'
+        if: matrix.platform == 'ios' && env.ORG_GRADLE_PROJECT_includeProMain == 'true'
         working-directory: app/iosApp
         run: pod install --deployment
       - name: Cache iOS native libraries

@@ -63,7 +63,7 @@ fun composeIosNativeRoots(targetName: String): List<File> {
         providers.gradleProperty("iosNativeXcframeworksRoot").orNull,
         providers.environmentVariable("IOS_NATIVE_XCFRAMEWORKS_ROOT").orNull,
         rootProject.file("app/iosApp/Pods/WebRTC-SDK")
-            .takeIf { it.exists() }
+            .takeIf { includeProMain && it.exists() }
             ?.absolutePath,
         file("${System.getProperty("user.home")}/ios-native-xcframeworks")
             .takeIf { it.exists() }
@@ -76,13 +76,14 @@ fun composeIosNativeRoots(targetName: String): List<File> {
 }
 
 fun composeIosXcframeworks(root: File): List<File> {
-    return if (root.name.endsWith(".xcframework")) {
+    val frameworks = if (root.name.endsWith(".xcframework")) {
         listOf(root)
     } else {
         root.listFiles()
             ?.filter { it.isDirectory && it.name.endsWith(".xcframework") }
             ?: emptyList()
     }
+    return if (includeProMain) frameworks else frameworks.filterNot { it.name == "WebRTC.xcframework" }
 }
 
 fun composeIosXcframeworkSlice(xcframework: File, targetName: String): File? {
