@@ -90,7 +90,6 @@ jobs:
       - name: Resolve install versions
         id: version
         env:
-          BUILD_PRODUCT: app
           BUILD_CHANNEL: preview
           BUILD_VERSION: ${{ inputs.version }}
         run: python3 scripts/ci/resolve-install-versions.py >> "$GITHUB_OUTPUT"

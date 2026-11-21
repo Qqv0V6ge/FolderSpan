@@ -68,21 +68,21 @@ FolderSpan 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台
 | Windows | x64 提供 MSI、EXE 与 Chocolatey 包，ARM64 提供解压即用的 ZIP。 |
 | macOS | Apple Silicon 和 Intel 均提供 DMG 与 PKG。 |
 | Linux | x64 和 ARM64 均提供 DEB、RPM、TAR.GZ 和 Flatpak。两版 x64 另提供 AppImage 和 strict Snap 候选包。 |
-| Headless Runtime | 在独立的 `FolderSpan Headless` Release 中提供 Windows、macOS 和 Linux 的无窗口运行包，适合通过浏览器管理服务器或常开设备。首次使用推荐内置 JS 界面的 `headless-runtime-…-js-pro-…` 包。 |
+| FolderSpanHeadless | 独立 Rust 无界面宿主，适合通过浏览器管理 Windows、macOS 和 Linux 上的宿主文件。 |
 | Web | 已提供 JS 和 Wasm 前端包。独立部署后需要连接 Headless Runtime，管理该 Runtime 所在机器的文件。 |
 | iOS | 正式发布提供两版面向 App Store Connect 的签名 IPA，常规预览提供 Pro 签名 IPA。设备上的测试安装通过 TestFlight。 |
 
 常规发布还包含当期 WinGet、Scoop、Chocolatey、AUR、Nix 与 F-Droid 配方压缩包。F-Droid 配方处于待审状态，各渠道配方可供独立验证。
 
-Headless Runtime 独立构建和发布，请在 [Releases 列表](https://github.com/Qqv0V6ge/FolderSpan/releases)中查找标签为 `headless-v版本号` 的 Release；常规应用使用 `v版本号`，两者的安装包与校验文件分开存放。Headless Release 也提供同版本的 JS / Wasm 前端包。
+独立无界面宿主由 FolderSpanHeadless 仓库构建和打包。本仓库的 `headless-v*` 标签是旧 JVM 宿主的发布记录。
 
-Desktop 和 Headless 发行包包含 Java Runtime，直接使用安装包无需另装 Java。Windows ARM64 包当前不支持本机原生 WebRTC。
+Desktop 安装包自带 Java Runtime，FolderSpanHeadless 作为原生二进制运行。Windows ARM64 包当前不支持本机原生 WebRTC。
 
-Headless 启动后，按控制台提示打开页面并输入访问密钥。独立部署 Web 前端时，应选择与 Runtime 相同版本的 `pro` 包；前端与 Runtime 不同源时，需要在 Runtime 的 `FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS` 中配置前端的完整来源。
+Headless 启动后，按控制台提示打开页面并输入访问密钥。独立部署 Web 前端时，应选择宿主锁定的配套 JS 或 Wasm 制品。官方房间需要 Pro 宿主与配套的 Pro Web；前端与 Runtime 不同源时，需要在 Runtime 的 `FOLDERSPAN_WEB_UI_ALLOWED_ORIGINS` 中配置前端的完整来源。
 
 Headless 提供宿主文件与连接能力，任务由浏览器页面管理；关闭页面或会话断开后，不保证任务继续运行。
 
-源码构建的 Headless 运行包排除桌面界面组件、图标、动画及桌面通知依赖，并保留业务所需的状态、数据库、加密和网络能力。需要进一步减少部署空间时，可使用 `-PruntimeWebUi=none` 构建不含前端资源的运行包，再连接单独部署的同版本 Web 前端。运行包仍包含 Java Runtime，部署到 OpenWrt 等设备前须核对 CPU 架构、libc、解包空间及可用内存。
+解压便携包后运行 `folderspan-headless`，Windows 使用 `folderspan-headless.exe`。可用 `--web-root` 指定外置网页资源。从旧 JVM 宿主切换前先停止旧进程并备份原数据。Rust 宿主使用独立的访问密钥、TLS 证书和状态目录。
 
 ## 源码运行
 
@@ -136,8 +136,8 @@ Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
 
 ### CI 构建与发布
 
-- 预览包仅通过 GitHub Actions 手动构建。打开 `Build Preview`（常规应用）或 `Build Headless Preview`，点击 `Run workflow`，选择 `all`、平台（如 `linux`，构建两种架构）或具体架构（如 `linux-arm64`）。常规应用还可单选 Android、iOS、Web JS 或 Web Wasm，`all` 包含这些目标。Headless 为选中的平台和架构生成无 Web UI、JS 和 Wasm 三种运行时包。构建产物可在运行详情的 `Artifacts` 下载，保留 14 天。
-- 正式发布使用 `Build and Release` 和 `Build and Release Headless`，可手动运行，也分别由 `v版本号` 和 `headless-v版本号` 标签触发，创建对应的草稿 Release。常规应用草稿的附件包含签名 IPA。版本格式为 `MAJOR.MINOR.PATCH`，例如 `headless-v1.0.2`。
+- 预览包仅通过 GitHub Actions 手动构建。打开 `Build Preview`，点击 `Run workflow`，选择 `all`、平台（如 `linux`，构建两种架构）或具体架构（如 `linux-arm64`）。常规应用还可单选 Android、iOS、Web JS 或 Web Wasm，`all` 包含这些目标。构建产物可在运行详情的 `Artifacts` 下载，保留 14 天。
+- 正式发布使用 `Build and Release`，可手动运行，也可由 `vMAJOR.MINOR.PATCH` 标签触发。草稿附件包含所选平台的产物。
 
 ## 工程结构
 
@@ -149,7 +149,6 @@ Windows 上将上述 `./gradlew` 替换为 `.\gradlew.bat`。
 | `app/androidApp/` | Android 应用入口与构建配置。 |
 | `app/iosApp/` | iOS 应用入口、Xcode 工程与 CocoaPods 配置。 |
 | `app/webApp/` | JavaScript 与 WebAssembly 浏览器入口。 |
-| `app/headlessRuntime/` | 无窗口运行时，为 Web 界面提供宿主文件与连接能力。 |
 
 ## 开源许可
 

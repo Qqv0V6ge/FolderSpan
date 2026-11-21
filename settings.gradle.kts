@@ -37,7 +37,6 @@ plugins {
 
 include(":app:androidApp")
 include(":app:desktopApp")
-include(":app:headlessRuntime")
 include(":app:shared")
 include(":app:webApp")
 include(":core")

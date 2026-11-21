@@ -34,11 +34,11 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
             if path.name != "build-release.yml":
                 entries.extend(dict(entry, workflow=path.name) for entry in self.read_static_package_entries(path))
 
-        self.assertEqual(len(entries), 18)
+        self.assertEqual(len(entries), 6)
         for entry in entries:
             label, output, task = entry["label"], entry["paths"], entry["tasks"]
             with self.subTest(platform=label, output=output):
-                module = re.search(r":app:(desktopApp|headlessRuntime):", task).group(1)
+                module = re.search(r":app:(desktopApp):", task).group(1)
                 mode = "Release" if "/main-release/" in output else ""
                 if label.startswith("linux-"):
                     selected = [(f"package{mode}TarGz", ".tar.gz")]
@@ -48,8 +48,6 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                     selected = [(f"create{mode}Distributable", ".zip")]
                 elif label.startswith("macos-"):
                     selected = [(f"package{mode}Dmg", ".dmg")]
-                    if module == "headlessRuntime" and entry["workflow"] == "build-headless-release.yml":
-                        selected.append(("packageReleasePkg", ".pkg"))
                 else:
                     self.fail(f"未指定打包策略的平台：{label}")
                 self.assertEqual(task.split(), [f":app:{module}:{name}" for name, _ in selected])
@@ -66,7 +64,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                 yield from entries
 
     def test_previews_only_dispatch_manually(self):
-        for file_name in ("build-preview.yml", "build-headless-preview.yml"):
+        for file_name in ("build-preview.yml",):
             workflow = (WORKFLOWS / file_name).read_text()
             trigger = workflow.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
             self.assertEqual(re.findall(r"^  ([\w-]+):", trigger, re.M), ["workflow_dispatch"])
@@ -94,7 +92,7 @@ class SinglePackageWorkflowsTest(unittest.TestCase):
                         with self.subTest(workflow=path.name, packages=count):
                             self.assertEqual(result.returncode == 0, count == 1, result.stdout + result.stderr)
                 guards += 1
-        self.assertEqual(guards, 3)
+        self.assertEqual(guards, 1)
 
     def test_apple_store_builds_default_to_pro_and_only_pro_fetches_the_submodule(self):
         release = (WORKFLOWS / "build-release.yml").read_text()

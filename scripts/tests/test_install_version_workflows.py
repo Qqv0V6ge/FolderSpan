@@ -72,11 +72,11 @@ class InstallVersionWorkflowsTest(unittest.TestCase):
                 subprocess.run(["git", "-c", "user.name=Version test", "-c", "user.email=version@example.test",
                                 "commit", "--quiet", "--allow-empty", "-m", "Source"], cwd=root, check=True)
 
-            def resolve(channel, number, version="1.1.2", product="app", cwd=root):
+            def resolve(channel, number, version="1.1.2", cwd=root):
                 return subprocess.run(
                     [sys.executable, str(SCRIPT)], cwd=cwd, capture_output=True, text=True,
                     env=dict(os.environ, BUILD_CHANNEL=channel, BUILD_VERSION=version,
-                             BUILD_PRODUCT=product, GITHUB_RUN_NUMBER=str(number)),
+                             GITHUB_RUN_NUMBER=str(number)),
                 )
 
             def outputs(result):
@@ -99,8 +99,6 @@ class InstallVersionWorkflowsTest(unittest.TestCase):
             self.assertNotEqual(missing_version.returncode, 0)
             self.assertEqual(missing_version.stdout, "")
             self.assertIn("explicit release version", missing_version.stderr)
-            self.assertEqual(outputs(resolve("release", 20, "headless-v2.0.1", "headless"))["tag"], "headless-v2.0.1")
-            self.assertEqual(outputs(resolve("release", 20, "v2.0.1", "headless"))["version"], "2.0.1")
             old = resolve("release", 100, "1.0.99")
             self.assertNotEqual(old.returncode, 0)
             self.assertEqual(old.stdout, "")
@@ -128,11 +126,10 @@ class InstallVersionWorkflowsTest(unittest.TestCase):
                 self.assertRegex(text, r"ORG_GRADLE_PROJECT_windowsPackageVersion: \$\{\{ needs\.(?:prepare|targets)\.outputs\.windows_package_version \}\}")
                 if path.name in ("build-preview.yml", "build-release.yml"):
                     self.assertRegex(text, r"ORG_GRADLE_PROJECT_androidVersionCode: \$\{\{ needs\.(?:prepare|targets)\.outputs\.android_version_code \}\}")
-        for module in ("desktopApp", "headlessRuntime"):
-            gradle = (ROOT / f"app/{module}/build.gradle.kts").read_text()
-            self.assertIn('gradleProperty("windowsPackageVersion")', gradle)
-            self.assertIn("msiPackageVersion = installVersion", gradle)
-            self.assertIn("exePackageVersion = installVersion", gradle)
+        gradle = (ROOT / "app/desktopApp/build.gradle.kts").read_text()
+        self.assertIn('gradleProperty("windowsPackageVersion")', gradle)
+        self.assertIn("msiPackageVersion = installVersion", gradle)
+        self.assertIn("exePackageVersion = installVersion", gradle)
 
 
 if __name__ == "__main__":

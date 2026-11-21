@@ -228,29 +228,15 @@ gh() {
                 else:
                     self.assertFalse(calls.exists())
 
-    def test_application_and_headless_builds_are_separate(self):
+    def test_application_builds_leave_headless_to_the_native_repository(self):
+        self.assertEqual(list(WORKFLOWS.glob("build-headless*.yml")), [])
         for kind in ("release", "preview"):
-            with self.subTest(kind=kind):
-                application = (WORKFLOWS / f"build-{kind}.yml").read_text()
-                headless = (WORKFLOWS / f"build-headless-{kind}.yml").read_text()
-                self.assertNotIn("headless-runtime", application)
-                self.assertNotIn(":app:headlessRuntime:", application)
-                jobs = re.findall(r"^  ([\w-]+):$", headless.split("\njobs:\n", 1)[1], re.M)
-                self.assertIn("headless-runtime", jobs)
-                self.assertIn("web", jobs)
-                self.assertNotIn("android", jobs)
-                self.assertNotIn("desktop", jobs)
-
-    def test_release_tags_trigger_only_the_matching_workflow(self):
-        for file, accepted, rejected in (
-            ("build-release.yml", "v1.2.3", "headless-v1.2.3"),
-            ("build-headless-release.yml", "headless-v1.2.3", "v1.2.3"),
-        ):
-            with self.subTest(workflow=file):
-                triggers = (WORKFLOWS / file).read_text().split("\npermissions:", 1)[0]
-                patterns = re.findall(r'^      - "([^"]+)"$', triggers, re.M)
-                self.assertTrue(any(fnmatch.fnmatchcase(accepted, p) for p in patterns))
-                self.assertFalse(any(fnmatch.fnmatchcase(rejected, p) for p in patterns))
+            application = (WORKFLOWS / f"build-{kind}.yml").read_text()
+            self.assertNotIn(":app:headlessRuntime:", application)
+        triggers = (WORKFLOWS / "build-release.yml").read_text().split("\npermissions:", 1)[0]
+        patterns = re.findall(r'^      - "([^"]+)"$', triggers, re.M)
+        self.assertTrue(any(fnmatch.fnmatchcase("v1.2.3", pattern) for pattern in patterns))
+        self.assertFalse(any(fnmatch.fnmatchcase("headless-v1.2.3", pattern) for pattern in patterns))
 
     def test_application_ios_workflows_reuse_signing_and_route_ipa(self):
         preview = (WORKFLOWS / "build-preview.yml").read_text()
@@ -312,67 +298,6 @@ gh() {
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Duplicate release asset name", result.stdout)
-
-    def test_headless_version_is_normalized_and_validated_before_packaging(self):
-        workflow = (WORKFLOWS / "build-headless-release.yml").read_text()
-        self.assertIn("BUILD_PRODUCT: headless", workflow)
-        self.assertIn("python3 scripts/ci/resolve-install-versions.py", workflow)
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            subprocess.run(["git", "init", "--quiet", str(root)], check=True)
-            subprocess.run(
-                ["git", "-c", "user.name=Version test", "-c", "user.email=version@example.test",
-                 "commit", "--quiet", "--allow-empty", "-m", "Source"], cwd=root, check=True,
-            )
-            subprocess.run(["git", "tag", "headless-v1.1.0"], cwd=root, check=True)
-            for version in ("headless-v1.2.3", "1.2.3", "v1.2.3", "headless-v1.2", "1.2.3-rc1", "bad"):
-                with self.subTest(version=version):
-                    result = subprocess.run(
-                        [sys.executable, str(ROOT / "scripts/ci/resolve-install-versions.py")],
-                        cwd=root, capture_output=True, text=True,
-                        env=dict(os.environ, BUILD_VERSION=version, BUILD_CHANNEL="release", BUILD_PRODUCT="headless"),
-                    )
-                    if version in ("headless-v1.2.3", "1.2.3", "v1.2.3"):
-                        self.assertEqual(result.returncode, 0, result.stderr)
-                        output = dict(line.split("=", 1) for line in result.stdout.splitlines())
-                        self.assertEqual(output["tag"], "headless-v1.2.3")
-                        self.assertEqual(output["version"], "1.2.3")
-                        self.assertEqual(output["source_revision"], "1")
-                    else:
-                        self.assertNotEqual(result.returncode, 0)
-                        self.assertEqual(result.stdout, "")
-        self.assertEqual(workflow.count(
-            "      ORG_GRADLE_PROJECT_releaseVersion: ${{ needs.prepare.outputs.version }}"), 2)
-
-    def test_headless_release_is_created_with_its_own_tag_and_title(self):
-        workflow = (WORKFLOWS / "build-headless-release.yml").read_text()
-        script = step_script(workflow, "Create or update draft GitHub Release")
-        stub = '''
-gh() {
-  if [[ "$1 $2" == "release view" && "$5" == "isDraft,targetCommitish" ]]; then
-    return 1
-  fi
-  printf '%s\\0' "$@" >> "$GH_CALL_LOG"
-}
-'''
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "release-assets").mkdir()
-            (root / "release-assets/runtime.zip").touch()
-            log = root / "calls"
-            result = subprocess.run(
-                ["bash", "-e", "-o", "pipefail", "-c", stub + script], cwd=root,
-                capture_output=True, text=True,
-                env=dict(os.environ, RELEASE_TAG="headless-v1.2.3", GITHUB_SHA="test-commit",
-                         GH_CALL_LOG=str(log), GITHUB_STEP_SUMMARY=str(root / "summary")),
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            arguments = log.read_bytes().decode().split("\0")
-            self.assertEqual(arguments[:3], ["release", "create", "headless-v1.2.3"])
-            self.assertIn("FolderSpan Headless 1.2.3", arguments)
-            self.assertIn("--draft", arguments)
-            self.assertIn("--latest=false", arguments)
-
 
 if __name__ == "__main__":
     unittest.main()

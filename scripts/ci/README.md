@@ -11,7 +11,7 @@ Preview 和 Release 均使用生产构建和原有应用标识、签名、数据
 
 用户安装同一发布仓库、同一应用与签名、相同代码或更新代码的正式包时，无需为了渠道切换而卸载或清理数据。已经下载的旧包无法修改内部版本，须重新构建正式包；此前使用 Debug 密钥的旧预览包还受 Android 签名兼容限制，不能仅靠改版本号覆盖。真正回退到更旧代码、跨不同源码仓库或重写过的 Git 历史不在这个升级顺序保证内；不要通过强制降级绕过系统保护。
 
-已发布兼容依据：公开仓库的 `v1.0.0`、`v1.0.1`、`v1.1.0`、`v1.1.1` 及 `headless-v1.1.0`；此前安装版本来自语义版本和独立工作流序号。此次仅调整打包元数据，不修改应用 ID、签名密钥、数据库或数据目录，不需要数据迁移。
+已发布兼容依据：公开仓库的 `v1.0.0`、`v1.0.1`、`v1.1.0` 和 `v1.1.1`；此前安装版本来自语义版本和独立工作流序号。此次仅调整打包元数据，不修改应用 ID、签名密钥、数据库或数据目录，不需要数据迁移。
 
 | 对象 | 发布证据 | 兼容处理 | 数据迁移 | 版本提升 |
 | --- | --- | --- | --- | --- |
@@ -24,6 +24,6 @@ Apple 商店中已经上传的完整历史未在本机核实；当前验证覆�
 
 Preview and Release share production builds, app identity, signing keys and data paths. The resolver derives install versions from complete source history, never from per-workflow counters. For source revision `R`, Preview uses `2R` and Release uses `2R+1`; a subsequent source revision is newer than either build of its predecessor. Re-running the same source revision and channel keeps the same install version.
 
-The public semantic version remains separate from Android's `versionCode`, Windows MSI/EXE versions and Apple build numbers. Winget manifests use the MSI's actual `ProductVersion` for package and installed-version comparisons, while download URLs retain the public release tag. An empty Preview version uses the latest release-tag version for that product; Release requires an explicit version, and a new draft needs an unused version. Source revisions, platform ranges and published baselines are validated before packaging.
+The public semantic version remains separate from Android's `versionCode`, Windows MSI/EXE versions and Apple build numbers. Winget manifests use the MSI's actual `ProductVersion` for package and installed-version comparisons, while download URLs retain the public release tag. An empty Preview version uses the latest release-tag version for the client; Release requires an explicit version, and a new draft needs an unused version. Source revisions, platform ranges and published baselines are validated before packaging.
 
 The guarantee applies to the same publishing repository, app identity and signing key with unchanged or newer source. Existing old artifacts must be rebuilt; changing a version number does not make old debug-signed APKs compatible with the production signing key. It does not authorize downgrading older source, changing repositories or rewriting publishing history. No app data migration or uninstall is introduced. Actual device installation remains a separate platform acceptance check.

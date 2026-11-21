@@ -32,16 +32,9 @@ import strings.AppStrings
 import java.nio.file.Path
 import kotlin.system.exitProcess
 
-data class FolderSpanRuntimeStatus(
-    val lockHeld: Boolean,
-    val webUiRunning: Boolean,
-    val webUiPort: Int? = null,
-    val errorCode: String? = null,
-)
-
 private val runtimeMutex = Mutex()
 
-/** Desktop business services; the Web UI listener belongs to startHeadlessPlatformRuntime only. */
+/** Desktop business services; the Web UI listener runs in FolderSpanHeadless. */
 suspend fun startFolderSpanRuntime(
     koin: Koin = GlobalContext.get(),
     onStarted: () -> Unit = {},
@@ -110,15 +103,6 @@ suspend fun startFolderSpanRuntime(
         } finally {
             runtimeMutex.unlock()
         }
-    }
-}
-
-fun printWebUiUrls(urls: List<String>, oneTimeSecret: String?) {
-    println("FolderSpan Web UI")
-    urls.sortedBy { url -> if (url.startsWith("https://")) 0 else 1 }
-        .forEach { url -> println("  $url") }
-    if (!oneTimeSecret.isNullOrBlank()) {
-        println(AppStrings.ui_web_ui_setup_secret_arg0.format(arg0 = oneTimeSecret))
     }
 }
 

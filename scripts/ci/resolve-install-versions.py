@@ -48,19 +48,15 @@ def git(*arguments):
 
 
 def main():
-    product = os.environ.get("BUILD_PRODUCT", "app")
-    if product not in ("app", "headless"):
-        raise ValueError("Build product must be app or headless.")
-    prefix = "v" if product == "app" else "headless-v"
     if git("rev-parse", "--is-shallow-repository") != "false":
         raise ValueError("Install versions need full Git history; use checkout fetch-depth: 0.")
     versions = []
-    for tag in git("tag", "--list", f"{prefix}*").splitlines():
-        value = tag.removeprefix(prefix)
+    for tag in git("tag", "--list", "v*").splitlines():
+        value = tag.removeprefix("v")
         if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value):
             versions.append(semantic_version(value))
     baseline = max(versions, default=(1, 0, 0))
-    requested = os.environ.get("BUILD_VERSION", "").strip().removeprefix(prefix).removeprefix("v")
+    requested = os.environ.get("BUILD_VERSION", "").strip().removeprefix("v")
     channel = os.environ["BUILD_CHANNEL"]
     if channel == "release" and not requested:
         raise ValueError("Set an explicit release version; preview alone may reuse the published baseline.")
@@ -68,7 +64,7 @@ def main():
     if semantic_version(version) < baseline:
         raise ValueError("Version is older than the published baseline; choose the current or a newer version.")
     result = derive_versions(version, int(git("rev-list", "--count", "HEAD")), channel)
-    result["tag"] = prefix + result["version"]
+    result["tag"] = "v" + result["version"]
     for name, value in result.items():
         print(f"{name}={value}")
 

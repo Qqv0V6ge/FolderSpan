@@ -100,7 +100,6 @@ jobs:
       - name: Resolve install versions
         id: version
         env:
-          BUILD_PRODUCT: app
           BUILD_CHANNEL: release
           BUILD_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version }}
         run: python3 scripts/ci/resolve-install-versions.py >> "$GITHUB_OUTPUT"

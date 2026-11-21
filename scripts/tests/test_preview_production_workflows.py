@@ -26,7 +26,6 @@ def step_script(block):
 class PreviewProductionWorkflowsTest(unittest.TestCase):
     def test_every_preview_uses_production_builds_and_matching_artifact_paths(self):
         paths = [WORKFLOWS / "build-preview.yml"]
-        paths += [path for path in WORKFLOWS.glob("build-headless*.yml") if "release" not in path.name]
         for path in paths:
             workflow = path.read_text()
             with self.subTest(workflow=path.name):
