@@ -101,6 +101,8 @@ data class WebRtcRoomProfile(
     val maxDevices: Int = 0,
     val officialType: WebRtcOfficialRoomType? = null,
     val owned: Boolean = false,
+    val pendingCount: Int = 0,
+    val memberCount: Int = 0,
 ) {
     val catalogKey: String
         get() = when (source) {
@@ -190,6 +192,8 @@ fun officialWebRtcRoomProfile(
     maxDevices: Int = 0,
     officialType: WebRtcOfficialRoomType = WebRtcOfficialRoomType.Custom,
     owned: Boolean = true,
+    pendingCount: Int = 0,
+    memberCount: Int = 0,
 ): WebRtcRoomProfile = WebRtcRoomProfile(
     id = 0L,
     name = name,
@@ -207,6 +211,8 @@ fun officialWebRtcRoomProfile(
     maxDevices = maxDevices,
     officialType = officialType,
     owned = owned,
+    pendingCount = pendingCount,
+    memberCount = memberCount,
 )
 
 fun WebRtcRoomProfile.withoutCachedTurnPassword(): WebRtcRoomProfile =

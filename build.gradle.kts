@@ -1,4 +1,8 @@
 import org.gradle.api.tasks.testing.Test
+import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnPlugin
+import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension
+import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin
+import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootExtension
 
 plugins {
     // this is necessary to avoid the plugins to be loaded multiple times
@@ -17,6 +21,21 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.ktor) apply false
     alias(libs.plugins.sqldelight) apply false
+}
+
+if (findProject(":proMain") == null) {
+    // Kotlin checks the exact Yarn lock contents. Pro adds its own Web dependencies.
+    plugins.withType<YarnPlugin> {
+        extensions.configure<YarnRootExtension> {
+            lockFileNameProperty.set("yarn-no-pro.lock")
+        }
+    }
+    plugins.withType<WasmYarnPlugin> {
+        extensions.configure<WasmYarnRootExtension> {
+            lockFileDirectoryProperty.set(layout.projectDirectory.dir("kotlin-js-store"))
+            lockFileNameProperty.set("yarn-wasm-no-pro.lock")
+        }
+    }
 }
 
 // One source of license files for every application artifact.

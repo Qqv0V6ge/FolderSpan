@@ -73,7 +73,7 @@ FolderSpan 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台
 
 常规发布还包含当期 WinGet、Scoop、Chocolatey、AUR、Nix 与 F-Droid 配方压缩包。F-Droid 配方处于待审状态，各渠道配方可供独立验证。
 
-独立无界面宿主由 FolderSpanHeadless 仓库构建和打包。本仓库的 `headless-v*` 标签是旧 JVM 宿主的发布记录。
+FolderSpanHeadless 提供普通版 Rust 宿主源码。在本仓库 Actions 的 **Package FolderSpanHeadless** 中可选择普通版、Pro 或同时构建。普通版便携包内置配套的 JS 或 Wasm 界面。Pro 的宿主和配套外置 Web 由私有工作流构建，产物和日志保存在该私有运行中。本仓库的 `headless-v*` 标签保留旧 JVM 宿主的发布记录。
 
 Desktop 安装包自带 Java Runtime，FolderSpanHeadless 作为原生二进制运行。Windows ARM64 包当前不支持本机原生 WebRTC。
 

@@ -1,0 +1,233 @@
+name: Package FolderSpanHeadless
+
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: "构建版本"
+        type: choice
+        options: [standard, pro, both]
+        default: standard
+      web_kind:
+        description: "配套 Web 制品"
+        type: choice
+        options: [js, wasm]
+        default: js
+      build_linux_x64:
+        description: "打包 Linux x64"
+        type: boolean
+        default: true
+      build_linux_arm64:
+        description: "打包 Linux ARM64"
+        type: boolean
+        default: true
+      build_windows_x64:
+        description: "打包 Windows x64"
+        type: boolean
+        default: true
+      build_windows_arm64:
+        description: "打包 Windows ARM64"
+        type: boolean
+        default: true
+      build_macos_x64:
+        description: "打包 macOS x64"
+        type: boolean
+        default: true
+      build_macos_arm64:
+        description: "打包 macOS ARM64"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  HEADLESS_RUST: '1.88.0'
+  WEB_EDITION: standard
+
+jobs:
+  prepare:
+    name: Select standard Headless package platforms
+    if: inputs.edition != 'pro'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.targets.outputs.native }}
+      repository: ${{ steps.host.outputs.repository }}
+      ref: ${{ steps.host.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate Headless repository and commit
+        id: host
+        env:
+          HEADLESS_REPOSITORY: ${{ vars.HEADLESS_REPOSITORY }}
+          HEADLESS_REF: ${{ vars.HEADLESS_REF }}
+        run: |
+          if [[ ! "$HEADLESS_REPOSITORY" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ||
+                ! "$HEADLESS_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Set HEADLESS_REPOSITORY (owner/repo) and HEADLESS_REF (full commit SHA)."
+            exit 1
+          fi
+          printf 'repository=%s\nref=%s\n' "$HEADLESS_REPOSITORY" "$HEADLESS_REF" >> "$GITHUB_OUTPUT"
+      - name: Filter platform matrix
+        id: targets
+        env:
+          BUILD_INPUTS: ${{ toJSON(inputs) }}
+          PACKAGE_MATRIX: >-
+            {"native":[
+              {"os":"ubuntu-24.04","label":"linux-x64","target":"x86_64-unknown-linux-gnu"},
+              {"os":"ubuntu-24.04-arm","label":"linux-arm64","target":"aarch64-unknown-linux-gnu"},
+              {"os":"windows-2025","label":"windows-x64","target":"x86_64-pc-windows-msvc"},
+              {"os":"windows-11-arm","label":"windows-arm64","target":"aarch64-pc-windows-msvc"},
+              {"os":"macos-15-intel","label":"macos-x64","target":"x86_64-apple-darwin"},
+              {"os":"macos-15","label":"macos-arm64","target":"aarch64-apple-darwin"}
+            ]}
+        run: python3 scripts/ci/select-build-targets.py >> "$GITHUB_OUTPUT"
+
+  web:
+    name: Build companion Web (${{ inputs.web_kind }})
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ORG_GRADLE_PROJECT_folderspanBuildType: release
+      ORG_GRADLE_PROJECT_includeProMain: 'false'
+      NODE_OPTIONS: --max-old-space-size=8192
+      WEB_KIND: ${{ inputs.web_kind }}
+      WEB_TARGET: ${{ inputs.web_kind == 'wasm' && 'wasmJs' || 'js' }}
+    steps:
+      - name: Check out client
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check out native host
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.prepare.outputs.repository }}
+          ref: ${{ needs.prepare.outputs.ref }}
+          path: native-headless
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build production Web
+        run: ./gradlew --no-daemon --max-workers=1 ":app:webApp:${WEB_TARGET}BrowserDistribution" --stacktrace
+      - name: Seal Web and record the client revision
+        run: |
+          stage="$RUNNER_TEMP/headless-web"
+          mkdir -p "$stage"
+          python3 native-headless/tools/web_artifact.py \
+            --source "app/webApp/build/dist/$WEB_TARGET/productionExecutable" \
+            --output "$stage/web-ui" --lock "$stage/upstream.lock.json" \
+            --kind "$WEB_KIND" --edition "$WEB_EDITION" --client-commit "$(git rev-parse HEAD)" \
+            --host-commit "$(git -C native-headless rev-parse HEAD)"
+      - name: Upload sealed companion Web
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-web-${{ inputs.web_kind }}-${{ env.WEB_EDITION }}
+          path: ${{ runner.temp }}/headless-web/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  package:
+    name: Package Headless (${{ matrix.platform.label }})
+    needs: [prepare, web]
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.prepare.outputs.native) }}
+    env:
+      RUST_TARGET: ${{ matrix.platform.target }}
+    steps:
+      - name: Check out native host
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.prepare.outputs.repository }}
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Download sealed companion Web
+        uses: actions/download-artifact@v8
+        with:
+          name: headless-web-${{ inputs.web_kind }}-${{ env.WEB_EDITION }}
+          path: ${{ runner.temp }}/headless-web
+      - name: Build and package native host
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
+        run: |
+          rustup toolchain install "$HEADLESS_RUST" --profile minimal --target "$RUST_TARGET"
+          rustup default "$HEADLESS_RUST"
+          cargo build --release --locked --target "$RUST_TARGET"
+          python tools/collect_licenses.py --target "$RUST_TARGET"
+          stage="$RUNNER_TEMP/headless-web"
+          python tools/web_artifact.py --verify "$stage/web-ui" --lock "$stage/upstream.lock.json" \
+            --host-commit "$(git rev-parse HEAD)"
+          python tools/package.py --target "$RUST_TARGET" --edition "$WEB_EDITION" \
+            --lock "$stage/upstream.lock.json" --web-root "$stage/web-ui"
+      - name: Upload Headless portable archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-${{ matrix.platform.label }}-${{ inputs.web_kind }}-${{ env.WEB_EDITION }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  pro:
+    name: Build Headless Pro in the private repository
+    if: inputs.edition != 'standard'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment: headless-pro-dispatch
+    permissions: {}
+    steps:
+      - name: Dispatch and wait for the private build
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PRO_REPOSITORY: ${{ vars.HEADLESS_PRO_REPOSITORY }}
+          PRO_DISPATCH_TOKEN: ${{ secrets.HEADLESS_PRO_DISPATCH_TOKEN }}
+          BUILD_INPUTS: ${{ toJSON(inputs) }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::error::Run Headless Pro from the default branch."
+            exit 1
+          fi
+          if [[ ! "$PRO_REPOSITORY" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ || -z "$PRO_DISPATCH_TOKEN" ]]; then
+            echo "::error::Configure the private Headless Pro repository and dispatch credential."
+            exit 1
+          fi
+          api() {
+            curl --silent --show-error --fail --max-time 30 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $PRO_DISPATCH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2026-03-10" "$@"
+          }
+          repository="$GITHUB_API_URL/repos/$PRO_REPOSITORY"
+          branch="$(api "$repository" | jq -er 'select(.private == true) | .default_branch')"
+          request="$(jq -cn --arg ref "$branch" --arg sha "$GITHUB_SHA" --argjson inputs "$BUILD_INPUTS" \
+            '{ref: $ref, inputs: ($inputs | del(.edition) + {client_ref: $sha})}')"
+          run_id="$(api -H "Content-Type: application/json" --data "$request" \
+            "$repository/actions/workflows/package-headless-pro.yml/dispatches" \
+            | jq -er '.workflow_run_id | numbers')"
+          printf 'Headless Pro run [%s](%s/%s/actions/runs/%s) is in the private repository.\n' \
+            "$run_id" "$GITHUB_SERVER_URL" "$PRO_REPOSITORY" "$run_id" >> "$GITHUB_STEP_SUMMARY"
+          while true; do
+            run="$(api --retry 3 "$repository/actions/runs/$run_id")"
+            if [[ "$(jq -er '.status' <<< "$run")" == completed ]]; then
+              result="$(jq -er '.conclusion' <<< "$run")"
+              echo "Private Headless Pro build: $result"
+              [[ "$result" == success ]]
+              exit 0
+            fi
+            sleep 30
+          done
