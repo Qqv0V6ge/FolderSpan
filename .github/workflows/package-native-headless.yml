@@ -222,7 +222,8 @@ jobs:
           printf 'Headless Pro run [%s](%s/%s/actions/runs/%s) is in the private repository.\n' \
             "$run_id" "$GITHUB_SERVER_URL" "$PRO_REPOSITORY" "$run_id" >> "$GITHUB_STEP_SUMMARY"
           while true; do
-            run="$(api --retry 3 "$repository/actions/runs/$run_id")"
+            # A new run can briefly return 404 before GitHub makes it readable.
+            run="$(api --retry 5 --retry-all-errors --retry-max-time 60 "$repository/actions/runs/$run_id")"
             if [[ "$(jq -er '.status' <<< "$run")" == completed ]]; then
               result="$(jq -er '.conclusion' <<< "$run")"
               echo "Private Headless Pro build: $result"
