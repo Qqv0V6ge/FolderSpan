@@ -2,6 +2,7 @@ package com.folderspan.cleanup
 
 import com.folderspan.settings.IosKeychainStore
 import com.folderspan.utils.FileAccessPermission
+import com.folderspan.utils.IosDatabaseStorage
 import com.folderspan.utils.NativePathUtils
 import com.folderspan.utils.PathUtils
 import com.russhwolf.settings.NSUserDefaultsSettings
@@ -15,7 +16,6 @@ import okio.use
 import platform.Foundation.NSUserDefaults
 
 private const val CLEANUP_REQUEST_FILE = ".folderspan-cleanup-pending"
-private const val DATABASE_NAME = "folderspan.db"
 private const val APP_GROUP_IDENTIFIER = "group.com.folderspan.FolderSpan"
 private const val APP_GROUP_LANGUAGE_KEY = "settings.appearance.language"
 
@@ -76,13 +76,9 @@ actual object ApplicationDataCleanup {
         val appPath = PathUtils.getAppPath().trimEnd('/')
         val cachePath = PathUtils.getCachePath().trimEnd('/')
         if (ApplicationDataCleanupCategory.ApplicationData in categories) {
-            listOf(
-                "$appPath/$DATABASE_NAME",
-                "$appPath/$DATABASE_NAME-wal",
-                "$appPath/$DATABASE_NAME-shm",
-                "$appPath/$DATABASE_NAME-journal",
-                "$appPath/Library/Application Support/FolderSpan/tls-identity",
-            ).forEach(::deleteRecursively)
+            // 数据库清理由存储模块提供新旧路径，保持与驱动使用的路径一致。
+            IosDatabaseStorage.pathsForCleanup(appPath).forEach(::deleteRecursively)
+            deleteRecursively("$appPath/Library/Application Support/FolderSpan/tls-identity")
         }
         if (ApplicationDataCleanupCategory.PreferencesAndAccount in categories) {
             NSUserDefaultsSettings.Factory().create("FolderSpan").clear()

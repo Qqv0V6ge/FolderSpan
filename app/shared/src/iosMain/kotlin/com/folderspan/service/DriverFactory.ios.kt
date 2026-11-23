@@ -4,30 +4,21 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import com.folderspan.db.FolderSpanDatabase
 import com.folderspan.utils.DatabaseReady
-import com.folderspan.utils.PathUtils
-import com.folderspan.utils.protectIosPrivatePath
+import com.folderspan.utils.IosDatabaseStorage
 
 actual class DriverFactory {
     actual fun createDriver(): SqlDriver {
-        val databaseName = "folderspan.db"
-        val basePath = PathUtils.getAppPath()
+        // 沙盒根目录可能不可写，先准备 Application Support 下的私有数据库目录。
+        val basePath = IosDatabaseStorage.prepareDirectory()
         val driver = NativeSqliteDriver(
             FolderSpanDatabase.Schema,
-            databaseName,
+            IosDatabaseStorage.databaseName,
             onConfiguration = { config ->
                 config.copy(extendedConfig = config.extendedConfig.copy(basePath = basePath))
             }
         )
-        protectIosPrivateDatabaseFiles(basePath, databaseName)
+        IosDatabaseStorage.protectDatabaseFiles(basePath)
         DatabaseReady.markReady()
         return driver
-    }
-
-    private fun protectIosPrivateDatabaseFiles(basePath: String, databaseName: String) {
-        val root = basePath.trimEnd('/')
-        protectIosPrivatePath("$root/$databaseName")
-        protectIosPrivatePath("$root/$databaseName-wal")
-        protectIosPrivatePath("$root/$databaseName-shm")
-        protectIosPrivatePath("$root/$databaseName-journal")
     }
 }

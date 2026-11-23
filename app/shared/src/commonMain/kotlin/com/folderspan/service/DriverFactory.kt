@@ -58,7 +58,7 @@ expect class DriverFactory() {
 // - macOS ~/Library/Application Support/FolderSpan/folderspan.db
 // - Windows %APPDATA%/FolderSpan/folderspan.db
 // - Linux ~/.local/share/FolderSpan/folderspan.db
-// - iOS: app sandbox home directory (NSHomeDirectory)/folderspan.db
+// - iOS：应用沙盒的 Library/Application Support/FolderSpan/database/folderspan.db
 // - JS/WASM: SQL.js WebWorkerDriver snapshots the database into IndexedDB.
 fun createDatabase(driverFactory: DriverFactory): FolderSpanDatabase = createDatabase(driverFactory.createDriver())
 
