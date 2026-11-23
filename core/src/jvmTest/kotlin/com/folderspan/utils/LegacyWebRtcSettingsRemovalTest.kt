@@ -1,62 +1,35 @@
 package com.folderspan.utils
 
+import com.folderspan.test.createInMemorySettings
+import com.folderspan.ui.state.main.DrawerState
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class LegacyWebRtcSettingsRemovalTest {
     @Test
-    fun usedWebRtcDrawerSettingsRemainAvailable() {
-        val settingsUtils = readProjectFile("core/src/commonMain/kotlin/com/folderspan/utils/SettingsUtils.kt")
-        val drawerState = readProjectFile("core/src/commonMain/kotlin/com/folderspan/ui/state/main/DrawerState.kt")
-        val pageSettings = readProjectFile(
-            "app/shared/src/commonMain/kotlin/com/folderspan/ui/screen/settings/PageSettingsScreen.kt"
+    fun webRtcDrawerPreferencesUseExistingSettingsKeys() {
+        val expandKey = "settings.drawer.expand.webrtc"
+        val showKey = "settings.drawer.show.webrtc"
+        val settings = createInMemorySettings(
+            expandKey to false,
+            showKey to true,
         )
-        val appDrawer = readProjectFile("app/shared/src/commonMain/kotlin/com/folderspan/ui/components/drawer/AppDrawer.kt")
+        val drawerState = DrawerState(settings)
 
-        listOf(
-            "KEY_DRAWER_EXPAND_WEBRTC",
-            "KEY_DRAWER_SHOW_WEBRTC",
-            "\"settings.drawer.expand.webrtc\"",
-            "\"settings.drawer.show.webrtc\"",
-        ).forEach { token ->
-            assertTrue(settingsUtils.contains(token), "$token should remain in SettingsUtils.kt")
-        }
+        assertFalse(drawerState.isExpandWebRtc.value)
+        assertTrue(drawerState.isShowWebRtc.value)
 
-        listOf(
-            "isExpandWebRtc",
-            "updateExpandWebRtc",
-            "isShowWebRtc",
-            "updateShowWebRtc",
-            "KEY_DRAWER_EXPAND_WEBRTC",
-            "KEY_DRAWER_SHOW_WEBRTC",
-        ).forEach { token ->
-            assertTrue(drawerState.contains(token), "$token should remain in DrawerState.kt")
-        }
+        drawerState.updateExpandWebRtc(true)
+        drawerState.updateShowWebRtc(false)
 
-        listOf(
-            "AppStrings.webrtc_label",
-            "isShowWebRtc",
-            "updateShowWebRtc",
-        ).forEach { token ->
-            assertTrue(pageSettings.contains(token), "$token should remain in PageSettingsScreen.kt")
-        }
-
-        listOf(
-            "isShowWebRtc",
-            "rememberAppDrawerWebRtcUiState()",
-        ).forEach { token ->
-            assertTrue(appDrawer.contains(token), "$token should remain in AppDrawer.kt")
-        }
-
-        assertTrue(
-            Files.exists(
-                projectRoot().resolve("app/shared/src/commonMain/kotlin/com/folderspan/ui/components/drawer/AppDrawerWebRtc.kt")
-            ),
-            "AppDrawerWebRtc.kt should remain because the drawer uses it"
-        )
+        assertTrue(drawerState.isExpandWebRtc.value)
+        assertFalse(drawerState.isShowWebRtc.value)
+        assertEquals(true, settings.getBooleanOrNull(expandKey))
+        assertEquals(false, settings.getBooleanOrNull(showKey))
     }
 
     @Test
