@@ -25,6 +25,11 @@ tasks.matching { it.name.startsWith("cinteropOpensslIos") }.configureEach {
     inputs.file(layout.projectDirectory.file("src/iosMain/cinterop/openssl_wrapper.h"))
 }
 
+// 包装头包含心跳兼容逻辑，修改后必须重新生成两种 iOS 目标的互操作绑定。
+tasks.matching { it.name.startsWith("cinteropLibsmb2Ios") }.configureEach {
+    inputs.file(layout.projectDirectory.file("src/iosMain/cinterop/smb2_wrapper.h"))
+}
+
 val appReleaseVersion = providers.gradleProperty("releaseVersion")
     .map { item -> item.removePrefix("v") }
     .orElse("1.0.0")

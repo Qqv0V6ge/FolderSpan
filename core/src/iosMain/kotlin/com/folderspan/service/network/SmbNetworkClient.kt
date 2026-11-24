@@ -25,7 +25,7 @@ import platform.smb2.smb2_closedir
 import platform.smb2.smb2_connect_share
 import platform.smb2.smb2_destroy_context
 import platform.smb2.smb2_disconnect_share
-import platform.smb2.smb2_echo
+import platform.smb2.folderspan_smb2_echo
 import platform.smb2.smb2_set_timeout
 import platform.smb2.smb2_get_error
 import platform.smb2.smb2_init_context
@@ -301,7 +301,8 @@ internal class SmbNetworkClient(private val network: NetworkConnectionConfig) : 
 
     companion object {
         private val sessions = NetworkSessionCache<CPointer<smb2_context>>(
-            isOpen = { smb2_echo(it) == 0 },
+            // 通过异步 ECHO 驱动真实心跳，避开 libsmb2 6.2 的同步连接误判。
+            isOpen = { folderspan_smb2_echo(it) == 0 },
             close = { smb2_disconnect_share(it); smb2_destroy_context(it) },
             isConnectionFailure = { true },
             // libsmb2 的同步上下文由单个操作独占，完成后交回缓存复用。
