@@ -1,10 +1,12 @@
 package com.folderspan.cleanup
 
 import com.folderspan.settings.IosKeychainStore
+import com.folderspan.ui.state.main.IosSyncTaskStorage
 import com.folderspan.utils.FileAccessPermission
 import com.folderspan.utils.IosDatabaseStorage
 import com.folderspan.utils.NativePathUtils
 import com.folderspan.utils.PathUtils
+import com.folderspan.utils.iosApplicationSupportRoot
 import com.russhwolf.settings.NSUserDefaultsSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,11 +26,6 @@ private val IOS_AVAILABLE_CATEGORIES = setOf(
     ApplicationDataCleanupCategory.PreferencesAndAccount,
     ApplicationDataCleanupCategory.TransferHistory,
     ApplicationDataCleanupCategory.CacheAndLogs,
-)
-
-private val APPLICATION_DIRECTORY_NAMES = listOf(
-    "share-history",
-    "sync-tasks",
 )
 
 private val APPLICATION_CACHE_DIRECTORY_NAMES = listOf(
@@ -78,7 +75,7 @@ actual object ApplicationDataCleanup {
         if (ApplicationDataCleanupCategory.ApplicationData in categories) {
             // 数据库清理由存储模块提供新旧路径，保持与驱动使用的路径一致。
             IosDatabaseStorage.pathsForCleanup(appPath).forEach(::deleteRecursively)
-            deleteRecursively("$appPath/Library/Application Support/FolderSpan/tls-identity")
+            deleteRecursively((iosApplicationSupportRoot(appPath.toPath()) / "tls-identity").toString())
         }
         if (ApplicationDataCleanupCategory.PreferencesAndAccount in categories) {
             NSUserDefaultsSettings.Factory().create("FolderSpan").clear()
@@ -87,9 +84,8 @@ actual object ApplicationDataCleanup {
                 .removeObjectForKey(APP_GROUP_LANGUAGE_KEY)
         }
         if (ApplicationDataCleanupCategory.TransferHistory in categories) {
-            APPLICATION_DIRECTORY_NAMES.forEach { name ->
-                deleteRecursively("$appPath/$name")
-            }
+            IosSyncTaskStorage.clear(appPath.toPath())
+            deleteRecursively("$appPath/share-history")
         }
         if (ApplicationDataCleanupCategory.CacheAndLogs in categories) {
             APPLICATION_CACHE_DIRECTORY_NAMES.forEach { name ->

@@ -11,12 +11,9 @@ object IosDatabaseStorage {
     private val recoveryFiles = listOf("$databaseName-wal", "$databaseName-journal")
     private val databaseFiles = listOf(databaseName, "$databaseName-shm") + recoveryFiles
 
-    private fun storageDirectory(home: Path): Path =
-        home / "Library" / "Application Support" / "FolderSpan"
+    private fun databaseDirectory(home: Path): Path = iosApplicationSupportRoot(home) / "database"
 
-    private fun databaseDirectory(home: Path): Path = storageDirectory(home) / "database"
-
-    private fun migrationDirectory(home: Path): Path = storageDirectory(home) / "database-migration"
+    private fun migrationDirectory(home: Path): Path = iosApplicationSupportRoot(home) / "database-migration"
 
     fun prepareDirectory(): String = prepareDirectory(PathUtils.getAppPath().toPath()).toString()
 

@@ -7,6 +7,7 @@ import strings.AppStrings
 import com.folderspan.createSettings
 import com.folderspan.utils.PathUtils
 import com.folderspan.utils.SettingsUtils
+import com.folderspan.utils.iosApplicationSupportRoot
 import com.folderspan.utils.protectIosPrivatePath
 import kotlinx.cinterop.*
 import okio.FileSystem
@@ -38,7 +39,7 @@ internal object DeviceTlsIdentityFileStore {
     }
 
     private fun defaultStore(): IosTlsIdentityFileStore {
-        val directory = PathUtils.getAppPath().trimEnd('/') + "/Library/Application Support/FolderSpan/tls-identity"
+        val directory = (iosApplicationSupportRoot(PathUtils.getAppPath().toPath()) / "tls-identity").toString()
         val deviceId = createSettings().getString(SettingsUtils.KEY_DEVICE_ID, "")
         return openIosTlsIdentityFileStore(directory, deviceId)
     }

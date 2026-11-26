@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-private const val SYNC_TASK_STORE_DIR_NAME = "sync-tasks"
+internal const val SYNC_TASK_STORE_DIR_NAME = "sync-tasks"
 private const val SYNC_TASK_STORE_TASK_DIR_NAME = "tasks"
 private const val SYNC_TASK_STORE_RUN_DIR_NAME = "runs"
 private const val SYNC_TASK_STORE_META_FILE_NAME = "meta.pb64"
@@ -45,9 +45,13 @@ private data class SyncTaskStoreMeta(
     val nextTaskId: Long = 1L,
 )
 
-class TempSyncTaskStore(
-    private val baseDir: String = buildDefaultSyncTaskStoreDir(),
-) : SyncTaskStore {
+class TempSyncTaskStore private constructor(resolveBaseDir: () -> String) : SyncTaskStore {
+    constructor() : this(::buildDefaultSyncTaskStoreDir)
+    constructor(baseDir: String) : this({ baseDir })
+
+    // 首次读写时在操作锁内解析路径，迁移失败后下次操作仍可重试。
+    private val baseDir by lazy(resolveBaseDir)
+
     private companion object {
         val operationLock = TaskRuntimeStoreLock()
     }
@@ -294,8 +298,12 @@ class TempSyncTaskStore(
 }
 
 private fun buildDefaultSyncTaskStoreDir(): String {
-    return joinPath(PrivateFileStorage.getAppPath().trimEnd('/', '\\'), SYNC_TASK_STORE_DIR_NAME)
+    val legacyDirectory = joinPath(PrivateFileStorage.getAppPath(), SYNC_TASK_STORE_DIR_NAME)
+    return resolveSyncTaskStoreDirectory(legacyDirectory)
 }
+
+// 各平台提供同步任务的持久化目录，iOS 在这里迁移旧目录。
+internal expect fun resolveSyncTaskStoreDirectory(legacyDirectory: String): String
 
 private fun joinPath(parent: String, child: String): String {
     val separator = PrivateFileStorage.getPathSeparator()
